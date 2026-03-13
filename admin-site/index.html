@@ -372,6 +372,24 @@
         .replace(/>/g, '&gt;');
     }
 
+    async function fetchAllRows(table, columns, orderColumn, options = {}) {
+      const pageSize = 1000;
+      const rows = [];
+      let from = 0;
+
+      while (true) {
+        let query = sb.from(table).select(columns).order(orderColumn, options).range(from, from + pageSize - 1);
+        const { data, error } = await query;
+        if (error) throw error;
+        const batch = data || [];
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        from += pageSize;
+      }
+
+      return rows;
+    }
+
     function formatSourceKey(source, medium, content, term) {
       return [source || '', medium || '', content || '', term || ''].join('|');
     }
@@ -575,9 +593,10 @@
       const avatarUrl = user.user_metadata?.avatar_url || '';
       const displayName = currentPerson.name || user.email;
 
-      const { data: links } = await sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false });
-      const { data: variants } = await sb.from('tracking_variants').select('*').order('created_at');
-      const { data: clicks } = await sb.from('click_log').select('variant_id, link_id');
+      const { data: links, error: linksError } = await sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false });
+      if (linksError) throw linksError;
+      const variants = await fetchAllRows('tracking_variants', '*', 'created_at');
+      const clicks = await fetchAllRows('click_log', 'variant_id, link_id', 'clicked_at');
 
       const clicksByVariant = {};
       const clicksByLink = {};
