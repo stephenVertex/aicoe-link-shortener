@@ -646,7 +646,7 @@
               <div class="source-chip">
                 ${renderBrandIcon(source.utm_source, source.icon)}
                 <span>${source.label}</span>
-                <span class="meta">${[source.utm_source, source.utm_medium, source.utm_content].filter(Boolean).join(' / ')}</span>
+                <span class="meta">${[source.utm_source, source.utm_medium, source.utm_content, source.utm_term].filter(Boolean).join(' / ')}</span>
                 <button class="remove" onclick="removeSource('${source.id}')" title="Remove source">×</button>
               </div>
             `).join('')}
@@ -655,10 +655,10 @@
             <div class="source-form">
               <input class="source-input" placeholder="Icon" value="${escapeAttr(sourceDraft.icon)}" oninput="setSourceDraftField('icon', this.value)">
               <input class="source-input wide" placeholder="Name (e.g. Discord - AI Builders)" value="${escapeAttr(sourceDraft.label)}" oninput="setSourceDraftField('label', this.value)">
-              <input class="source-input" placeholder="source" value="${escapeAttr(sourceDraft.source)}" oninput="setSourceDraftField('source', this.value)">
-              <input class="source-input" placeholder="medium" value="${escapeAttr(sourceDraft.medium)}" oninput="setSourceDraftField('medium', this.value)">
-              <input class="source-input wide" placeholder="channel / group / content (optional)" value="${escapeAttr(sourceDraft.content)}" oninput="setSourceDraftField('content', this.value)">
-              <input class="source-input" placeholder="term (optional)" value="${escapeAttr(sourceDraft.term)}" oninput="setSourceDraftField('term', this.value)">
+              <input class="source-input" placeholder="source (e.g. discord)" value="${escapeAttr(sourceDraft.source)}" oninput="setSourceDraftField('source', this.value)">
+              <input class="source-input" placeholder="medium (usually social)" value="${escapeAttr(sourceDraft.medium)}" oninput="setSourceDraftField('medium', this.value)">
+              <input class="source-input wide" placeholder="channel / group / community (utm_content)" value="${escapeAttr(sourceDraft.content)}" oninput="setSourceDraftField('content', this.value)">
+              <input class="source-input" placeholder="extra tag (utm_term)" value="${escapeAttr(sourceDraft.term)}" oninput="setSourceDraftField('term', this.value)">
             </div>
             <div class="source-explainer">
               <div class="source-explainer-title">How This Works</div>
@@ -667,10 +667,10 @@
                 <li><strong>Name</strong>: what you want to see in the dashboard, like <code>Discord - AI Builders</code> or <code>LinkedIn - Fintech Founders</code>.</li>
                 <li><strong>source</strong>: the platform or top-level channel, like <code>linkedin</code>, <code>discord</code>, <code>x</code>, or <code>youtube</code>.</li>
                 <li><strong>medium</strong>: usually <code>social</code>.</li>
-                <li><strong>channel / group / content</strong>: optional sub-channel detail when you want multiple tracked links for the same platform.</li>
-                <li><strong>term</strong>: optional extra tag for more segmentation.</li>
+                <li><strong>channel / group / community</strong> goes into <code>utm_content</code> and is the main field to use when you want multiple tracked links for the same platform.</li>
+                <li><strong>extra tag</strong> goes into <code>utm_term</code> and is optional extra segmentation beyond the community itself.</li>
               </ul>
-              <p>Example: if you already have a default <code>Discord</code> source, you can add <code>Discord - AI CoE General</code> with the same <code>source=discord</code> and a distinct content or term value to track that specific community separately.</p>
+              <p>Example: if you already have a default <code>Discord</code> source, add <code>Discord - AI CoE General</code> with <code>source=discord</code> and <code>channel / group / community=ai-coe-general</code>. That creates a separate Discord community profile and retroactively generates links for every article.</p>
             </div>
             <div class="source-actions">
               <button class="btn btn-sm btn-primary" onclick="saveSource()">${sourceSaving ? 'Saving...' : 'Save source'}</button>
