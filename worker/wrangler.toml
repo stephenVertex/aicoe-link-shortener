@@ -1,0 +1,10 @@
+name = "aicoe-redirect"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+SUPABASE_FUNCTION_URL = "https://dumhbtxskncofwwzrmfx.supabase.co/functions/v1/redirect"
+
+routes = [
+  { pattern = "aicoe.fit/*", zone_name = "aicoe.fit" }
+]

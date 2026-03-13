@@ -1,0 +1,15 @@
+# Python
+cli/.venv/
+cli/__pycache__/
+cli/.env
+*.pyc
+
+# Node
+worker/node_modules/
+worker/.wrangler/
+
+# Env
+.env
+
+# Misc
+.DS_Store
