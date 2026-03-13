@@ -223,12 +223,13 @@
     .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-light); color: var(--text-muted); font-weight: 500; }
     .variant-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-faint); }
     .variant-table tr.mine { background: var(--mine-bg); }
+    .short-url-wrap { display: inline-flex; align-items: center; gap: 4px; flex-wrap: nowrap; vertical-align: middle; }
     .short-url { font-family: monospace; font-size: 0.9em; color: var(--accent); text-decoration: none; }
     .short-url:hover { text-decoration: underline; }
     .copy-btn { background: none; border: 1px solid var(--copy-btn-border); border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: var(--text-muted); }
     .copy-btn:hover { background: var(--copy-btn-hover); }
     .copy-btn.copied { background: var(--copied-bg); border-color: var(--copied-border); color: var(--copied-text); }
-    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; }
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; }
     .icon-btn svg { width: 15px; height: 15px; fill: currentColor; }
     .clicks { font-weight: 600; color: var(--clicks); }
     .loading { text-align: center; padding: 60px; color: var(--text-faint); }
@@ -337,6 +338,7 @@
     let currentPerson = null;
     let showAll = false;
     let searchQuery = '';
+    let dashboardData = null;
     let dashboardLoaded = false;
     let dashboardLoading = false;
     let mySources = [];
@@ -355,6 +357,21 @@
     async function rerenderDashboard() {
       const { data: { session } } = await sb.auth.getSession();
       if (session) await renderDashboard(session);
+    }
+
+    async function refreshDashboardData() {
+      const [linksResult, variantsResult, clicksResult] = await Promise.all([
+        sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false }),
+        fetchAllRows('tracking_variants', '*', 'created_at'),
+        fetchAllRows('click_log', 'id, variant_id, link_id', 'clicked_at'),
+      ]);
+
+      if (linksResult.error) throw linksResult.error;
+      dashboardData = {
+        links: linksResult.data || [],
+        variants: variantsResult || [],
+        clicks: clicksResult || [],
+      };
     }
 
     function resetSourceDraft() {
@@ -506,6 +523,7 @@
         sourceComposerOpen = false;
         resetSourceDraft();
         sourceNotice = 'Saved "' + sourceName + '" and generated ' + ((data && data.generated_links) || 'all') + ' tracking links for existing articles. Future articles will get this source automatically too.';
+        dashboardData = null;
         await rerenderDashboard();
       } catch (err) {
         alert('Unable to save source: ' + err.message);
@@ -527,6 +545,7 @@
       }
       mySources = mySources.filter((s) => s.id !== sourceId);
       sourceNotice = 'Removed "' + label + '" from your active sources. Existing links still work, but new articles will no longer auto-generate for it.';
+      dashboardData = null;
       await rerenderDashboard();
     }
 
@@ -544,6 +563,7 @@
             await loadDashboard(session);
           } else if (event === 'SIGNED_OUT') {
             dashboardLoaded = false;
+            dashboardData = null;
             currentPerson = null;
             mySources = [];
             sourceComposerOpen = false;
@@ -594,6 +614,7 @@
     async function signOut() {
       await sb.auth.signOut();
       dashboardLoaded = false;
+      dashboardData = null;
       currentPerson = null;
       mySources = [];
       sourceComposerOpen = false;
@@ -622,7 +643,7 @@
         if (sourcesErr) throw sourcesErr;
         mySources = sourcesData || [];
 
-        await renderDashboard(session);
+        await renderDashboard(session, true);
         dashboardLoaded = true;
       } catch (err) {
         app.innerHTML = '<div class="error-box">Error loading dashboard: <code>' + err.message + '</code></div>';
@@ -632,15 +653,26 @@
       }
     }
 
-    async function renderDashboard(session) {
+    async function renderDashboard(session, forceRefresh) {
+      const activeElement = document.activeElement;
+      const shouldRestoreFilterFocus = activeElement && activeElement.classList && activeElement.classList.contains('filter-input');
+      const filterSelection = shouldRestoreFilterFocus ? {
+        start: activeElement.selectionStart,
+        end: activeElement.selectionEnd,
+        direction: activeElement.selectionDirection,
+      } : null;
+
       const user = session.user;
       const avatarUrl = user.user_metadata?.avatar_url || '';
       const displayName = currentPerson.name || user.email;
 
-      const { data: links, error: linksError } = await sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false });
-      if (linksError) throw linksError;
-      const variants = await fetchAllRows('tracking_variants', '*', 'created_at');
-      const clicks = await fetchAllRows('click_log', 'id, variant_id, link_id', 'clicked_at');
+      if (forceRefresh || !dashboardData) {
+        await refreshDashboardData();
+      }
+
+      const links = dashboardData.links;
+      const variants = dashboardData.variants;
+      const clicks = dashboardData.clicks;
 
       const clicksByVariant = {};
       const clicksByLink = {};
@@ -791,8 +823,10 @@
             <div class="meta">${authorStr}${authorStr && pubDate ? ' &middot; ' : ''}${pubDate}</div>
             <div class="dest"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a></div>
             <div style="margin-bottom:8px">
-              <a class="short-url" href="https://${DOMAIN}/${link.slug}" target="_blank" rel="noopener">https://${DOMAIN}/${link.slug}</a>
-              ${renderCopyIconButton(`https://${DOMAIN}/${link.slug}`)}
+              <span class="short-url-wrap">
+                <a class="short-url" href="https://${DOMAIN}/${link.slug}" target="_blank" rel="noopener">https://${DOMAIN}/${link.slug}</a>
+                ${renderCopyIconButton(`https://${DOMAIN}/${link.slug}`)}
+              </span>
               <span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks > 0 ? directClicks + ' direct clicks' : ''}</span>
             </div>
         `;
@@ -824,7 +858,7 @@
               <button class="copy-btn" onclick="copyCardTable(this, '${cardId}')">Copy table</button>
             </div>
             <table class="variant-table">
-              <thead><tr><th>Person</th><th>Short URL</th><th>Source</th><th>Clicks</th><th></th></tr></thead>
+              <thead><tr><th>Person</th><th>Short URL</th><th>Source</th><th>Clicks</th></tr></thead>
               <tbody>
           `;
           for (const v of displayVariants) {
@@ -834,10 +868,9 @@
             h += `
               <tr class="${isMine ? 'mine' : ''}">
                 <td>${v.ref || '-'} ${isMine ? '<span class="badge badge-you">you</span>' : ''}</td>
-                <td><a class="short-url" href="${url}" target="_blank" rel="noopener">${url}</a></td>
+                <td><span class="short-url-wrap"><a class="short-url" href="${url}" target="_blank" rel="noopener">${url}</a>${renderCopyIconButton(url)}</span></td>
                 <td>${renderSourceSummary(v)}</td>
                 <td class="clicks">${vc}</td>
-                <td>${renderCopyIconButton(url)}</td>
               </tr>
             `;
           }
@@ -848,6 +881,16 @@
       }
 
       app.innerHTML = h;
+
+      if (shouldRestoreFilterFocus) {
+        const filterInput = app.querySelector('.filter-input');
+        if (filterInput) {
+          filterInput.focus({ preventScroll: true });
+          if (filterSelection && filterSelection.start !== null && filterSelection.end !== null) {
+            filterInput.setSelectionRange(filterSelection.start, filterSelection.end, filterSelection.direction || 'none');
+          }
+        }
+      }
     }
 
     async function toggleView(all) {
