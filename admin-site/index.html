@@ -42,7 +42,7 @@
       --google-hover: #f8f9fa;
       --stat-num: #2563eb;
     }
-    html.dark {
+    html[data-theme="synthwave-dark"] {
       --bg: #1a1a2e;
       --text: #e0e0e0;
       --text-muted: #a0a0b8;
@@ -78,6 +78,78 @@
       --google-hover: #1a2a4e;
       --stat-num: #ff6ec7;
     }
+    html[data-theme="solarized-dark"] {
+      --bg: #002b36;
+      --text: #93a1a1;
+      --text-muted: #839496;
+      --text-faint: #657b83;
+      --text-title: #b58900;
+      --card-bg: #073642;
+      --card-shadow: rgba(0,0,0,0.28);
+      --border: #0d4a59;
+      --border-light: #114b59;
+      --border-faint: #0c4250;
+      --accent: #268bd2;
+      --accent-hover: #3aa0e8;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #11333d;
+      --badge-text: #6cbeff;
+      --mine-bg: #0c3640;
+      --btn-secondary-bg: #11404d;
+      --btn-secondary-text: #93a1a1;
+      --btn-secondary-hover: #15505f;
+      --copy-btn-border: #1a5564;
+      --copy-btn-hover: #11404d;
+      --copied-bg: #123f40;
+      --copied-border: #2aa198;
+      --copied-text: #7ee5dd;
+      --error-bg: #3a2323;
+      --error-border: #6d3f3f;
+      --error-text: #dc322f;
+      --error-code-bg: #4a2b2b;
+      --google-bg: #073642;
+      --google-border: #1a5564;
+      --google-text: #93a1a1;
+      --google-hover: #11404d;
+      --stat-num: #b58900;
+    }
+    html[data-theme="solarized-light"] {
+      --bg: #fdf6e3;
+      --text: #586e75;
+      --text-muted: #657b83;
+      --text-faint: #93a1a1;
+      --text-title: #b58900;
+      --card-bg: #fffdf4;
+      --card-shadow: rgba(88,110,117,0.12);
+      --border: #eee8d5;
+      --border-light: #e6dfca;
+      --border-faint: #f2ecdc;
+      --accent: #268bd2;
+      --accent-hover: #1f76b4;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #e8f1f3;
+      --badge-text: #268bd2;
+      --mine-bg: #f3f0df;
+      --btn-secondary-bg: #eee8d5;
+      --btn-secondary-text: #586e75;
+      --btn-secondary-hover: #e6dfca;
+      --copy-btn-border: #d8d2c0;
+      --copy-btn-hover: #f2ecdc;
+      --copied-bg: #e6f4ef;
+      --copied-border: #9dd7c5;
+      --copied-text: #20756d;
+      --error-bg: #fff1f0;
+      --error-border: #f3c7c2;
+      --error-text: #b8332f;
+      --error-code-bg: #fde6e3;
+      --google-bg: #fffdf4;
+      --google-border: #d8d2c0;
+      --google-text: #586e75;
+      --google-hover: #f6f0de;
+      --stat-num: #b58900;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); transition: background 0.2s, color 0.2s; }
     .container { max-width: 900px; margin: 0 auto; padding: 20px; }
@@ -94,6 +166,17 @@
     .btn-google { background: var(--google-bg); border: 1px solid var(--google-border); color: var(--google-text); padding: 12px 24px; font-size: 1em; display: flex; align-items: center; gap: 10px; margin: 40vh auto 0; border-radius: 6px; cursor: pointer; }
     .btn-google:hover { background: var(--google-hover); box-shadow: 0 1px 3px var(--card-shadow); }
     .btn-google svg { width: 20px; height: 20px; }
+    .login-panel .btn-google { margin: 0; width: 100%; justify-content: center; }
+    .login-shell { display: grid; grid-template-columns: 1.2fr 0.9fr; gap: 24px; align-items: center; min-height: calc(100vh - 140px); }
+    .login-hero { background: linear-gradient(135deg, rgba(37,99,235,0.08), rgba(191,106,255,0.16)); border: 1px solid var(--border-light); border-radius: 20px; padding: 16px; box-shadow: 0 20px 50px var(--card-shadow); }
+    .login-image { width: 100%; display: block; border-radius: 14px; }
+    .login-panel { background: var(--card-bg); border: 1px solid var(--border-light); border-radius: 20px; padding: 28px; box-shadow: 0 18px 40px var(--card-shadow); }
+    .login-eyebrow { font-size: 0.75em; letter-spacing: 0.16em; text-transform: uppercase; color: var(--author); margin-bottom: 10px; }
+    .login-title { font-size: 2em; line-height: 1.05; color: var(--text-title); margin-bottom: 12px; }
+    .login-copy { color: var(--text-muted); font-size: 0.96em; line-height: 1.5; margin-bottom: 20px; }
+    .login-points { display: grid; gap: 10px; margin-bottom: 24px; }
+    .login-point { display: flex; gap: 10px; align-items: flex-start; color: var(--text); font-size: 0.9em; }
+    .login-point .dot { color: var(--accent); font-size: 1.1em; line-height: 1; margin-top: 2px; }
     .toggle-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
     .link-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
     .link-card h3 { font-size: 1.1em; margin-bottom: 4px; }
@@ -148,13 +231,13 @@
     .stat-card .label { font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
     .error-box { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 8px; padding: 16px; margin: 20px 0; color: var(--error-text); }
     .error-box code { background: var(--error-code-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
-    /* Dark mode toggle */
-    .theme-toggle { position: relative; width: 44px; height: 24px; border-radius: 12px; background: var(--btn-secondary-bg); border: 1px solid var(--border); cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
-    .theme-toggle .knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: white; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-    html.dark .theme-toggle { background: #ff6ec7; border-color: #ff6ec7; }
-    html.dark .theme-toggle .knob { transform: translateX(20px); background: #1a1a2e; }
+    .theme-control { display: inline-flex; align-items: center; gap: 6px; }
     .theme-label { font-size: 0.75em; color: var(--text-faint); }
+    .theme-select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 0.8em; }
     @media (max-width: 720px) {
+      .login-shell { grid-template-columns: 1fr; min-height: auto; }
+      .login-panel { padding: 22px; }
+      .login-title { font-size: 1.7em; }
       .stats-row { flex-wrap: wrap; }
       .source-form { grid-template-columns: 1fr; }
       .source-form .wide, .source-form .full { grid-column: auto; }
@@ -169,17 +252,54 @@
   </div>
 
   <script>
-    // Dark mode - apply saved preference before first paint
-    if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
+    const THEME_KEY = 'theme';
+
+    function resolveTheme(theme) {
+      if (theme === 'dark') return 'synthwave-dark';
+      if (theme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'synthwave-dark' : 'light';
+      }
+      return theme || 'synthwave-dark';
     }
 
-    function toggleTheme() {
-      document.documentElement.classList.toggle('dark');
-      localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    function applyTheme(theme) {
+      const resolved = resolveTheme(theme);
+      if (resolved === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', resolved);
+      }
     }
 
-    const themeToggleHtml = '<div style="display:flex;align-items:center;gap:6px"><span class="theme-label">Dark</span><div class="theme-toggle" onclick="toggleTheme()"><div class="knob"></div></div></div>';
+    function setTheme(theme) {
+      localStorage.setItem(THEME_KEY, theme);
+      applyTheme(theme);
+    }
+
+    function getSavedTheme() {
+      const saved = localStorage.getItem(THEME_KEY) || 'synthwave-dark';
+      return saved === 'dark' ? 'synthwave-dark' : saved;
+    }
+
+    function renderThemeControl() {
+      const currentTheme = getSavedTheme();
+      const options = [
+        ['synthwave-dark', 'Synthwave'],
+        ['solarized-dark', 'Solarized Dark'],
+        ['solarized-light', 'Solarized Light'],
+        ['light', 'Light'],
+        ['system', 'System'],
+      ];
+      return '<div class="theme-control"><span class="theme-label">Theme</span><select class="theme-select" onchange="setTheme(this.value)">' +
+        options.map(([value, label]) => '<option value="' + value + '"' + (currentTheme === value ? ' selected' : '') + '>' + label + '</option>').join('') +
+        '</select></div>';
+    }
+
+    applyTheme(getSavedTheme());
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (getSavedTheme() === 'system') applyTheme('system');
+    });
 
     const SUPABASE_URL = 'https://dumhbtxskncofwwzrmfx.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
@@ -368,11 +488,26 @@
 
     function showLogin() {
       app.innerHTML = `
-        <header><h1>aicoe.fit</h1>${themeToggleHtml}</header>
-        <button class="btn btn-google" onclick="signIn()">
-          <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-          Sign in with Google
-        </button>
+        <header><h1>aicoe.fit</h1>${renderThemeControl()}</header>
+        <div class="login-shell">
+          <div class="login-hero">
+            <img class="login-image" src="./aicoe-landing.png" alt="AI Center of Excellence landing artwork">
+          </div>
+          <div class="login-panel">
+            <div class="login-eyebrow">AI Center of Excellence</div>
+            <div class="login-title">Track every article, source, and community from one dashboard.</div>
+            <div class="login-copy">Manage branded source profiles, generate retroactive campaign links for old articles, and copy polished link tables straight into Google Chat.</div>
+            <div class="login-points">
+              <div class="login-point"><span class="dot">•</span><span>Default profiles for LinkedIn, X, YouTube, and Discord</span></div>
+              <div class="login-point"><span class="dot">•</span><span>Create custom community links like specific Discord servers or WhatsApp groups</span></div>
+              <div class="login-point"><span class="dot">•</span><span>See article-level tracking variants and copy ready-to-share tables instantly</span></div>
+            </div>
+            <button class="btn btn-google" onclick="signIn()">
+              <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              Sign in with Google
+            </button>
+          </div>
+        </div>
       `;
     }
 
@@ -469,7 +604,7 @@
             ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
             ${displayName}
             <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
-            ${themeToggleHtml}
+            ${renderThemeControl()}
           </div>
         </header>
 
