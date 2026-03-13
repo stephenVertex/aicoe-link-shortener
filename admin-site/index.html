@@ -6,56 +6,134 @@
   <title>aicoe.fit - Link Dashboard</title>
   <script src="./supabase.min.js"></script>
   <style>
+    :root {
+      --bg: #f5f5f5;
+      --text: #333;
+      --text-muted: #666;
+      --text-faint: #888;
+      --text-title: #111;
+      --card-bg: white;
+      --card-shadow: rgba(0,0,0,0.08);
+      --border: #e0e0e0;
+      --border-light: #e5e7eb;
+      --border-faint: #f3f4f6;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --author: #6b21a8;
+      --clicks: #059669;
+      --badge-bg: #dbeafe;
+      --badge-text: #1e40af;
+      --mine-bg: #eff6ff;
+      --btn-secondary-bg: #e5e7eb;
+      --btn-secondary-text: #374151;
+      --btn-secondary-hover: #d1d5db;
+      --copy-btn-border: #d1d5db;
+      --copy-btn-hover: #f3f4f6;
+      --copied-bg: #dcfce7;
+      --copied-border: #86efac;
+      --copied-text: #166534;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --error-text: #991b1b;
+      --error-code-bg: #fee2e2;
+      --google-bg: white;
+      --google-border: #dadce0;
+      --google-text: #3c4043;
+      --google-hover: #f8f9fa;
+      --stat-num: #2563eb;
+    }
+    html.dark {
+      --bg: #2b2b2b;
+      --text: #a9b7c6;
+      --text-muted: #808080;
+      --text-faint: #6a6a6a;
+      --text-title: #cc7832;
+      --card-bg: #3c3f41;
+      --card-shadow: rgba(0,0,0,0.3);
+      --border: #555;
+      --border-light: #4a4a4a;
+      --border-faint: #444;
+      --accent: #6897bb;
+      --accent-hover: #7eb8da;
+      --author: #9876aa;
+      --clicks: #6a8759;
+      --badge-bg: #2d3748;
+      --badge-text: #6897bb;
+      --mine-bg: #32372b;
+      --btn-secondary-bg: #4a4a4a;
+      --btn-secondary-text: #a9b7c6;
+      --btn-secondary-hover: #555;
+      --copy-btn-border: #555;
+      --copy-btn-hover: #4a4a4a;
+      --copied-bg: #2d3a2d;
+      --copied-border: #4a6a4a;
+      --copied-text: #6a8759;
+      --error-bg: #3c2b2b;
+      --error-border: #6a3a3a;
+      --error-text: #cc7832;
+      --error-code-bg: #4a2b2b;
+      --google-bg: #3c3f41;
+      --google-border: #555;
+      --google-text: #a9b7c6;
+      --google-hover: #4a4a4a;
+      --stat-num: #cc7832;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); transition: background 0.2s, color 0.2s; }
     .container { max-width: 900px; margin: 0 auto; padding: 20px; }
-    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 24px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
     header h1 { font-size: 1.4em; font-weight: 700; }
-    header .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.9em; color: #666; }
+    header .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.9em; color: var(--text-muted); }
     header .user-info img { width: 32px; height: 32px; border-radius: 50%; }
     .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; transition: all 0.15s; }
-    .btn-primary { background: #2563eb; color: white; }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-secondary { background: #e5e7eb; color: #374151; }
-    .btn-secondary:hover { background: #d1d5db; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); }
+    .btn-secondary:hover { background: var(--btn-secondary-hover); }
     .btn-sm { padding: 4px 10px; font-size: 0.8em; }
-    .btn-google { background: white; border: 1px solid #dadce0; color: #3c4043; padding: 12px 24px; font-size: 1em; display: flex; align-items: center; gap: 10px; margin: 40vh auto 0; border-radius: 6px; cursor: pointer; }
-    .btn-google:hover { background: #f8f9fa; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .btn-google { background: var(--google-bg); border: 1px solid var(--google-border); color: var(--google-text); padding: 12px 24px; font-size: 1em; display: flex; align-items: center; gap: 10px; margin: 40vh auto 0; border-radius: 6px; cursor: pointer; }
+    .btn-google:hover { background: var(--google-hover); box-shadow: 0 1px 3px var(--card-shadow); }
     .btn-google svg { width: 20px; height: 20px; }
     .toggle-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
-    .link-card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .link-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
     .link-card h3 { font-size: 1.1em; margin-bottom: 4px; }
-    .link-card .title { font-size: 0.95em; color: #111; margin-bottom: 2px; }
-    .link-card .meta { font-size: 0.8em; color: #888; margin-bottom: 8px; }
-    .link-card .meta .author { color: #6b21a8; font-weight: 500; }
-    .link-card .dest { font-size: 0.85em; color: #666; margin-bottom: 12px; word-break: break-all; }
-    .link-card .dest a { color: #2563eb; text-decoration: none; }
+    .link-card .title { font-size: 0.95em; color: var(--text-title); margin-bottom: 2px; }
+    .link-card .meta { font-size: 0.8em; color: var(--text-faint); margin-bottom: 8px; }
+    .link-card .meta .author { color: var(--author); font-weight: 500; }
+    .link-card .dest { font-size: 0.85em; color: var(--text-muted); margin-bottom: 12px; word-break: break-all; }
+    .link-card .dest a { color: var(--accent); text-decoration: none; }
     .link-card .dest a:hover { text-decoration: underline; }
-    .copy-table-bar { background: white; border-radius: 8px; padding: 12px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .copy-table-bar .label { font-size: 0.9em; font-weight: 500; color: #555; }
-    .person-btn { padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; cursor: pointer; font-size: 0.8em; color: #374151; transition: all 0.15s; }
-    .person-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
-    .person-btn.copied { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .copy-table-bar { background: var(--card-bg); border-radius: 8px; padding: 12px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .copy-table-bar .label { font-size: 0.9em; font-weight: 500; color: var(--text-muted); }
+    .person-btn { padding: 4px 12px; border: 1px solid var(--copy-btn-border); border-radius: 4px; background: var(--card-bg); cursor: pointer; font-size: 0.8em; color: var(--btn-secondary-text); transition: all 0.15s; }
+    .person-btn:hover { background: var(--copy-btn-hover); border-color: var(--text-muted); }
+    .person-btn.copied { background: var(--copied-bg); border-color: var(--copied-border); color: var(--copied-text); }
     .variant-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
-    .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: #666; font-weight: 500; }
-    .variant-table td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; }
-    .variant-table tr.mine { background: #eff6ff; }
-    .short-url { font-family: monospace; font-size: 0.9em; color: #2563eb; text-decoration: none; }
+    .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-light); color: var(--text-muted); font-weight: 500; }
+    .variant-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-faint); }
+    .variant-table tr.mine { background: var(--mine-bg); }
+    .short-url { font-family: monospace; font-size: 0.9em; color: var(--accent); text-decoration: none; }
     .short-url:hover { text-decoration: underline; }
-    .copy-btn { background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: #666; }
-    .copy-btn:hover { background: #f3f4f6; }
-    .copy-btn.copied { background: #dcfce7; border-color: #86efac; color: #166534; }
-    .clicks { font-weight: 600; color: #059669; }
-    .loading { text-align: center; padding: 60px; color: #999; }
+    .copy-btn { background: none; border: 1px solid var(--copy-btn-border); border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: var(--text-muted); }
+    .copy-btn:hover { background: var(--copy-btn-hover); }
+    .copy-btn.copied { background: var(--copied-bg); border-color: var(--copied-border); color: var(--copied-text); }
+    .clicks { font-weight: 600; color: var(--clicks); }
+    .loading { text-align: center; padding: 60px; color: var(--text-faint); }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 500; }
-    .badge-you { background: #dbeafe; color: #1e40af; }
+    .badge-you { background: var(--badge-bg); color: var(--badge-text); }
     #app { min-height: 60vh; }
     .stats-row { display: flex; gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: white; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); flex: 1; text-align: center; }
-    .stat-card .num { font-size: 2em; font-weight: 700; color: #2563eb; }
-    .stat-card .label { font-size: 0.85em; color: #666; margin-top: 4px; }
-    .error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin: 20px 0; color: #991b1b; }
-    .error-box code { background: #fee2e2; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
+    .stat-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px var(--card-shadow); flex: 1; text-align: center; }
+    .stat-card .num { font-size: 2em; font-weight: 700; color: var(--stat-num); }
+    .stat-card .label { font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
+    .error-box { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 8px; padding: 16px; margin: 20px 0; color: var(--error-text); }
+    .error-box code { background: var(--error-code-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
+    /* Dark mode toggle */
+    .theme-toggle { position: relative; width: 44px; height: 24px; border-radius: 12px; background: var(--btn-secondary-bg); border: 1px solid var(--border); cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+    .theme-toggle .knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: white; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    html.dark .theme-toggle { background: #6897bb; }
+    html.dark .theme-toggle .knob { transform: translateX(20px); background: #2b2b2b; }
+    .theme-label { font-size: 0.75em; color: var(--text-faint); }
   </style>
 </head>
 <body>
@@ -64,6 +142,18 @@
   </div>
 
   <script>
+    // Dark mode - apply saved preference before first paint
+    if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    }
+
+    const themeToggleHtml = '<div style="display:flex;align-items:center;gap:6px"><span class="theme-label">Dark</span><div class="theme-toggle" onclick="toggleTheme()"><div class="knob"></div></div></div>';
+
     const SUPABASE_URL = 'https://dumhbtxskncofwwzrmfx.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
     const DOMAIN = 'aicoe.fit';
@@ -109,7 +199,7 @@
 
     function showLogin() {
       app.innerHTML = `
-        <header><h1>aicoe.fit</h1></header>
+        <header><h1>aicoe.fit</h1>${themeToggleHtml}</header>
         <button class="btn btn-google" onclick="signIn()">
           <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
           Sign in with Google
@@ -201,6 +291,7 @@
             ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
             ${displayName}
             <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
+            ${themeToggleHtml}
           </div>
         </header>
 
