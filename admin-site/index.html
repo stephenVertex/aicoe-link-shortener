@@ -80,6 +80,8 @@
 
     let currentPerson = null;
     let showAll = false;
+    let dashboardLoaded = false;
+    let dashboardLoading = false;
 
     async function init() {
       try {
@@ -91,8 +93,12 @@
         }
 
         sb.auth.onAuthStateChange(async (event, session) => {
-          if (event === 'SIGNED_IN' && session) {
+          if (event === 'SIGNED_IN' && session && !dashboardLoaded) {
             await loadDashboard(session);
+          } else if (event === 'SIGNED_OUT') {
+            dashboardLoaded = false;
+            currentPerson = null;
+            showLogin();
           }
         });
       } catch (err) {
@@ -126,17 +132,28 @@
     }
 
     async function loadDashboard(session) {
-      app.innerHTML = '<div class="loading">Loading dashboard...</div>';
+      if (dashboardLoading) return;
+      dashboardLoading = true;
+
+      // Only show loading spinner on first load, not on re-renders
+      if (!dashboardLoaded) {
+        app.innerHTML = '<div class="loading">Loading dashboard...</div>';
+      }
 
       try {
-        const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
-        if (personErr) throw personErr;
-        currentPerson = person;
+        if (!currentPerson) {
+          const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
+          if (personErr) throw personErr;
+          currentPerson = person;
+        }
 
         await renderDashboard(session);
+        dashboardLoaded = true;
       } catch (err) {
         app.innerHTML = '<div class="error-box">Error loading dashboard: <code>' + err.message + '</code></div>';
         console.error(err);
+      } finally {
+        dashboardLoading = false;
       }
     }
 
