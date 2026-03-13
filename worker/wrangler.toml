@@ -2,14 +2,10 @@ name = "aicoe-redirect"
 main = "src/worker.js"
 compatibility_date = "2024-01-01"
 
+[[routes]]
+pattern = "aicoe.fit/*"
+zone_name = "aicoe.fit"
+
 [vars]
 SUPABASE_BASE_URL = "https://dumhbtxskncofwwzrmfx.supabase.co"
-
-routes = [
-  { pattern = "aicoe.fit/*", zone_name = "aicoe.fit" }
-]
-
-# Enable importing non-JS modules (HTML files)
-rules = [
-  { type = "Text", globs = ["**/*.html"] }
-]
+ADMIN_URL = "https://main.d3er9dt9913cnv.amplifyapp.com"

@@ -1,5 +1,3 @@
-import ADMIN_HTML from "../admin/index.html";
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -10,22 +8,11 @@ export default {
       return new Response("", { status: 404 });
     }
 
-    // Root page — redirect to admin dashboard
-    if (path === "/") {
+    // Root page — redirect to admin dashboard on Amplify
+    if (path === "/" || path === "/admin" || path === "/admin/") {
       return new Response(null, {
         status: 302,
-        headers: { Location: "/admin" },
-      });
-    }
-
-    // Admin dashboard — serve HTML directly from the worker
-    if (path === "/admin" || path === "/admin/") {
-      return new Response(ADMIN_HTML, {
-        status: 200,
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-cache",
-        },
+        headers: { Location: env.ADMIN_URL || "https://admin.aicoe.fit" },
       });
     }
 

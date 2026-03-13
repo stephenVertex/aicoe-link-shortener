@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>aicoe.fit - Link Dashboard</title>
-  <script src="/admin/supabase.min.js"></script>
+  <script src="./supabase.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
@@ -43,6 +43,8 @@
     .stat-card { background: white; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); flex: 1; text-align: center; }
     .stat-card .num { font-size: 2em; font-weight: 700; color: #2563eb; }
     .stat-card .label { font-size: 0.85em; color: #666; margin-top: 4px; }
+    .error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin: 20px 0; color: #991b1b; }
+    .error-box code { background: #fee2e2; padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
   </style>
 </head>
 <body>
@@ -55,25 +57,37 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
     const DOMAIN = 'aicoe.fit';
 
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let sb;
+    try {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      document.getElementById('app').innerHTML = '<div class="error-box">Failed to initialize Supabase client: <code>' + e.message + '</code></div>';
+      throw e;
+    }
+
     const app = document.getElementById('app');
 
     let currentPerson = null;
     let showAll = false;
 
     async function init() {
-      const { data: { session } } = await sb.auth.getSession();
-      if (session) {
-        await loadDashboard(session);
-      } else {
-        showLogin();
-      }
-
-      sb.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
           await loadDashboard(session);
+        } else {
+          showLogin();
         }
-      });
+
+        sb.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+            await loadDashboard(session);
+          }
+        });
+      } catch (err) {
+        app.innerHTML = '<div class="error-box">Initialization error: <code>' + err.message + '</code></div>';
+        console.error(err);
+      }
     }
 
     function showLogin() {
@@ -110,7 +124,7 @@
 
         await renderDashboard(session);
       } catch (err) {
-        app.innerHTML = '<div class="loading">Error: ' + err.message + '</div>';
+        app.innerHTML = '<div class="error-box">Error loading dashboard: <code>' + err.message + '</code></div>';
         console.error(err);
       }
     }
