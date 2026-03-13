@@ -178,6 +178,9 @@
     .login-point { display: flex; gap: 10px; align-items: flex-start; color: var(--text); font-size: 0.9em; }
     .login-point .dot { color: var(--accent); font-size: 1.1em; line-height: 1; margin-top: 2px; }
     .toggle-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+    .filter-input { min-width: 260px; flex: 1; max-width: 420px; background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 10px; padding: 9px 12px; font-size: 0.9em; }
+    .filter-input::placeholder { color: var(--text-faint); }
+    .filter-meta { font-size: 0.82em; color: var(--text-muted); margin-left: auto; }
     .link-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
     .link-card h3 { font-size: 1.1em; margin-bottom: 4px; }
     .link-card .title { font-size: 0.95em; color: var(--text-title); margin-bottom: 2px; }
@@ -225,6 +228,8 @@
     .copy-btn { background: none; border: 1px solid var(--copy-btn-border); border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: var(--text-muted); }
     .copy-btn:hover { background: var(--copy-btn-hover); }
     .copy-btn.copied { background: var(--copied-bg); border-color: var(--copied-border); color: var(--copied-text); }
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; }
+    .icon-btn svg { width: 15px; height: 15px; fill: currentColor; }
     .clicks { font-weight: 600; color: var(--clicks); }
     .loading { text-align: center; padding: 60px; color: var(--text-faint); }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 500; }
@@ -244,6 +249,9 @@
       .login-panel { padding: 22px; }
       .login-title { font-size: 1.7em; }
       .stats-row { flex-wrap: wrap; }
+      .toggle-bar { flex-wrap: wrap; }
+      .filter-input { max-width: none; min-width: 0; width: 100%; }
+      .filter-meta { width: 100%; margin-left: 0; }
       .source-form { grid-template-columns: 1fr; }
       .source-form .wide, .source-form .full { grid-column: auto; }
       header { align-items: flex-start; }
@@ -300,6 +308,12 @@
         '</select></div>';
     }
 
+    function renderCopyIconButton(url) {
+      return '<button class="copy-btn icon-btn" title="Copy short link" aria-label="Copy short link" onclick="copyUrl(this, \'" + url + "\')">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6c-1.1 0-2 .9-2 2v14h2V3h10V1Zm3 4H10c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h9c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2Zm0 16H10V7h9v14Z"/></svg>' +
+        '</button>';
+    }
+
     applyTheme(getSavedTheme());
 
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -322,6 +336,7 @@
 
     let currentPerson = null;
     let showAll = false;
+    let searchQuery = '';
     let dashboardLoaded = false;
     let dashboardLoading = false;
     let mySources = [];
@@ -370,6 +385,25 @@
         .replace(/'/g, '&#39;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+    }
+
+    function fuzzyMatch(text, query) {
+      const haystack = String(text || '').toLowerCase();
+      const needle = String(query || '').trim().toLowerCase();
+      if (!needle) return true;
+      if (haystack.includes(needle)) return true;
+
+      let index = 0;
+      for (const char of haystack) {
+        if (char === needle[index]) index += 1;
+        if (index === needle.length) return true;
+      }
+      return false;
+    }
+
+    function setSearchQuery(value) {
+      searchQuery = value;
+      rerenderDashboard();
     }
 
     async function fetchAllRows(table, columns, orderColumn, options = {}) {
@@ -632,6 +666,13 @@
         });
       }
 
+      if (searchQuery.trim()) {
+        displayLinks = displayLinks.filter(link => {
+          const searchText = [link.title, link.author, link.slug].filter(Boolean).join(' ');
+          return fuzzyMatch(searchText, searchQuery);
+        });
+      }
+
       const myVariants = (variants || []).filter(v => v.ref === mySlug);
       const myClicks = myVariants.reduce((sum, v) => sum + (clicksByVariant[v.id] || 0), 0);
       const myArticleCount = new Set(myVariants.map(v => v.link_id)).size;
@@ -712,6 +753,8 @@
         <div class="toggle-bar">
           <button class="btn btn-sm ${showAll ? 'btn-secondary' : 'btn-primary'}" onclick="toggleView(false)">My Links</button>
           <button class="btn btn-sm ${showAll ? 'btn-primary' : 'btn-secondary'}" onclick="toggleView(true)">All Links</button>
+          <input class="filter-input" placeholder="Filter articles by title, author, or slug..." value="${escapeAttr(searchQuery)}" oninput="setSearchQuery(this.value)">
+          <span class="filter-meta">${displayLinks.length} shown</span>
         </div>
       `;
 
@@ -749,7 +792,7 @@
             <div class="dest"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a></div>
             <div style="margin-bottom:8px">
               <a class="short-url" href="https://${DOMAIN}/${link.slug}" target="_blank" rel="noopener">https://${DOMAIN}/${link.slug}</a>
-              <button class="copy-btn" onclick="copyUrl(this, 'https://${DOMAIN}/${link.slug}')">Copy</button>
+              ${renderCopyIconButton(`https://${DOMAIN}/${link.slug}`)}
               <span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks > 0 ? directClicks + ' direct clicks' : ''}</span>
             </div>
         `;
@@ -794,7 +837,7 @@
                 <td><a class="short-url" href="${url}" target="_blank" rel="noopener">${url}</a></td>
                 <td>${renderSourceSummary(v)}</td>
                 <td class="clicks">${vc}</td>
-                <td><button class="copy-btn" onclick="copyUrl(this, '${url}')">Copy</button></td>
+                <td>${renderCopyIconButton(url)}</td>
               </tr>
             `;
           }
@@ -815,10 +858,16 @@
 
     function copyUrl(btn, url) {
       navigator.clipboard.writeText(url).then(() => {
-        btn.textContent = 'Copied!';
+        const originalHtml = btn.innerHTML;
+        const originalTitle = btn.getAttribute('title') || '';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
+        btn.setAttribute('title', 'Copied');
+        btn.setAttribute('aria-label', 'Copied');
         btn.classList.add('copied');
         setTimeout(() => {
-          btn.textContent = 'Copy';
+          btn.innerHTML = originalHtml;
+          btn.setAttribute('title', originalTitle || 'Copy short link');
+          btn.setAttribute('aria-label', originalTitle || 'Copy short link');
           btn.classList.remove('copied');
         }, 1500);
       });
