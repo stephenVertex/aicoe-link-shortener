@@ -375,14 +375,24 @@
     async function fetchAllRows(table, columns, orderColumn, options = {}) {
       const pageSize = 1000;
       const rows = [];
+      const seenIds = new Set();
       let from = 0;
 
       while (true) {
-        let query = sb.from(table).select(columns).order(orderColumn, options).range(from, from + pageSize - 1);
+        let query = sb
+          .from(table)
+          .select(columns)
+          .order(orderColumn, options)
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1);
         const { data, error } = await query;
         if (error) throw error;
         const batch = data || [];
-        rows.push(...batch);
+        for (const row of batch) {
+          if (row && row.id && seenIds.has(row.id)) continue;
+          if (row && row.id) seenIds.add(row.id);
+          rows.push(row);
+        }
         if (batch.length < pageSize) break;
         from += pageSize;
       }
@@ -596,7 +606,7 @@
       const { data: links, error: linksError } = await sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false });
       if (linksError) throw linksError;
       const variants = await fetchAllRows('tracking_variants', '*', 'created_at');
-      const clicks = await fetchAllRows('click_log', 'variant_id, link_id', 'clicked_at');
+      const clicks = await fetchAllRows('click_log', 'id, variant_id, link_id', 'clicked_at');
 
       const clicksByVariant = {};
       const clicksByLink = {};
