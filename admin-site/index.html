@@ -134,7 +134,7 @@
       const avatarUrl = user.user_metadata?.avatar_url || '';
       const displayName = currentPerson.name || user.email;
 
-      const { data: links } = await sb.from('links').select('*').order('created_at', { ascending: false });
+      const { data: links } = await sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false });
       const { data: variants } = await sb.from('tracking_variants').select('*').order('created_at');
       const { data: clicks } = await sb.from('click_log').select('variant_id, link_id');
 
@@ -208,9 +208,11 @@
 
         const displayVariants = showAll ? lvs : lvs.filter(v => v.ref === mySlug);
 
+        const pubDate = link.published_at ? new Date(link.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+
         h += `
           <div class="link-card">
-            <h3>${link.slug}</h3>
+            <h3>${link.slug}${pubDate ? ' <span style="font-size:0.75em; font-weight:400; color:#888">' + pubDate + '</span>' : ''}</h3>
             <div class="dest">${link.destination_url}</div>
             <div style="margin-bottom:8px">
               <span class="short-url">https://${DOMAIN}/${link.slug}</span>
