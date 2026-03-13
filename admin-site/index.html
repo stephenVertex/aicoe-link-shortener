@@ -25,7 +25,17 @@
     .toggle-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
     .link-card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
     .link-card h3 { font-size: 1.1em; margin-bottom: 4px; }
+    .link-card .title { font-size: 0.95em; color: #111; margin-bottom: 2px; }
+    .link-card .meta { font-size: 0.8em; color: #888; margin-bottom: 8px; }
+    .link-card .meta .author { color: #6b21a8; font-weight: 500; }
     .link-card .dest { font-size: 0.85em; color: #666; margin-bottom: 12px; word-break: break-all; }
+    .link-card .dest a { color: #2563eb; text-decoration: none; }
+    .link-card .dest a:hover { text-decoration: underline; }
+    .copy-table-bar { background: white; border-radius: 8px; padding: 12px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .copy-table-bar .label { font-size: 0.9em; font-weight: 500; color: #555; }
+    .person-btn { padding: 4px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: white; cursor: pointer; font-size: 0.8em; color: #374151; transition: all 0.15s; }
+    .person-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
+    .person-btn.copied { background: #dcfce7; border-color: #86efac; color: #166534; }
     .variant-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
     .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: #666; font-weight: 500; }
     .variant-table td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; }
@@ -197,9 +207,21 @@
         </div>
       `;
 
+      // In "All Links" view, show copy-table buttons per person
+      if (showAll) {
+        const allPeopleRefs = [...new Set((variants || []).map(v => v.ref).filter(Boolean))].sort();
+        h += `<div class="copy-table-bar">
+          <span class="label">Copy all links for:</span>
+          ${allPeopleRefs.map(ref => `<button class="person-btn" onclick="copyTableForPerson(this, '${ref}')">${ref}</button>`).join('')}
+        </div>`;
+      }
+
       if (displayLinks.length === 0) {
         h += '<div class="link-card"><p style="color:#999">No links yet. Create some with the CLI.</p></div>';
       }
+
+      // Store data globally so copyTableForPerson can access it
+      window._dashData = { links: links || [], variants: variants || [], variantsByLink, clicksByVariant, clicksByLink };
 
       for (const link of displayLinks) {
         const lvs = variantsByLink[link.id] || [];
@@ -209,11 +231,14 @@
         const displayVariants = showAll ? lvs : lvs.filter(v => v.ref === mySlug);
 
         const pubDate = link.published_at ? new Date(link.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+        const displayTitle = link.title || link.slug;
+        const authorStr = link.author ? `<span class="author">${link.author}</span>` : '';
 
         h += `
           <div class="link-card">
-            <h3>${link.slug}${pubDate ? ' <span style="font-size:0.75em; font-weight:400; color:#888">' + pubDate + '</span>' : ''}</h3>
-            <div class="dest">${link.destination_url}</div>
+            <div class="title">${displayTitle}</div>
+            <div class="meta">${authorStr}${authorStr && pubDate ? ' &middot; ' : ''}${pubDate}</div>
+            <div class="dest"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a></div>
             <div style="margin-bottom:8px">
               <span class="short-url">https://${DOMAIN}/${link.slug}</span>
               <button class="copy-btn" onclick="copyUrl(this, 'https://${DOMAIN}/${link.slug}')">Copy</button>
@@ -264,6 +289,60 @@
           btn.textContent = 'Copy';
           btn.classList.remove('copied');
         }, 1500);
+      });
+    }
+
+    function copyTableForPerson(btn, personRef) {
+      const { links, variantsByLink } = window._dashData;
+
+      // Build rows: Title | Date | Short URL
+      const rows = [];
+      for (const link of links) {
+        const lvs = variantsByLink[link.id] || [];
+        const variant = lvs.find(v => v.ref === personRef);
+        if (!variant) continue;
+        const shortUrl = 'https://' + DOMAIN + '/' + link.slug + '-' + variant.suffix;
+        const title = link.title || link.slug;
+        const pubDate = link.published_at ? new Date(link.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+        const author = link.author || '';
+        rows.push({ title, author, pubDate, shortUrl, destUrl: link.destination_url });
+      }
+
+      if (rows.length === 0) {
+        alert('No links found for ' + personRef);
+        return;
+      }
+
+      // Build rich HTML table (for pasting into Google Chat / Docs)
+      let html = '<table><thead><tr><th>Title</th><th>Author</th><th>Date</th><th>Short Link</th></tr></thead><tbody>';
+      for (const r of rows) {
+        html += '<tr>';
+        html += '<td><a href="' + r.destUrl + '">' + r.title + '</a></td>';
+        html += '<td>' + r.author + '</td>';
+        html += '<td>' + r.pubDate + '</td>';
+        html += '<td><a href="' + r.shortUrl + '">' + r.shortUrl + '</a></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+
+      // Build plain text markdown table as fallback
+      let md = '| Title | Author | Date | Short Link |\n';
+      md += '|-------|--------|------|------------|\n';
+      for (const r of rows) {
+        md += '| ' + r.title + ' | ' + r.author + ' | ' + r.pubDate + ' | ' + r.shortUrl + ' |\n';
+      }
+
+      // Copy as both HTML and plain text
+      const blob = new Blob([html], { type: 'text/html' });
+      const textBlob = new Blob([md], { type: 'text/plain' });
+      const item = new ClipboardItem({ 'text/html': blob, 'text/plain': textBlob });
+      navigator.clipboard.write([item]).then(() => {
+        btn.textContent = 'Copied ' + rows.length + ' links!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = personRef;
+          btn.classList.remove('copied');
+        }, 2000);
       });
     }
 

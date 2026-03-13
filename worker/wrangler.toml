@@ -8,4 +8,4 @@ zone_name = "aicoe.fit"
 
 [vars]
 SUPABASE_BASE_URL = "https://dumhbtxskncofwwzrmfx.supabase.co"
-ADMIN_URL = "https://main.d3er9dt9913cnv.amplifyapp.com"
+ADMIN_URL = "https://admin.aicoe.fit"
