@@ -223,8 +223,8 @@
     .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-light); color: var(--text-muted); font-weight: 500; }
     .variant-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-faint); }
     .variant-table tr.mine { background: var(--mine-bg); }
-    .short-url-wrap { display: inline-flex; align-items: center; gap: 4px; flex-wrap: nowrap; vertical-align: middle; }
-    .short-url { font-family: monospace; font-size: 0.9em; color: var(--accent); text-decoration: none; }
+    .short-url-wrap { display: inline-flex; align-items: center; gap: 2px; flex-wrap: nowrap; vertical-align: middle; }
+    .short-url { font-family: monospace; font-size: 0.9em; color: var(--accent); text-decoration: none; white-space: nowrap; }
     .short-url:hover { text-decoration: underline; }
     .copy-btn { background: none; border: 1px solid var(--copy-btn-border); border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: var(--text-muted); }
     .copy-btn:hover { background: var(--copy-btn-hover); }
@@ -310,7 +310,7 @@
     }
 
     function renderCopyIconButton(url) {
-      return '<button class="copy-btn icon-btn" title="Copy short link" aria-label="Copy short link" onclick="copyUrl(this, \'" + url + "\')">' +
+      return '<button type="button" class="copy-btn icon-btn" title="Copy short link" aria-label="Copy short link" data-copy-url="' + escapeAttr(url) + '" onclick="copyUrl(this)">' +
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H6c-1.1 0-2 .9-2 2v14h2V3h10V1Zm3 4H10c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h9c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2Zm0 16H10V7h9v14Z"/></svg>' +
         '</button>';
     }
@@ -899,7 +899,9 @@
       if (session) await renderDashboard(session);
     }
 
-    function copyUrl(btn, url) {
+    function copyUrl(btn) {
+      const url = btn.getAttribute('data-copy-url');
+      if (!url) return;
       navigator.clipboard.writeText(url).then(() => {
         const originalHtml = btn.innerHTML;
         const originalTitle = btn.getAttribute('title') || '';
