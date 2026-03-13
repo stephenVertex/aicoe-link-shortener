@@ -40,7 +40,8 @@
     .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: #666; font-weight: 500; }
     .variant-table td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; }
     .variant-table tr.mine { background: #eff6ff; }
-    .short-url { font-family: monospace; font-size: 0.9em; color: #2563eb; }
+    .short-url { font-family: monospace; font-size: 0.9em; color: #2563eb; text-decoration: none; }
+    .short-url:hover { text-decoration: underline; }
     .copy-btn { background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: #666; }
     .copy-btn:hover { background: #f3f4f6; }
     .copy-btn.copied { background: #dcfce7; border-color: #86efac; color: #166534; }
@@ -240,7 +241,7 @@
             <div class="meta">${authorStr}${authorStr && pubDate ? ' &middot; ' : ''}${pubDate}</div>
             <div class="dest"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a></div>
             <div style="margin-bottom:8px">
-              <span class="short-url">https://${DOMAIN}/${link.slug}</span>
+              <a class="short-url" href="https://${DOMAIN}/${link.slug}" target="_blank" rel="noopener">https://${DOMAIN}/${link.slug}</a>
               <button class="copy-btn" onclick="copyUrl(this, 'https://${DOMAIN}/${link.slug}')">Copy</button>
               <span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks > 0 ? directClicks + ' direct clicks' : ''}</span>
             </div>
@@ -279,7 +280,7 @@
             h += `
               <tr class="${isMine ? 'mine' : ''}">
                 <td>${v.ref || '-'} ${isMine ? '<span class="badge badge-you">you</span>' : ''}</td>
-                <td><span class="short-url">${url}</span></td>
+                <td><a class="short-url" href="${url}" target="_blank" rel="noopener">${url}</a></td>
                 <td>${v.utm_source || '-'} / ${v.utm_medium || '-'}</td>
                 <td class="clicks">${vc}</td>
                 <td><button class="copy-btn" onclick="copyUrl(this, '${url}')">Copy</button></td>
