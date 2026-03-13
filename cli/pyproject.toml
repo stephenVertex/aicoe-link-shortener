@@ -5,6 +5,7 @@ description = "CLI admin tool for aicoe.fit link shortener"
 requires-python = ">=3.14"
 dependencies = [
     "click>=8.3.1",
+    "feedparser>=6.0.12",
     "python-dotenv>=1.2.2",
     "supabase>=2.28.0",
 ]

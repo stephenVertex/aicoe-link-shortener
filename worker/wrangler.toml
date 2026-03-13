@@ -3,8 +3,13 @@ main = "src/worker.js"
 compatibility_date = "2024-01-01"
 
 [vars]
-SUPABASE_FUNCTION_URL = "https://dumhbtxskncofwwzrmfx.supabase.co/functions/v1/redirect"
+SUPABASE_BASE_URL = "https://dumhbtxskncofwwzrmfx.supabase.co"
 
 routes = [
   { pattern = "aicoe.fit/*", zone_name = "aicoe.fit" }
+]
+
+# Enable importing non-JS modules (HTML files)
+rules = [
+  { type = "Text", globs = ["**/*.html"] }
 ]

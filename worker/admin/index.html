@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>aicoe.fit - Link Dashboard</title>
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 24px; }
+    header h1 { font-size: 1.4em; font-weight: 700; }
+    header .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.9em; color: #666; }
+    header .user-info img { width: 32px; height: 32px; border-radius: 50%; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; transition: all 0.15s; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .btn-secondary:hover { background: #d1d5db; }
+    .btn-sm { padding: 4px 10px; font-size: 0.8em; }
+    .btn-google { background: white; border: 1px solid #dadce0; color: #3c4043; padding: 12px 24px; font-size: 1em; display: flex; align-items: center; gap: 10px; margin: 40vh auto 0; border-radius: 6px; cursor: pointer; }
+    .btn-google:hover { background: #f8f9fa; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .btn-google svg { width: 20px; height: 20px; }
+    .toggle-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+    .link-card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .link-card h3 { font-size: 1.1em; margin-bottom: 4px; }
+    .link-card .dest { font-size: 0.85em; color: #666; margin-bottom: 12px; word-break: break-all; }
+    .variant-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; color: #666; font-weight: 500; }
+    .variant-table td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; }
+    .variant-table tr.mine { background: #eff6ff; }
+    .short-url { font-family: monospace; font-size: 0.9em; color: #2563eb; }
+    .copy-btn { background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: #666; }
+    .copy-btn:hover { background: #f3f4f6; }
+    .copy-btn.copied { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .clicks { font-weight: 600; color: #059669; }
+    .loading { text-align: center; padding: 60px; color: #999; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 500; }
+    .badge-you { background: #dbeafe; color: #1e40af; }
+    #app { min-height: 60vh; }
+    .stats-row { display: flex; gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: white; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); flex: 1; text-align: center; }
+    .stat-card .num { font-size: 2em; font-weight: 700; color: #2563eb; }
+    .stat-card .label { font-size: 0.85em; color: #666; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="app"><div class="loading">Loading...</div></div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://dumhbtxskncofwwzrmfx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
+    const DOMAIN = 'aicoe.fit';
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const app = document.getElementById('app');
+
+    let currentPerson = null;
+    let showAll = false;
+
+    async function init() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        await loadDashboard(session);
+      } else {
+        showLogin();
+      }
+
+      sb.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          await loadDashboard(session);
+        }
+      });
+    }
+
+    function showLogin() {
+      app.innerHTML = `
+        <header><h1>aicoe.fit</h1></header>
+        <button class="btn btn-google" onclick="signIn()">
+          <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Sign in with Google
+        </button>
+      `;
+    }
+
+    async function signIn() {
+      const currentUrl = window.location.origin + window.location.pathname;
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: currentUrl }
+      });
+      if (error) alert('Sign in failed: ' + error.message);
+    }
+
+    async function signOut() {
+      await sb.auth.signOut();
+      showLogin();
+    }
+
+    async function loadDashboard(session) {
+      app.innerHTML = '<div class="loading">Loading dashboard...</div>';
+
+      try {
+        const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
+        if (personErr) throw personErr;
+        currentPerson = person;
+
+        await renderDashboard(session);
+      } catch (err) {
+        app.innerHTML = '<div class="loading">Error: ' + err.message + '</div>';
+        console.error(err);
+      }
+    }
+
+    async function renderDashboard(session) {
+      const user = session.user;
+      const avatarUrl = user.user_metadata?.avatar_url || '';
+      const displayName = currentPerson.name || user.email;
+
+      const { data: links } = await sb.from('links').select('*').order('created_at', { ascending: false });
+      const { data: variants } = await sb.from('tracking_variants').select('*').order('created_at');
+      const { data: clicks } = await sb.from('click_log').select('variant_id, link_id');
+
+      const clicksByVariant = {};
+      const clicksByLink = {};
+      (clicks || []).forEach(c => {
+        if (c.variant_id) {
+          clicksByVariant[c.variant_id] = (clicksByVariant[c.variant_id] || 0) + 1;
+        }
+        clicksByLink[c.link_id] = (clicksByLink[c.link_id] || 0) + 1;
+      });
+
+      const variantsByLink = {};
+      (variants || []).forEach(v => {
+        if (!variantsByLink[v.link_id]) variantsByLink[v.link_id] = [];
+        variantsByLink[v.link_id].push(v);
+      });
+
+      const mySlug = currentPerson.slug;
+      let displayLinks = links || [];
+      if (!showAll) {
+        displayLinks = displayLinks.filter(link => {
+          const lvs = variantsByLink[link.id] || [];
+          return lvs.some(v => v.ref === mySlug);
+        });
+      }
+
+      const myVariants = (variants || []).filter(v => v.ref === mySlug);
+      const myClicks = myVariants.reduce((sum, v) => sum + (clicksByVariant[v.id] || 0), 0);
+      const totalClicks = (clicks || []).length;
+
+      let h = `
+        <header>
+          <h1>aicoe.fit</h1>
+          <div class="user-info">
+            ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
+            ${displayName}
+            <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
+          </div>
+        </header>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="num">${myVariants.length}</div>
+            <div class="label">My Links</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${myClicks}</div>
+            <div class="label">My Clicks</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${totalClicks}</div>
+            <div class="label">Total Clicks</div>
+          </div>
+        </div>
+
+        <div class="toggle-bar">
+          <button class="btn btn-sm ${showAll ? 'btn-secondary' : 'btn-primary'}" onclick="toggleView(false)">My Links</button>
+          <button class="btn btn-sm ${showAll ? 'btn-primary' : 'btn-secondary'}" onclick="toggleView(true)">All Links</button>
+        </div>
+      `;
+
+      if (displayLinks.length === 0) {
+        h += '<div class="link-card"><p style="color:#999">No links yet. Create some with the CLI.</p></div>';
+      }
+
+      for (const link of displayLinks) {
+        const lvs = variantsByLink[link.id] || [];
+        const variantClicks = lvs.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0);
+        const directClicks = (clicksByLink[link.id] || 0) - variantClicks;
+
+        const displayVariants = showAll ? lvs : lvs.filter(v => v.ref === mySlug);
+
+        h += `
+          <div class="link-card">
+            <h3>${link.slug}</h3>
+            <div class="dest">${link.destination_url}</div>
+            <div style="margin-bottom:8px">
+              <span class="short-url">https://${DOMAIN}/${link.slug}</span>
+              <button class="copy-btn" onclick="copyUrl(this, 'https://${DOMAIN}/${link.slug}')">Copy</button>
+              <span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks > 0 ? directClicks + ' direct clicks' : ''}</span>
+            </div>
+        `;
+
+        if (displayVariants.length > 0) {
+          h += `
+            <table class="variant-table">
+              <thead><tr><th>Person</th><th>Short URL</th><th>Source</th><th>Clicks</th><th></th></tr></thead>
+              <tbody>
+          `;
+          for (const v of displayVariants) {
+            const isMine = v.ref === mySlug;
+            const url = 'https://' + DOMAIN + '/' + link.slug + '-' + v.suffix;
+            const vc = clicksByVariant[v.id] || 0;
+            h += `
+              <tr class="${isMine ? 'mine' : ''}">
+                <td>${v.ref || '-'} ${isMine ? '<span class="badge badge-you">you</span>' : ''}</td>
+                <td><span class="short-url">${url}</span></td>
+                <td>${v.utm_source || '-'} / ${v.utm_medium || '-'}</td>
+                <td class="clicks">${vc}</td>
+                <td><button class="copy-btn" onclick="copyUrl(this, '${url}')">Copy</button></td>
+              </tr>
+            `;
+          }
+          h += '</tbody></table>';
+        }
+
+        h += '</div>';
+      }
+
+      app.innerHTML = h;
+    }
+
+    async function toggleView(all) {
+      showAll = all;
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) await renderDashboard(session);
+    }
+
+    function copyUrl(btn, url) {
+      navigator.clipboard.writeText(url).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 1500);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>

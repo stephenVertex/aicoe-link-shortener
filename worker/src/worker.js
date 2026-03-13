@@ -1,18 +1,37 @@
+import ADMIN_HTML from "../admin/index.html";
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // Skip favicon and other non-link requests
-    if (path === "/" || path === "/favicon.ico" || path === "/robots.txt") {
-      return new Response("aicoe.fit link shortener", { status: 200 });
+    // Skip favicon and robots
+    if (path === "/favicon.ico" || path === "/robots.txt") {
+      return new Response("", { status: 404 });
     }
 
-    // Strip leading slash to get the slug
-    const slug = path.slice(1);
+    // Root page — redirect to admin dashboard
+    if (path === "/") {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "/admin" },
+      });
+    }
 
-    // Proxy to Supabase Edge Function
-    const targetUrl = `${env.SUPABASE_FUNCTION_URL}/${slug}`;
+    // Admin dashboard — serve HTML directly from the worker
+    if (path === "/admin" || path === "/admin/") {
+      return new Response(ADMIN_HTML, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    // Everything else — redirect logic via the Supabase edge function
+    const slug = path.slice(1);
+    const targetUrl = `${env.SUPABASE_BASE_URL}/functions/v1/redirect/${slug}`;
 
     const response = await fetch(targetUrl, {
       method: request.method,
@@ -22,10 +41,9 @@ export default {
         "x-forwarded-for": request.headers.get("cf-connecting-ip") || "",
         "x-real-ip": request.headers.get("cf-connecting-ip") || "",
       },
-      redirect: "manual", // Don't follow redirects — pass them through
+      redirect: "manual",
     });
 
-    // Pass through the redirect response (or 404) directly
     return new Response(response.body, {
       status: response.status,
       headers: response.headers,

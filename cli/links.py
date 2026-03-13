@@ -323,5 +323,240 @@ def click_stats(slug: str | None, days: int):
                 click.echo(f"    -{label}{extra}: {count}")
 
 
+@cli.command()
+@click.option(
+    "--substack-url",
+    default="https://trilogyai.substack.com",
+    help="Substack publication URL",
+)
+@click.option("--utm-source", default="linkedin", help="Default utm_source")
+@click.option("--utm-medium", default="social", help="Default utm_medium")
+@click.option(
+    "--generate-variants/--no-generate-variants",
+    default=True,
+    help="Auto-generate variants for all people",
+)
+@click.option("--dry-run/--no-dry-run", default=False, help="Preview without creating")
+def import_substack(
+    substack_url: str,
+    utm_source: str,
+    utm_medium: str,
+    generate_variants: bool,
+    dry_run: bool,
+):
+    """Import all articles from a Substack publication."""
+    import xml.etree.ElementTree as ET
+
+    import requests
+
+    # Fetch sitemap for complete article list
+    sitemap_url = f"{substack_url}/sitemap.xml"
+    click.echo(f"Fetching sitemap from {sitemap_url}...")
+    resp = requests.get(sitemap_url, timeout=30)
+    resp.raise_for_status()
+
+    tree = ET.fromstring(resp.content)
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    urls = tree.findall(".//s:url/s:loc", ns)
+    post_urls = [u.text for u in urls if u.text and "/p/" in u.text]
+
+    click.echo(f"Found {len(post_urls)} articles in sitemap.")
+
+    # Fetch RSS feed for titles of recent articles
+    feed_url = f"{substack_url}/feed"
+    click.echo(f"Fetching RSS feed for article titles...")
+    import feedparser
+
+    feed = feedparser.parse(feed_url)
+    title_map: dict[str, str] = {}
+    for entry in feed.entries:
+        # Extract slug from link
+        link = entry.get("link", "")
+        if "/p/" in link:
+            slug = link.split("/p/")[-1].rstrip("/")
+            title_map[slug] = entry.get("title", slug)
+
+    # Get existing links to avoid duplicates
+    existing = supabase.table("links").select("slug").execute()
+    existing_slugs = {l["slug"] for l in existing.data}
+
+    # Get people for variant generation
+    people = []
+    if generate_variants:
+        people_result = supabase.table("people").select("*").order("name").execute()
+        people = people_result.data or []
+
+    created = 0
+    skipped = 0
+
+    for post_url in post_urls:
+        # Derive slug from URL: https://trilogyai.substack.com/p/some-article -> some-article
+        substack_slug = post_url.split("/p/")[-1].rstrip("/")
+
+        # Use title from RSS if available, otherwise use slug
+        title = title_map.get(substack_slug, substack_slug)
+
+        if substack_slug in existing_slugs:
+            skipped += 1
+            continue
+
+        if dry_run:
+            click.echo(f"  [DRY RUN] Would create: {substack_slug} -> {post_url}")
+            click.echo(f"    Title: {title}")
+            created += 1
+            continue
+
+        # Create the link
+        try:
+            result = (
+                supabase.table("links")
+                .insert({"slug": substack_slug, "destination_url": post_url})
+                .execute()
+            )
+            link_id = result.data[0]["id"]
+            existing_slugs.add(substack_slug)
+            created += 1
+
+            click.echo(f"  Created: {substack_slug}")
+            click.echo(f"    {title}")
+            click.echo(f"    https://{DOMAIN}/{substack_slug}")
+
+            # Generate variants for all people
+            if generate_variants and people:
+                campaign = substack_slug
+                for person in people:
+                    ref = person["slug"]
+                    suffix = make_suffix(
+                        utm_source, utm_medium, campaign, None, None, ref
+                    )
+
+                    # Check for suffix collision
+                    dup = (
+                        supabase.table("tracking_variants")
+                        .select("id")
+                        .eq("suffix", suffix)
+                        .execute()
+                    )
+                    if dup.data:
+                        continue
+
+                    row = {
+                        "link_id": link_id,
+                        "suffix": suffix,
+                        "utm_source": utm_source,
+                        "utm_medium": utm_medium,
+                        "utm_campaign": campaign,
+                        "ref": ref,
+                    }
+                    supabase.table("tracking_variants").insert(row).execute()
+
+                click.echo(f"    Generated {len(people)} variants")
+        except Exception as e:
+            click.echo(f"  ERROR creating {substack_slug}: {e}", err=True)
+
+    click.echo(f"\nDone. Created: {created}, Skipped (existing): {skipped}")
+
+
+@cli.command()
+@click.option(
+    "--substack-url",
+    default="https://trilogyai.substack.com",
+    help="Substack publication URL",
+)
+@click.option("--utm-source", default="linkedin", help="Default utm_source")
+@click.option("--utm-medium", default="social", help="Default utm_medium")
+def sync_substack(substack_url: str, utm_source: str, utm_medium: str):
+    """Check for new Substack articles and create links for them.
+
+    This is the same as import-substack but designed to be run
+    repeatedly (e.g. via cron). Only creates links for new articles.
+    """
+    import xml.etree.ElementTree as ET
+
+    import requests
+
+    # Fetch sitemap
+    resp = requests.get(f"{substack_url}/sitemap.xml", timeout=30)
+    resp.raise_for_status()
+
+    tree = ET.fromstring(resp.content)
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    urls = tree.findall(".//s:url/s:loc", ns)
+    post_urls = [u.text for u in urls if u.text and "/p/" in u.text]
+
+    # Get existing links
+    existing = supabase.table("links").select("slug").execute()
+    existing_slugs = {l["slug"] for l in existing.data}
+
+    # Find new articles
+    new_urls = [
+        u for u in post_urls if u.split("/p/")[-1].rstrip("/") not in existing_slugs
+    ]
+
+    if not new_urls:
+        click.echo("No new articles found.")
+        return
+
+    click.echo(f"Found {len(new_urls)} new article(s).")
+
+    # Get RSS feed for titles
+    import feedparser
+
+    feed = feedparser.parse(f"{substack_url}/feed")
+    title_map: dict[str, str] = {}
+    for entry in feed.entries:
+        link = entry.get("link", "")
+        if "/p/" in link:
+            slug = link.split("/p/")[-1].rstrip("/")
+            title_map[slug] = entry.get("title", slug)
+
+    # Get people
+    people_result = supabase.table("people").select("*").order("name").execute()
+    people = people_result.data or []
+
+    for post_url in new_urls:
+        substack_slug = post_url.split("/p/")[-1].rstrip("/")
+        title = title_map.get(substack_slug, substack_slug)
+
+        try:
+            result = (
+                supabase.table("links")
+                .insert({"slug": substack_slug, "destination_url": post_url})
+                .execute()
+            )
+            link_id = result.data[0]["id"]
+
+            click.echo(f"  Created: {substack_slug} - {title}")
+
+            # Generate variants
+            campaign = substack_slug
+            for person in people:
+                ref = person["slug"]
+                suffix = make_suffix(utm_source, utm_medium, campaign, None, None, ref)
+                dup = (
+                    supabase.table("tracking_variants")
+                    .select("id")
+                    .eq("suffix", suffix)
+                    .execute()
+                )
+                if dup.data:
+                    continue
+                row = {
+                    "link_id": link_id,
+                    "suffix": suffix,
+                    "utm_source": utm_source,
+                    "utm_medium": utm_medium,
+                    "utm_campaign": campaign,
+                    "ref": ref,
+                }
+                supabase.table("tracking_variants").insert(row).execute()
+
+            click.echo(f"    + {len(people)} variants")
+        except Exception as e:
+            click.echo(f"  ERROR: {e}", err=True)
+
+    click.echo("Sync complete.")
+
+
 if __name__ == "__main__":
     cli()
