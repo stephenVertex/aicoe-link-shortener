@@ -247,7 +247,27 @@
         `;
 
         if (displayVariants.length > 0) {
+          // Store card data for copy function
+          const cardId = 'card-' + link.id.replace(/-/g, '');
+          window._cardData = window._cardData || {};
+          window._cardData[cardId] = {
+            title: displayTitle,
+            author: link.author || '',
+            pubDate,
+            destUrl: link.destination_url,
+            slug: link.slug,
+            variants: displayVariants.map(v => ({
+              ref: v.ref,
+              url: 'https://' + DOMAIN + '/' + link.slug + '-' + v.suffix,
+              clicks: clicksByVariant[v.id] || 0,
+            })),
+          };
+
           h += `
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
+              <span style="font-size:0.8em; color:#888; font-weight:500">Tracking variants</span>
+              <button class="copy-btn" onclick="copyCardTable(this, '${cardId}')">Copy table</button>
+            </div>
             <table class="variant-table">
               <thead><tr><th>Person</th><th>Short URL</th><th>Source</th><th>Clicks</th><th></th></tr></thead>
               <tbody>
@@ -287,6 +307,40 @@
         btn.classList.add('copied');
         setTimeout(() => {
           btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 1500);
+      });
+    }
+
+    function copyCardTable(btn, cardId) {
+      const data = window._cardData[cardId];
+      if (!data) return;
+
+      // Rich HTML table for Google Chat
+      let html = '<b>' + data.title + '</b><br>';
+      html += '<i>' + data.author + (data.pubDate ? ' - ' + data.pubDate : '') + '</i><br>';
+      html += '<a href="' + data.destUrl + '">' + data.destUrl + '</a><br><br>';
+      html += '<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse">';
+      html += '<thead><tr><th>Person</th><th>Short URL</th><th>Clicks</th></tr></thead><tbody>';
+      for (const v of data.variants) {
+        html += '<tr><td>' + v.ref + '</td><td><a href="' + v.url + '">' + v.url + '</a></td><td>' + v.clicks + '</td></tr>';
+      }
+      html += '</tbody></table>';
+
+      // Plain text fallback
+      let text = data.title + '\n' + data.author + (data.pubDate ? ' - ' + data.pubDate : '') + '\n' + data.destUrl + '\n\n';
+      text += '| Person | Short URL | Clicks |\n|--------|-----------|--------|\n';
+      for (const v of data.variants) {
+        text += '| ' + v.ref + ' | ' + v.url + ' | ' + v.clicks + ' |\n';
+      }
+
+      const htmlBlob = new Blob([html], { type: 'text/html' });
+      const textBlob = new Blob([text], { type: 'text/plain' });
+      navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })]).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy table';
           btn.classList.remove('copied');
         }, 1500);
       });
