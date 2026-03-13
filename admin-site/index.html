@@ -205,6 +205,11 @@
     .source-input::placeholder { color: var(--text-faint); }
     .source-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
     .source-hint { font-size: 0.78em; color: var(--text-muted); }
+    .source-explainer { display: grid; gap: 8px; margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border-light); }
+    .source-explainer-title { font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.08em; color: var(--author); font-weight: 700; }
+    .source-explainer p, .source-explainer li { font-size: 0.83em; color: var(--text-muted); line-height: 1.45; }
+    .source-explainer ul { margin-left: 18px; display: grid; gap: 4px; }
+    .source-notice { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--copied-bg); border: 1px solid var(--copied-border); color: var(--copied-text); font-size: 0.84em; }
     .source-pill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
     .brand-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0; }
     .brand-icon svg { width: 12px; height: 12px; display: block; }
@@ -322,6 +327,7 @@
     let mySources = [];
     let sourceComposerOpen = false;
     let sourceSaving = false;
+    let sourceNotice = '';
     let sourceDraft = {
       icon: '',
       label: '',
@@ -421,7 +427,7 @@
       if (sourceSaving) return;
       sourceSaving = true;
       try {
-        const { error } = await sb.rpc('create_person_source', {
+        const { data, error } = await sb.rpc('create_person_source', {
           p_label: sourceDraft.label,
           p_source: sourceDraft.source,
           p_medium: sourceDraft.medium,
@@ -434,8 +440,10 @@
         const { data: sourcesData, error: sourcesErr } = await sb.from('person_sources').select('*').order('created_at');
         if (sourcesErr) throw sourcesErr;
         mySources = sourcesData || [];
+        const sourceName = sourceDraft.label || sourceDraft.source;
         sourceComposerOpen = false;
         resetSourceDraft();
+        sourceNotice = 'Saved "' + sourceName + '" and generated ' + ((data && data.generated_links) || 'all') + ' tracking links for existing articles. Future articles will get this source automatically too.';
         await rerenderDashboard();
       } catch (err) {
         alert('Unable to save source: ' + err.message);
@@ -456,6 +464,7 @@
         return;
       }
       mySources = mySources.filter((s) => s.id !== sourceId);
+      sourceNotice = 'Removed "' + label + '" from your active sources. Existing links still work, but new articles will no longer auto-generate for it.';
       await rerenderDashboard();
     }
 
@@ -526,6 +535,7 @@
       currentPerson = null;
       mySources = [];
       sourceComposerOpen = false;
+      sourceNotice = '';
       resetSourceDraft();
       showLogin();
     }
@@ -650,11 +660,24 @@
               <input class="source-input wide" placeholder="channel / group / content (optional)" value="${escapeAttr(sourceDraft.content)}" oninput="setSourceDraftField('content', this.value)">
               <input class="source-input" placeholder="term (optional)" value="${escapeAttr(sourceDraft.term)}" oninput="setSourceDraftField('term', this.value)">
             </div>
+            <div class="source-explainer">
+              <div class="source-explainer-title">How This Works</div>
+              <p>A source profile defines one share channel you want to track across every article. When you click <strong>Save source</strong>, the app immediately generates a new tracking link for all existing articles, and all future articles will get one automatically.</p>
+              <ul>
+                <li><strong>Name</strong>: what you want to see in the dashboard, like <code>Discord - AI Builders</code> or <code>LinkedIn - Fintech Founders</code>.</li>
+                <li><strong>source</strong>: the platform or top-level channel, like <code>linkedin</code>, <code>discord</code>, <code>x</code>, or <code>youtube</code>.</li>
+                <li><strong>medium</strong>: usually <code>social</code>.</li>
+                <li><strong>channel / group / content</strong>: optional sub-channel detail when you want multiple tracked links for the same platform.</li>
+                <li><strong>term</strong>: optional extra tag for more segmentation.</li>
+              </ul>
+              <p>Example: if you already have a default <code>Discord</code> source, you can add <code>Discord - AI CoE General</code> with the same <code>source=discord</code> and a distinct content or term value to track that specific community separately.</p>
+            </div>
             <div class="source-actions">
               <button class="btn btn-sm btn-primary" onclick="saveSource()">${sourceSaving ? 'Saving...' : 'Save source'}</button>
               <span class="source-hint">Known brands like LinkedIn, X, YouTube, and Discord use matching icons automatically. Add a custom emoji for anything else.</span>
             </div>
           ` : ''}
+          ${sourceNotice ? `<div class="source-notice">${sourceNotice}</div>` : ''}
         </div>
 
         <div class="toggle-bar">
