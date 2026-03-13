@@ -161,6 +161,83 @@ def list_links():
 
 
 @cli.command()
+@click.option("--slug", required=True, help="Slug of existing link")
+@click.option("--utm-source", required=True, help="utm_source value")
+@click.option("--utm-medium", required=True, help="utm_medium value")
+@click.option(
+    "--utm-campaign", default=None, help="utm_campaign value (defaults to slug)"
+)
+def generate_all(slug: str, utm_source: str, utm_medium: str, utm_campaign: str | None):
+    """Generate tracking variants for all people on a link."""
+    # Look up the link
+    link_result = (
+        supabase.table("links").select("id").eq("slug", slug).single().execute()
+    )
+    link_id = link_result.data["id"]
+    campaign = utm_campaign or slug
+
+    # Get all people
+    people = supabase.table("people").select("*").order("name").execute()
+    if not people.data:
+        click.echo("No people configured.")
+        return
+
+    click.echo(f"Generating variants for {click.style(slug, bold=True)}:\n")
+
+    for person in people.data:
+        ref = person["slug"]
+        suffix = make_suffix(utm_source, utm_medium, campaign, None, None, ref)
+
+        # Check if already exists
+        existing = (
+            supabase.table("tracking_variants")
+            .select("id")
+            .eq("suffix", suffix)
+            .execute()
+        )
+        if existing.data:
+            click.echo(
+                f"  {person['name']:10s}  (already exists) https://{DOMAIN}/{slug}-{suffix}"
+            )
+            continue
+
+        row = {
+            "link_id": link_id,
+            "suffix": suffix,
+            "utm_source": utm_source,
+            "utm_medium": utm_medium,
+            "utm_campaign": campaign,
+            "ref": ref,
+        }
+        supabase.table("tracking_variants").insert(row).execute()
+        click.echo(f"  {person['name']:10s}  https://{DOMAIN}/{slug}-{suffix}")
+
+    click.echo(f"\nDone.")
+
+
+@cli.command()
+def list_people():
+    """Show all configured people."""
+    people = supabase.table("people").select("*").order("name").execute()
+    if not people.data:
+        click.echo("No people configured.")
+        return
+
+    click.echo("Configured people:")
+    for p in people.data:
+        click.echo(f"  {p['name']} ({p['slug']})")
+
+
+@cli.command()
+@click.option("--name", required=True, help="Display name")
+@click.option("--person-slug", required=True, help="Lowercase slug for ref param")
+def add_person(name: str, person_slug: str):
+    """Add a new person to the config."""
+    supabase.table("people").insert({"name": name, "slug": person_slug}).execute()
+    click.echo(f"Added: {name} ({person_slug})")
+
+
+@cli.command()
 @click.option("--slug", default=None, help="Filter by link slug")
 @click.option("--days", default=7, help="Number of days to look back")
 def click_stats(slug: str | None, days: int):
