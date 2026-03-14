@@ -3,8 +3,10 @@
 
 import hashlib
 import os
+import xml.etree.ElementTree as ET
 
 import click
+import requests
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -15,6 +17,7 @@ SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 DOMAIN = "aicoe.fit"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+SUBSTACK_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def make_suffix(*parts: str | None) -> str:
@@ -29,6 +32,126 @@ def make_suffix(*parts: str | None) -> str:
         result = chars[num % 36] + result
         num //= 36
     return result[:4] or "0"
+
+
+def fetch_sitemap_entries(substack_url: str) -> list[dict[str, str | None]]:
+    resp = requests.get(
+        f"{substack_url}/sitemap.xml", headers=SUBSTACK_HEADERS, timeout=30
+    )
+    resp.raise_for_status()
+
+    tree = ET.fromstring(resp.content)
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    entries = []
+    for entry in tree.findall(".//s:url", ns):
+        loc = entry.find("s:loc", ns)
+        if loc is None or not loc.text or "/p/" not in loc.text:
+            continue
+        lastmod = entry.find("s:lastmod", ns)
+        entries.append(
+            {
+                "url": loc.text,
+                "lastmod": lastmod.text if lastmod is not None else None,
+            }
+        )
+    return entries
+
+
+def fetch_all_post_meta(substack_url: str) -> dict[str, dict]:
+    posts: dict[str, dict] = {}
+    offset = 0
+    while True:
+        resp = requests.get(
+            f"{substack_url}/api/v1/posts?limit=50&offset={offset}",
+            headers=SUBSTACK_HEADERS,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        batch = resp.json()
+        if not batch:
+            break
+        for post in batch:
+            slug = post.get("slug")
+            if slug:
+                posts[slug] = post
+        offset += 50
+    return posts
+
+
+def post_author(post: dict | None) -> str | None:
+    if not post:
+        return None
+    bylines = post.get("publishedBylines") or []
+    if not bylines:
+        return None
+    return bylines[0].get("name")
+
+
+def load_variant_profiles(
+    default_source: str, default_medium: str
+) -> list[dict[str, str | None]]:
+    people_result = supabase.table("people").select("id, slug").order("name").execute()
+    people = people_result.data or []
+
+    sources_result = (
+        supabase.table("person_sources")
+        .select("person_id, utm_source, utm_medium, utm_content, utm_term")
+        .execute()
+    )
+    source_rows = sources_result.data or []
+
+    sources_by_person: dict[str, list[dict[str, str | None]]] = {}
+    for source in source_rows:
+        person_id = source.get("person_id")
+        if not person_id:
+            continue
+        sources_by_person.setdefault(person_id, []).append(source)
+
+    profiles = []
+    for person in people:
+        person_sources = sources_by_person.get(person["id"], [])
+        if not person_sources:
+            profiles.append(
+                {
+                    "ref": person["slug"],
+                    "utm_source": default_source,
+                    "utm_medium": default_medium,
+                    "utm_content": None,
+                    "utm_term": None,
+                }
+            )
+            continue
+
+        for source in person_sources:
+            profiles.append(
+                {
+                    "ref": person["slug"],
+                    "utm_source": source.get("utm_source") or default_source,
+                    "utm_medium": source.get("utm_medium") or default_medium,
+                    "utm_content": source.get("utm_content"),
+                    "utm_term": source.get("utm_term"),
+                }
+            )
+
+    return profiles
+
+
+def ensure_variant_profiles(link_id: str, profiles: list[dict[str, str | None]]) -> int:
+    generated = 0
+    for profile in profiles:
+        supabase.rpc(
+            "ensure_tracking_variant",
+            {
+                "p_link_id": link_id,
+                "p_ref": profile["ref"],
+                "p_source": profile["utm_source"],
+                "p_medium": profile["utm_medium"],
+                "p_content": profile["utm_content"],
+                "p_term": profile["utm_term"],
+            },
+        ).execute()
+        generated += 1
+    return generated
 
 
 @click.group()
@@ -345,46 +468,28 @@ def import_substack(
     dry_run: bool,
 ):
     """Import all articles from a Substack publication."""
-    import xml.etree.ElementTree as ET
-
-    import requests
-
-    # Fetch sitemap for complete article list
     sitemap_url = f"{substack_url}/sitemap.xml"
     click.echo(f"Fetching sitemap from {sitemap_url}...")
-    resp = requests.get(sitemap_url, timeout=30)
-    resp.raise_for_status()
-
-    tree = ET.fromstring(resp.content)
-    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-    urls = tree.findall(".//s:url/s:loc", ns)
-    post_urls = [u.text for u in urls if u.text and "/p/" in u.text]
+    sitemap_entries = fetch_sitemap_entries(substack_url)
+    post_urls = [entry["url"] for entry in sitemap_entries if entry["url"]]
 
     click.echo(f"Found {len(post_urls)} articles in sitemap.")
 
-    # Fetch RSS feed for titles of recent articles
-    feed_url = f"{substack_url}/feed"
-    click.echo(f"Fetching RSS feed for article titles...")
-    import feedparser
-
-    feed = feedparser.parse(feed_url)
-    title_map: dict[str, str] = {}
-    for entry in feed.entries:
-        # Extract slug from link
-        link = entry.get("link", "")
-        if "/p/" in link:
-            slug = link.split("/p/")[-1].rstrip("/")
-            title_map[slug] = entry.get("title", slug)
+    click.echo("Fetching Substack post metadata...")
+    post_meta = fetch_all_post_meta(substack_url)
+    sitemap_by_slug = {
+        entry["url"].split("/p/")[-1].rstrip("/"): entry
+        for entry in sitemap_entries
+        if entry["url"]
+    }
 
     # Get existing links to avoid duplicates
     existing = supabase.table("links").select("slug").execute()
     existing_slugs = {l["slug"] for l in existing.data}
 
-    # Get people for variant generation
-    people = []
+    variant_profiles = []
     if generate_variants:
-        people_result = supabase.table("people").select("*").order("name").execute()
-        people = people_result.data or []
+        variant_profiles = load_variant_profiles(utm_source, utm_medium)
 
     created = 0
     skipped = 0
@@ -392,27 +497,36 @@ def import_substack(
     for post_url in post_urls:
         # Derive slug from URL: https://trilogyai.substack.com/p/some-article -> some-article
         substack_slug = post_url.split("/p/")[-1].rstrip("/")
+        meta = post_meta.get(substack_slug)
+        sitemap_entry = sitemap_by_slug.get(substack_slug, {})
 
-        # Use title from RSS if available, otherwise use slug
-        title = title_map.get(substack_slug, substack_slug)
+        title = (meta or {}).get("title") or substack_slug
+        author = post_author(meta)
+        destination_url = (meta or {}).get("canonical_url") or post_url
 
         if substack_slug in existing_slugs:
             skipped += 1
             continue
 
         if dry_run:
-            click.echo(f"  [DRY RUN] Would create: {substack_slug} -> {post_url}")
+            click.echo(
+                f"  [DRY RUN] Would create: {substack_slug} -> {destination_url}"
+            )
             click.echo(f"    Title: {title}")
             created += 1
             continue
 
         # Create the link
         try:
-            result = (
-                supabase.table("links")
-                .insert({"slug": substack_slug, "destination_url": post_url})
-                .execute()
-            )
+            payload = {
+                "slug": substack_slug,
+                "destination_url": destination_url,
+                "title": title,
+                "author": author,
+            }
+            if sitemap_entry.get("lastmod"):
+                payload["published_at"] = sitemap_entry["lastmod"]
+            result = supabase.table("links").insert(payload).execute()
             link_id = result.data[0]["id"]
             existing_slugs.add(substack_slug)
             created += 1
@@ -421,36 +535,9 @@ def import_substack(
             click.echo(f"    {title}")
             click.echo(f"    https://{DOMAIN}/{substack_slug}")
 
-            # Generate variants for all people
-            if generate_variants and people:
-                campaign = substack_slug
-                for person in people:
-                    ref = person["slug"]
-                    suffix = make_suffix(
-                        utm_source, utm_medium, campaign, None, None, ref
-                    )
-
-                    # Check for suffix collision
-                    dup = (
-                        supabase.table("tracking_variants")
-                        .select("id")
-                        .eq("suffix", suffix)
-                        .execute()
-                    )
-                    if dup.data:
-                        continue
-
-                    row = {
-                        "link_id": link_id,
-                        "suffix": suffix,
-                        "utm_source": utm_source,
-                        "utm_medium": utm_medium,
-                        "utm_campaign": campaign,
-                        "ref": ref,
-                    }
-                    supabase.table("tracking_variants").insert(row).execute()
-
-                click.echo(f"    Generated {len(people)} variants")
+            if generate_variants and variant_profiles:
+                generated = ensure_variant_profiles(link_id, variant_profiles)
+                click.echo(f"    Generated {generated} variants")
         except Exception as e:
             click.echo(f"  ERROR creating {substack_slug}: {e}", err=True)
 
@@ -471,18 +558,13 @@ def sync_substack(substack_url: str, utm_source: str, utm_medium: str):
     This is the same as import-substack but designed to be run
     repeatedly (e.g. via cron). Only creates links for new articles.
     """
-    import xml.etree.ElementTree as ET
-
-    import requests
-
-    # Fetch sitemap
-    resp = requests.get(f"{substack_url}/sitemap.xml", timeout=30)
-    resp.raise_for_status()
-
-    tree = ET.fromstring(resp.content)
-    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-    urls = tree.findall(".//s:url/s:loc", ns)
-    post_urls = [u.text for u in urls if u.text and "/p/" in u.text]
+    sitemap_entries = fetch_sitemap_entries(substack_url)
+    post_urls = [entry["url"] for entry in sitemap_entries if entry["url"]]
+    sitemap_by_slug = {
+        entry["url"].split("/p/")[-1].rstrip("/"): entry
+        for entry in sitemap_entries
+        if entry["url"]
+    }
 
     # Get existing links
     existing = supabase.table("links").select("slug").execute()
@@ -499,59 +581,34 @@ def sync_substack(substack_url: str, utm_source: str, utm_medium: str):
 
     click.echo(f"Found {len(new_urls)} new article(s).")
 
-    # Get RSS feed for titles
-    import feedparser
+    post_meta = fetch_all_post_meta(substack_url)
 
-    feed = feedparser.parse(f"{substack_url}/feed")
-    title_map: dict[str, str] = {}
-    for entry in feed.entries:
-        link = entry.get("link", "")
-        if "/p/" in link:
-            slug = link.split("/p/")[-1].rstrip("/")
-            title_map[slug] = entry.get("title", slug)
-
-    # Get people
-    people_result = supabase.table("people").select("*").order("name").execute()
-    people = people_result.data or []
+    variant_profiles = load_variant_profiles(utm_source, utm_medium)
 
     for post_url in new_urls:
         substack_slug = post_url.split("/p/")[-1].rstrip("/")
-        title = title_map.get(substack_slug, substack_slug)
+        meta = post_meta.get(substack_slug)
+        sitemap_entry = sitemap_by_slug.get(substack_slug, {})
+        title = (meta or {}).get("title") or substack_slug
+        author = post_author(meta)
+        destination_url = (meta or {}).get("canonical_url") or post_url
 
         try:
-            result = (
-                supabase.table("links")
-                .insert({"slug": substack_slug, "destination_url": post_url})
-                .execute()
-            )
+            payload = {
+                "slug": substack_slug,
+                "destination_url": destination_url,
+                "title": title,
+                "author": author,
+            }
+            if sitemap_entry.get("lastmod"):
+                payload["published_at"] = sitemap_entry["lastmod"]
+            result = supabase.table("links").insert(payload).execute()
             link_id = result.data[0]["id"]
 
             click.echo(f"  Created: {substack_slug} - {title}")
 
-            # Generate variants
-            campaign = substack_slug
-            for person in people:
-                ref = person["slug"]
-                suffix = make_suffix(utm_source, utm_medium, campaign, None, None, ref)
-                dup = (
-                    supabase.table("tracking_variants")
-                    .select("id")
-                    .eq("suffix", suffix)
-                    .execute()
-                )
-                if dup.data:
-                    continue
-                row = {
-                    "link_id": link_id,
-                    "suffix": suffix,
-                    "utm_source": utm_source,
-                    "utm_medium": utm_medium,
-                    "utm_campaign": campaign,
-                    "ref": ref,
-                }
-                supabase.table("tracking_variants").insert(row).execute()
-
-            click.echo(f"    + {len(people)} variants")
+            generated = ensure_variant_profiles(link_id, variant_profiles)
+            click.echo(f"    + {generated} variants")
         except Exception as e:
             click.echo(f"  ERROR: {e}", err=True)
 
