@@ -252,12 +252,18 @@
     .theme-control { display: inline-flex; align-items: center; gap: 6px; }
     .theme-label { font-size: 0.75em; color: var(--text-faint); }
     .theme-select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 0.8em; }
+    .filter-input-wrap { position: relative; min-width: 260px; flex: 1; max-width: 420px; }
+    .filter-input-wrap .filter-input { min-width: 0; max-width: none; width: 100%; }
+    .author-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 100; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; max-height: 220px; overflow-y: auto; box-shadow: 0 4px 16px var(--card-shadow); margin-top: 4px; }
+    .author-dropdown-item { padding: 8px 12px; cursor: pointer; font-size: 0.9em; color: var(--text); }
+    .author-dropdown-item:hover, .author-dropdown-item.active { background: var(--mine-bg); color: var(--accent); }
     @media (max-width: 720px) {
       .login-shell { grid-template-columns: 1fr; min-height: auto; }
       .login-panel { padding: 22px; }
       .login-title { font-size: 1.7em; }
       .stats-row { flex-wrap: wrap; }
       .toggle-bar { flex-wrap: wrap; }
+      .filter-input-wrap { max-width: none; min-width: 0; width: 100%; }
       .filter-input { max-width: none; min-width: 0; width: 100%; }
       .filter-meta { width: 100%; margin-left: 0; }
       .source-form { grid-template-columns: 1fr; }
@@ -357,6 +363,9 @@
     let semanticLoading = false;
     let semanticError = '';
     let searchDebounceTimer = null;
+    let authorDropdownOpen = false;
+    let authorDropdownItems = [];
+    let authorDropdownIndex = -1;
     let embedRunning = false;
     let embedNotice = '';
     let syncRunning = false;
@@ -451,7 +460,55 @@
         semanticResults = null;
         semanticError = '';
       }
+      // Author '@' mention dropdown
+      const atIdx = value.lastIndexOf('@');
+      if (atIdx !== -1) {
+        const authorQuery = value.substring(atIdx + 1).toLowerCase();
+        const allAuthors = [...new Set((dashboardData && dashboardData.links || []).map(l => l.author).filter(Boolean))].sort();
+        authorDropdownItems = allAuthors.filter(a => a.toLowerCase().includes(authorQuery));
+        authorDropdownOpen = authorDropdownItems.length > 0;
+        authorDropdownIndex = -1;
+      } else {
+        authorDropdownOpen = false;
+        authorDropdownItems = [];
+        authorDropdownIndex = -1;
+      }
       rerenderDashboard();
+    }
+
+    function selectAuthor(author) {
+      const atIdx = searchQuery.lastIndexOf('@');
+      if (atIdx !== -1) {
+        searchQuery = searchQuery.substring(0, atIdx) + '@' + author;
+      } else {
+        searchQuery = '@' + author;
+      }
+      authorDropdownOpen = false;
+      authorDropdownItems = [];
+      authorDropdownIndex = -1;
+      rerenderDashboard();
+    }
+
+    function handleFilterKeydown(event) {
+      if (!authorDropdownOpen) return;
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        authorDropdownIndex = Math.min(authorDropdownIndex + 1, authorDropdownItems.length - 1);
+        rerenderDashboard();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        authorDropdownIndex = Math.max(authorDropdownIndex - 1, 0);
+        rerenderDashboard();
+      } else if (event.key === 'Enter' && authorDropdownIndex >= 0) {
+        event.preventDefault();
+        selectAuthor(authorDropdownItems[authorDropdownIndex]);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        authorDropdownOpen = false;
+        authorDropdownItems = [];
+        authorDropdownIndex = -1;
+        rerenderDashboard();
+      }
     }
 
     function toggleSemanticSearch() {
@@ -984,16 +1041,38 @@
       }
 
       if (searchQuery.trim()) {
-        if (semanticSearch && semanticResults && Object.keys(semanticResults).length > 0) {
-          // Semantic search: filter to matched articles and sort by similarity
-          displayLinks = displayLinks.filter(link => link.id in semanticResults);
-          displayLinks.sort((a, b) => (semanticResults[b.id] || 0) - (semanticResults[a.id] || 0));
-        } else {
-          // Fuzzy search fallback
-          displayLinks = displayLinks.filter(link => {
-            const searchText = [link.title, link.author, link.slug].filter(Boolean).join(' ');
-            return fuzzyMatch(searchText, searchQuery);
-          });
+        // Extract author filter from '@mention' if present
+        let textQuery = searchQuery;
+        let authorFilter = null;
+        const atIdx = searchQuery.lastIndexOf('@');
+        if (atIdx !== -1) {
+          authorFilter = searchQuery.substring(atIdx + 1).trim().toLowerCase();
+          textQuery = searchQuery.substring(0, atIdx).trim();
+        }
+
+        if (authorFilter) {
+          displayLinks = displayLinks.filter(link =>
+            link.author && link.author.toLowerCase().startsWith(authorFilter)
+          );
+        }
+
+        if (textQuery) {
+          if (semanticSearch && semanticResults && Object.keys(semanticResults).length > 0) {
+            // Semantic search: filter to matched articles and sort by similarity
+            displayLinks = displayLinks.filter(link => link.id in semanticResults);
+            displayLinks.sort((a, b) => (semanticResults[b.id] || 0) - (semanticResults[a.id] || 0));
+          } else {
+            // Fuzzy search fallback
+            displayLinks = displayLinks.filter(link => {
+              const searchText = [link.title, link.author, link.slug].filter(Boolean).join(' ');
+              return fuzzyMatch(searchText, textQuery);
+            });
+          }
+        } else if (!authorFilter) {
+          if (semanticSearch && semanticResults && Object.keys(semanticResults).length > 0) {
+            displayLinks = displayLinks.filter(link => link.id in semanticResults);
+            displayLinks.sort((a, b) => (semanticResults[b.id] || 0) - (semanticResults[a.id] || 0));
+          }
         }
       }
 
@@ -1110,7 +1189,10 @@
         <div class="toggle-bar">
           <button class="btn btn-sm ${showAll ? 'btn-secondary' : 'btn-primary'}" onclick="toggleView(false)">My Links</button>
           <button class="btn btn-sm ${showAll ? 'btn-primary' : 'btn-secondary'}" onclick="toggleView(true)">All Links</button>
-          <input class="filter-input" placeholder="${semanticSearch ? 'Semantic search (3+ chars)...' : 'Filter articles by title, author, or slug...'}" value="${escapeAttr(searchQuery)}" oninput="setSearchQuery(this.value)">
+          <div class="filter-input-wrap">
+            <input class="filter-input" placeholder="${semanticSearch ? 'Semantic search (3+ chars)...' : 'Filter by title, slug, or @author...'}" value="${escapeAttr(searchQuery)}" oninput="setSearchQuery(this.value)" onkeydown="handleFilterKeydown(event)">
+            ${authorDropdownOpen ? `<div class="author-dropdown">${authorDropdownItems.map((a, i) => `<div class="author-dropdown-item${i === authorDropdownIndex ? ' active' : ''}" onmousedown="selectAuthor('${escapeAttr(a)}')">${escapeAttr(a)}</div>`).join('')}</div>` : ''}
+          </div>
           <button class="btn btn-sm ${semanticSearch ? 'btn-primary' : 'btn-secondary'}" onclick="toggleSemanticSearch()" title="Toggle AI-powered semantic search">
             ${semanticLoading ? '⏳' : '🔍'} Semantic
           </button>
