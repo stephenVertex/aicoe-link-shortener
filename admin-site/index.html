@@ -546,11 +546,21 @@
       // Author '@' mention dropdown
       const atIdx = value.lastIndexOf('@');
       if (atIdx !== -1) {
-        const authorQuery = value.substring(atIdx + 1).toLowerCase();
-        const allAuthors = [...new Set((dashboardData && dashboardData.links || []).map(l => l.author).filter(Boolean))].sort();
-        authorDropdownItems = allAuthors.filter(a => a.toLowerCase().includes(authorQuery));
-        authorDropdownOpen = authorDropdownItems.length > 0;
-        authorDropdownIndex = -1;
+        const afterAt = value.substring(atIdx + 1);
+        // If token is complete @[Name], don't show dropdown
+        const bracketMatch = afterAt.match(/^\[([^\]]*)\]/);
+        if (bracketMatch) {
+          authorDropdownOpen = false;
+          authorDropdownItems = [];
+          authorDropdownIndex = -1;
+        } else {
+          // Strip leading '[' if user is mid-bracket (shouldn't happen normally)
+          const authorQuery = afterAt.replace(/^\[/, '').toLowerCase();
+          const allAuthors = [...new Set((dashboardData && dashboardData.links || []).map(l => l.author).filter(Boolean))].sort();
+          authorDropdownItems = allAuthors.filter(a => a.toLowerCase().includes(authorQuery));
+          authorDropdownOpen = authorDropdownItems.length > 0;
+          authorDropdownIndex = -1;
+        }
       } else {
         authorDropdownOpen = false;
         authorDropdownItems = [];
@@ -562,9 +572,9 @@
     function selectAuthor(author) {
       const atIdx = searchQuery.lastIndexOf('@');
       if (atIdx !== -1) {
-        searchQuery = searchQuery.substring(0, atIdx) + '@' + author;
+        searchQuery = searchQuery.substring(0, atIdx) + '@[' + author + ']';
       } else {
-        searchQuery = '@' + author;
+        searchQuery = '@[' + author + ']';
       }
       authorDropdownOpen = false;
       authorDropdownItems = [];
@@ -577,11 +587,11 @@
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         authorDropdownIndex = Math.min(authorDropdownIndex + 1, authorDropdownItems.length - 1);
-        rerenderDashboard();
+        updateAuthorDropdownHighlight();
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         authorDropdownIndex = Math.max(authorDropdownIndex - 1, 0);
-        rerenderDashboard();
+        updateAuthorDropdownHighlight();
       } else if (event.key === 'Enter' && authorDropdownIndex >= 0) {
         event.preventDefault();
         selectAuthor(authorDropdownItems[authorDropdownIndex]);
@@ -590,8 +600,21 @@
         authorDropdownOpen = false;
         authorDropdownItems = [];
         authorDropdownIndex = -1;
-        rerenderDashboard();
+        const dropdown = document.querySelector('.author-dropdown');
+        if (dropdown) dropdown.remove();
       }
+    }
+
+    function updateAuthorDropdownHighlight() {
+      const items = document.querySelectorAll('.author-dropdown-item');
+      items.forEach((el, i) => {
+        if (i === authorDropdownIndex) {
+          el.classList.add('active');
+          el.scrollIntoView({ block: 'nearest' });
+        } else {
+          el.classList.remove('active');
+        }
+      });
     }
 
     function closeAuthorDropdown() {
@@ -599,7 +622,10 @@
         authorDropdownOpen = false;
         authorDropdownItems = [];
         authorDropdownIndex = -1;
-        rerenderDashboard();
+        // Remove dropdown from DOM directly instead of full rerender
+        // to avoid race conditions with async rerenderDashboard()
+        const dropdown = document.querySelector('.author-dropdown');
+        if (dropdown) dropdown.remove();
       }
     }
 
@@ -1140,18 +1166,27 @@
       }
 
       if (searchQuery.trim()) {
-        // Extract author filter from '@mention' if present
+        // Extract author filter from '@[Name]' token or bare '@mention'
         let textQuery = searchQuery;
         let authorFilter = null;
-        const atIdx = searchQuery.lastIndexOf('@');
-        if (atIdx !== -1) {
-          authorFilter = searchQuery.substring(atIdx + 1).trim().toLowerCase();
-          textQuery = searchQuery.substring(0, atIdx).trim();
+        const bracketMention = searchQuery.match(/@\[([^\]]*)\]/);
+        if (bracketMention) {
+          authorFilter = bracketMention[1].trim().toLowerCase();
+          textQuery = searchQuery.replace(/@\[[^\]]*\]/, '').trim();
+        } else {
+          const atIdx = searchQuery.lastIndexOf('@');
+          if (atIdx !== -1) {
+            authorFilter = searchQuery.substring(atIdx + 1).trim().toLowerCase();
+            textQuery = searchQuery.substring(0, atIdx).trim();
+          }
         }
 
         if (authorFilter) {
+          const isExactToken = !!bracketMention;
           displayLinks = displayLinks.filter(link =>
-            link.author && link.author.toLowerCase().startsWith(authorFilter)
+            link.author && (isExactToken
+              ? link.author.toLowerCase() === authorFilter
+              : link.author.toLowerCase().startsWith(authorFilter))
           );
         }
 
