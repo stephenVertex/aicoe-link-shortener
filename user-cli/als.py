@@ -7,11 +7,16 @@ for articles, and search the article catalogue.
 
 import configparser
 import os
+import shutil
+import subprocess
 import sys
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 import click
 import requests
+
+__version__ = _pkg_version("als")
 
 CREDENTIALS_FILE = Path.home() / ".als.credentials"
 API_BASE = "https://dumhbtxskncofwwzrmfx.supabase.co/functions/v1"
@@ -79,6 +84,7 @@ def _api_request(
 
 
 @click.group()
+@click.version_option(version=__version__, prog_name="als")
 def cli():
     """aicoe.fit link shortener - get your personalised tracking links."""
     pass
@@ -101,6 +107,78 @@ def login(api_key: str):
 
     _write_credentials(api_key)
     click.echo(f"Logged in. Credentials saved to {CREDENTIALS_FILE}")
+
+
+# ---------------------------------------------------------------------------
+# Upgrade
+# ---------------------------------------------------------------------------
+
+# Canonical install source — GitHub repo subdirectory for the user CLI.
+_GITHUB_INSTALL_SRC = (
+    "als @ git+https://github.com/stephenVertex/aicoe-link-shortener.git"
+    "#subdirectory=user-cli"
+)
+
+
+@cli.command()
+@click.option("--force", is_flag=True, help="Force reinstall even if up to date.")
+def upgrade(force: bool):
+    """Upgrade als to the latest version from GitHub.
+
+    Fetches the latest code from the main branch of the GitHub repository
+    and reinstalls the CLI tool via uv.
+    """
+    # Ensure uv is available
+    uv_path = shutil.which("uv")
+    if uv_path is None:
+        click.echo(
+            "Error: 'uv' is not installed. Install it first: "
+            "https://docs.astral.sh/uv/getting-started/installation/",
+            err=True,
+        )
+        sys.exit(1)
+
+    old_version = __version__
+    click.echo(f"Current version: {old_version}")
+    click.echo("Upgrading als from GitHub (main branch)...")
+
+    cmd = [
+        uv_path,
+        "tool",
+        "install",
+        _GITHUB_INSTALL_SRC,
+        "--force",
+        "--reinstall",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        click.echo("Error: upgrade timed out after 120 seconds.", err=True)
+        sys.exit(1)
+
+    if result.returncode != 0:
+        click.echo("Upgrade failed:", err=True)
+        if result.stderr:
+            click.echo(result.stderr.strip(), err=True)
+        if result.stdout:
+            click.echo(result.stdout.strip(), err=True)
+        sys.exit(1)
+
+    # Show uv output (contains version info)
+    if result.stdout.strip():
+        click.echo(result.stdout.strip())
+    if result.stderr.strip():
+        # uv prints progress to stderr
+        click.echo(result.stderr.strip())
+
+    click.echo(f"\nUpgrade complete. (was: {old_version})")
+    click.echo("Run 'als --version' to check the new version.")
 
 
 @cli.command()
