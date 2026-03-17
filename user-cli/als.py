@@ -331,18 +331,31 @@ def search(query: str, count: int):
 
 @cli.command()
 @click.argument("n", default=10, type=int)
-def last(n: int):
+@click.option(
+    "--author",
+    default=None,
+    help="Filter articles by author name (case-insensitive substring match).",
+)
+def last(n: int, author: str | None):
     """Show the last N articles with your personalised tracking links.
 
     N defaults to 10. Shows the most recently published articles in the
     database, with your personalised tracking link for each one.
+
+    Use --author to filter to a specific author, e.g.:
+
+        als last 5 --author "Simon"
     """
     api_key = _get_api_key()
 
-    # Step 1: Fetch last N articles
+    # Step 1: Fetch last N articles (optionally filtered by author)
+    body: dict = {"count": n}
+    if author:
+        body["author"] = author
+
     last_resp = requests.post(
         f"{API_BASE}/last-articles",
-        json={"count": n},
+        json=body,
         timeout=30,
     )
     if last_resp.status_code != 200:
@@ -356,23 +369,31 @@ def last(n: int):
     results = last_data.get("results", [])
 
     if not results:
-        click.echo("No articles found.")
+        if author:
+            click.echo(f"No articles found for author: {author}")
+        else:
+            click.echo("No articles found.")
         return
 
-    click.echo(f"\nLast {len(results)} article(s):\n")
+    if author:
+        click.echo(
+            f"\nLast {len(results)} article(s) by {click.style(author, bold=True)}:\n"
+        )
+    else:
+        click.echo(f"\nLast {len(results)} article(s):\n")
 
     # Step 2: For each article, get personalised tracking link
     for i, result in enumerate(results, 1):
         title = result.get("title") or result.get("slug", "")
-        author = result.get("author", "")
+        article_author = result.get("author", "")
         slug = result.get("slug", "")
         published_at = result.get("published_at") or result.get("created_at", "")
         # Trim to date portion if present
         date_str = published_at[:10] if published_at else ""
 
         click.echo(f"  {i}. {click.style(title, bold=True)}")
-        if author:
-            click.echo(f"     by {author}")
+        if article_author:
+            click.echo(f"     by {article_author}")
         if date_str:
             click.echo(f"     {date_str}")
 
