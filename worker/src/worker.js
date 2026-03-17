@@ -6,7 +6,7 @@ const INSTALL_SCRIPT = `#!/usr/bin/env bash
 #    or: wget -qO- aicoe.fit/install | bash
 set -euo pipefail
 
-GITHUB_INSTALL_SRC="als @ git+https://github.com/stephenVertex/aicoe-link-shortener.git#subdirectory=user-cli"
+WHEEL_URL="https://post-genius-media.s3.amazonaws.com/shup/project/aicoe-link-shortener/als-021-py3-none-any.whl"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=12
 
@@ -101,7 +101,7 @@ ensure_uv() {
 
 install_als() {
     info "Installing als CLI from GitHub..."
-    uv tool install "$GITHUB_INSTALL_SRC" --force
+    uv tool install "$WHEEL_URL" --force
 
     # Verify
     export PATH="$HOME/.local/bin:$PATH"
