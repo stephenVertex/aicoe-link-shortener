@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>aicoe.fit - Link Dashboard</title>
   <script src="./supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
       --bg: #f5f5f5;
@@ -240,6 +241,12 @@
     .stat-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px var(--card-shadow); flex: 1; text-align: center; }
     .stat-card .num { font-size: 2em; font-weight: 700; color: var(--stat-num); }
     .stat-card .label { font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
+    .analytics-panel { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
+    .analytics-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .analytics-title { font-size: 1em; font-weight: 600; color: var(--text-title); }
+    .analytics-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .analytics-select, .analytics-input { background: var(--bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 0.85em; }
+    .chart-container { position: relative; height: 250px; width: 100%; }
     .error-box { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 8px; padding: 16px; margin: 20px 0; color: var(--error-text); }
     .error-box code { background: var(--error-code-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
     .theme-control { display: inline-flex; align-items: center; gap: 6px; }
@@ -355,6 +362,11 @@
       content: '',
       term: '',
     };
+    let analyticsInterval = 'day';
+    let analyticsLinkFilter = '';
+    let analyticsVariantFilter = '';
+    let analyticsChart = null;
+    let analyticsLoading = false;
 
     async function rerenderDashboard() {
       const { data: { session } } = await sb.auth.getSession();
@@ -549,6 +561,123 @@
       sourceNotice = 'Removed "' + label + '" from your active sources. Existing links still work, but new articles will no longer auto-generate for it.';
       dashboardData = null;
       await rerenderDashboard();
+    }
+
+    async function loadAnalyticsData() {
+      if (analyticsLoading) return;
+      analyticsLoading = true;
+      try {
+        const params = {
+          p_interval: analyticsInterval,
+        };
+        if (analyticsLinkFilter) params.p_link_id = analyticsLinkFilter;
+        if (analyticsVariantFilter) params.p_variant_id = analyticsVariantFilter;
+        
+        const { data, error } = await sb.rpc('get_click_analytics', params);
+        if (error) throw error;
+        return data || [];
+      } catch (err) {
+        console.error('Failed to load analytics:', err);
+        return [];
+      } finally {
+        analyticsLoading = false;
+      }
+    }
+
+    function setAnalyticsInterval(value) {
+      analyticsInterval = value;
+      rerenderDashboard();
+    }
+
+    function setAnalyticsLinkFilter(value) {
+      analyticsLinkFilter = value;
+      analyticsVariantFilter = '';
+      rerenderDashboard();
+    }
+
+    function setAnalyticsVariantFilter(value) {
+      analyticsVariantFilter = value;
+      rerenderDashboard();
+    }
+
+    function formatChartDate(date, interval) {
+      const d = new Date(date);
+      if (interval === 'hour') {
+        return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric' });
+      } else if (interval === 'week') {
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' week';
+      } else if (interval === 'month') {
+        return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function getChartColors() {
+      const style = getComputedStyle(document.documentElement);
+      const accent = style.getPropertyValue('--accent').trim() || '#2563eb';
+      return {
+        border: accent,
+        background: accent + '33',
+        grid: style.getPropertyValue('--border-faint').trim() || '#f3f4f6',
+        text: style.getPropertyValue('--text-muted').trim() || '#666',
+      };
+    }
+
+    async function renderAnalyticsChart() {
+      const canvas = document.getElementById('analytics-canvas');
+      if (!canvas) return;
+      
+      const data = await loadAnalyticsData();
+      const ctx = canvas.getContext('2d');
+      const colors = getChartColors();
+      
+      if (analyticsChart) {
+        analyticsChart.destroy();
+      }
+      
+      const labels = data.map(d => formatChartDate(d.period, analyticsInterval));
+      const values = data.map(d => d.clicks);
+      
+      analyticsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Clicks',
+            data: values,
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(0,0,0,0.8)',
+              titleFont: { size: 12 },
+              bodyFont: { size: 12 },
+              padding: 10,
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: colors.grid },
+              ticks: { color: colors.text, font: { size: 10 } }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: colors.grid },
+              ticks: { color: colors.text, font: { size: 10 }, stepSize: 1 }
+            }
+          }
+        }
+      });
     }
 
     async function init() {
@@ -775,6 +904,33 @@
           </div>
         </div>
 
+        <div class="analytics-panel">
+          <div class="analytics-header">
+            <div class="analytics-title">Click Analytics Over Time</div>
+            <div class="analytics-filters">
+              <select class="analytics-select" onchange="setAnalyticsInterval(this.value)">
+                <option value="hour" ${analyticsInterval === 'hour' ? 'selected' : ''}>Hourly</option>
+                <option value="day" ${analyticsInterval === 'day' ? 'selected' : ''}>Daily</option>
+                <option value="week" ${analyticsInterval === 'week' ? 'selected' : ''}>Weekly</option>
+                <option value="month" ${analyticsInterval === 'month' ? 'selected' : ''}>Monthly</option>
+              </select>
+              <select class="analytics-select" onchange="setAnalyticsLinkFilter(this.value)">
+                <option value="">All Links</option>
+                ${(dashboardData.links || []).map(l => `<option value="${l.id}" ${analyticsLinkFilter === l.id ? 'selected' : ''}>${l.title || l.slug}</option>`).join('')}
+              </select>
+              ${analyticsLinkFilter ? `
+                <select class="analytics-select" onchange="setAnalyticsVariantFilter(this.value)">
+                  <option value="">All Variants</option>
+                  ${(dashboardData.variants || []).filter(v => v.link_id === analyticsLinkFilter).map(v => `<option value="${v.id}" ${analyticsVariantFilter === v.id ? 'selected' : ''}>${v.ref || 'unknown'} - ${v.utm_source || ''}</option>`).join('')}
+                </select>
+              ` : ''}
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="analytics-canvas"></canvas>
+          </div>
+        </div>
+
         <div class="sources-panel">
           <div class="sources-header">
             <div>
@@ -921,6 +1077,8 @@
       }
 
       app.innerHTML = h;
+
+      renderAnalyticsChart();
 
       if (shouldRestoreFilterFocus) {
         const filterInput = app.querySelector('.filter-input');
