@@ -26,3 +26,4 @@ images/.mvr.latest
 __pycache__/
 state.json
 .beads/
+.opencode/
