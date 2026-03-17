@@ -25,3 +25,4 @@ images/.mvr.latest
 .logs/
 __pycache__/
 state.json
+.beads/
