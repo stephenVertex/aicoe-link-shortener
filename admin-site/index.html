@@ -492,8 +492,11 @@
         });
 
         if (!resp.ok) {
-          const err = await resp.json().catch(() => ({ error: 'Search failed' }));
-          throw new Error(err.error || 'Search failed');
+          const errBody = await resp.json().catch(() => ({ error: 'Search failed' }));
+          const errMsg = typeof errBody.error === 'string' ? errBody.error
+            : errBody.error ? JSON.stringify(errBody.error)
+            : errBody.message || 'Search failed';
+          throw new Error(errMsg);
         }
 
         const result = await resp.json();
@@ -504,7 +507,7 @@
         }
       } catch (err) {
         console.error('Semantic search error:', err);
-        semanticError = err.message;
+        semanticError = err instanceof Error ? err.message : (typeof err === 'string' ? err : JSON.stringify(err));
         semanticResults = null;
       } finally {
         semanticLoading = false;
@@ -1116,7 +1119,7 @@
           </button>
           <span class="filter-meta">${displayLinks.length} shown${semanticSearch && semanticResults ? ' (by relevance)' : ''}</span>
         </div>
-        ${semanticError ? '<div class="error-box" style="margin-bottom:16px;padding:10px 14px;font-size:0.85em;">Semantic search error: <code>' + semanticError + '</code>. Falling back to fuzzy filter.</div>' : ''}
+        ${semanticError ? '<div class="error-box" style="margin-bottom:16px;padding:10px 14px;font-size:0.85em;">Semantic search error: <code>' + escapeAttr(semanticError) + '</code>. Falling back to fuzzy filter.</div>' : ''}
       `;
 
       // In "All Links" view, show copy-table buttons per person
