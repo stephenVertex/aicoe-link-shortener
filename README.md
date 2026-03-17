@@ -139,7 +139,26 @@ New team members are auto-provisioned when they sign in with Google.
 - AWS account (for Amplify hosting)
 - Supabase project
 
-### CLI
+### User CLI (als)
+
+Install with one command:
+```bash
+curl -fsSL aicoe.fit/install | bash
+```
+Or with wget:
+```bash
+wget -qO- aicoe.fit/install | bash
+```
+
+Then log in with your API key:
+```bash
+als login --api-key <your-key>
+als shorten <article-url>
+als search <query>
+als last 5
+```
+
+### Admin CLI
 ```bash
 cd cli
 cp .env.example .env  # fill in Supabase URL and keys
