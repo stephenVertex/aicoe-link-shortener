@@ -352,6 +352,13 @@
     let sourceComposerOpen = false;
     let sourceSaving = false;
     let sourceNotice = '';
+    let semanticSearch = false;
+    let semanticResults = null; // null = not active, [] = no results, [...] = results
+    let semanticLoading = false;
+    let semanticError = '';
+    let searchDebounceTimer = null;
+    let embedRunning = false;
+    let embedNotice = '';
     let syncRunning = false;
     let syncNotice = '';
     let sourceDraft = {
@@ -436,7 +443,100 @@
 
     function setSearchQuery(value) {
       searchQuery = value;
+      if (semanticSearch && value.trim().length >= 3) {
+        // Debounce semantic search calls
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => performSemanticSearch(value), 400);
+      } else {
+        semanticResults = null;
+        semanticError = '';
+      }
       rerenderDashboard();
+    }
+
+    function toggleSemanticSearch() {
+      semanticSearch = !semanticSearch;
+      if (semanticSearch && searchQuery.trim().length >= 3) {
+        performSemanticSearch(searchQuery);
+      } else {
+        semanticResults = null;
+        semanticError = '';
+      }
+      rerenderDashboard();
+    }
+
+    async function performSemanticSearch(query) {
+      if (!query.trim() || query.trim().length < 3) return;
+      semanticLoading = true;
+      semanticError = '';
+      rerenderDashboard();
+
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        const headers = {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+        };
+        if (session) {
+          headers['Authorization'] = 'Bearer ' + session.access_token;
+        }
+
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/search-articles', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            query: query.trim(),
+            match_threshold: 0.25,
+            match_count: 30,
+          }),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ error: 'Search failed' }));
+          throw new Error(err.error || 'Search failed');
+        }
+
+        const result = await resp.json();
+        // Build a map of article IDs to similarity scores
+        semanticResults = {};
+        for (const r of (result.results || [])) {
+          semanticResults[r.id] = r.similarity;
+        }
+      } catch (err) {
+        console.error('Semantic search error:', err);
+        semanticError = err.message;
+        semanticResults = null;
+      } finally {
+        semanticLoading = false;
+        rerenderDashboard();
+      }
+    }
+
+    async function runEmbedArticles() {
+      if (embedRunning) return;
+      embedRunning = true;
+      embedNotice = '';
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { embedRunning = false; return; }
+
+      rerenderDashboard();
+
+      try {
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/embed-articles', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + session.access_token },
+        });
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result.error || 'Embedding failed');
+        embedNotice = result.message || ('Embedded ' + (result.embedded || 0) + ' articles');
+      } catch (err) {
+        embedNotice = 'Embed error: ' + err.message;
+        console.error(err);
+      } finally {
+        embedRunning = false;
+        rerenderDashboard();
+        setTimeout(() => { embedNotice = ''; rerenderDashboard(); }, 6000);
+      }
     }
 
     async function fetchAllRows(table, columns, orderColumn, options = {}) {
@@ -764,6 +864,10 @@
       mySources = [];
       sourceComposerOpen = false;
       sourceNotice = '';
+      semanticSearch = false;
+      semanticResults = null;
+      semanticError = '';
+      embedNotice = '';
       resetSourceDraft();
       showLogin();
     }
@@ -880,10 +984,17 @@
       }
 
       if (searchQuery.trim()) {
-        displayLinks = displayLinks.filter(link => {
-          const searchText = [link.title, link.author, link.slug].filter(Boolean).join(' ');
-          return fuzzyMatch(searchText, searchQuery);
-        });
+        if (semanticSearch && semanticResults && Object.keys(semanticResults).length > 0) {
+          // Semantic search: filter to matched articles and sort by similarity
+          displayLinks = displayLinks.filter(link => link.id in semanticResults);
+          displayLinks.sort((a, b) => (semanticResults[b.id] || 0) - (semanticResults[a.id] || 0));
+        } else {
+          // Fuzzy search fallback
+          displayLinks = displayLinks.filter(link => {
+            const searchText = [link.title, link.author, link.slug].filter(Boolean).join(' ');
+            return fuzzyMatch(searchText, searchQuery);
+          });
+        }
       }
 
       const myVariants = (variants || []).filter(v => v.ref === mySlug);
@@ -897,11 +1008,13 @@
             ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
             ${displayName}
             <button class="btn btn-sm btn-primary" onclick="refreshArticles()" ${syncRunning ? 'disabled' : ''}>${syncRunning ? 'Syncing...' : 'Refresh Articles'}</button>
+            <button class="btn btn-sm btn-secondary" onclick="runEmbedArticles()" ${embedRunning ? 'disabled' : ''} title="Generate embeddings for semantic search">${embedRunning ? 'Embedding...' : 'Embed Articles'}</button>
             <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
             ${renderThemeControl()}
           </div>
         </header>
         ${syncNotice ? '<div class="notice" style="background:var(--badge-bg);color:var(--badge-text);padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9em;">' + syncNotice + '</div>' : ''}
+        ${embedNotice ? '<div class="notice" style="background:var(--badge-bg);color:var(--badge-text);padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9em;">' + embedNotice + '</div>' : ''}
 
         <div class="stats-row">
           <div class="stat-card">
@@ -997,9 +1110,13 @@
         <div class="toggle-bar">
           <button class="btn btn-sm ${showAll ? 'btn-secondary' : 'btn-primary'}" onclick="toggleView(false)">My Links</button>
           <button class="btn btn-sm ${showAll ? 'btn-primary' : 'btn-secondary'}" onclick="toggleView(true)">All Links</button>
-          <input class="filter-input" placeholder="Filter articles by title, author, or slug..." value="${escapeAttr(searchQuery)}" oninput="setSearchQuery(this.value)">
-          <span class="filter-meta">${displayLinks.length} shown</span>
+          <input class="filter-input" placeholder="${semanticSearch ? 'Semantic search (3+ chars)...' : 'Filter articles by title, author, or slug...'}" value="${escapeAttr(searchQuery)}" oninput="setSearchQuery(this.value)">
+          <button class="btn btn-sm ${semanticSearch ? 'btn-primary' : 'btn-secondary'}" onclick="toggleSemanticSearch()" title="Toggle AI-powered semantic search">
+            ${semanticLoading ? '⏳' : '🔍'} Semantic
+          </button>
+          <span class="filter-meta">${displayLinks.length} shown${semanticSearch && semanticResults ? ' (by relevance)' : ''}</span>
         </div>
+        ${semanticError ? '<div class="error-box" style="margin-bottom:16px;padding:10px 14px;font-size:0.85em;">Semantic search error: <code>' + semanticError + '</code>. Falling back to fuzzy filter.</div>' : ''}
       `;
 
       // In "All Links" view, show copy-table buttons per person
@@ -1028,10 +1145,13 @@
         const pubDate = link.published_at ? new Date(link.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
         const displayTitle = link.title || link.slug;
         const authorStr = link.author ? `<span class="author">${link.author}</span>` : '';
+        const similarityScore = semanticSearch && semanticResults && semanticResults[link.id]
+          ? `<span class="badge" style="background:var(--copied-bg);color:var(--copied-text);margin-left:8px;font-size:0.75em">${Math.round(semanticResults[link.id] * 100)}% match</span>`
+          : '';
 
         h += `
           <div class="link-card">
-            <div class="title">${displayTitle}</div>
+            <div class="title">${displayTitle}${similarityScore}</div>
             <div class="meta">${authorStr}${authorStr && pubDate ? ' &middot; ' : ''}${pubDate}</div>
             <div class="dest"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a></div>
             <div style="margin-bottom:8px">
