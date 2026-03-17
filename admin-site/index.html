@@ -511,6 +511,15 @@
       }
     }
 
+    function closeAuthorDropdown() {
+      if (authorDropdownOpen) {
+        authorDropdownOpen = false;
+        authorDropdownItems = [];
+        authorDropdownIndex = -1;
+        rerenderDashboard();
+      }
+    }
+
     function toggleSemanticSearch() {
       semanticSearch = !semanticSearch;
       if (semanticSearch && searchQuery.trim().length >= 3) {
@@ -1190,8 +1199,8 @@
           <button class="btn btn-sm ${showAll ? 'btn-secondary' : 'btn-primary'}" onclick="toggleView(false)">My Links</button>
           <button class="btn btn-sm ${showAll ? 'btn-primary' : 'btn-secondary'}" onclick="toggleView(true)">All Links</button>
           <div class="filter-input-wrap">
-            <input class="filter-input" placeholder="${semanticSearch ? 'Semantic search (3+ chars)...' : 'Filter by title, slug, or @author...'}" value="${escapeAttr(searchQuery)}" oninput="setSearchQuery(this.value)" onkeydown="handleFilterKeydown(event)">
-            ${authorDropdownOpen ? `<div class="author-dropdown">${authorDropdownItems.map((a, i) => `<div class="author-dropdown-item${i === authorDropdownIndex ? ' active' : ''}" onmousedown="selectAuthor('${escapeAttr(a)}')">${escapeAttr(a)}</div>`).join('')}</div>` : ''}
+            <input class="filter-input" placeholder="${semanticSearch ? 'Semantic search (3+ chars)...' : 'Filter by title, slug, or @author...'}" value="${escapeAttr(searchQuery)}" oninput="setSearchQuery(this.value)" onkeydown="handleFilterKeydown(event)" onblur="setTimeout(closeAuthorDropdown, 150)">
+            ${authorDropdownOpen ? `<div class="author-dropdown">${authorDropdownItems.map((a, i) => `<div class="author-dropdown-item${i === authorDropdownIndex ? ' active' : ''}" data-author="${escapeAttr(a)}" onmousedown="selectAuthor(this.dataset.author)">${escapeAttr(a)}</div>`).join('')}</div>` : ''}
           </div>
           <button class="btn btn-sm ${semanticSearch ? 'btn-primary' : 'btn-secondary'}" onclick="toggleSemanticSearch()" title="Toggle AI-powered semantic search">
             ${semanticLoading ? '⏳' : '🔍'} Semantic
