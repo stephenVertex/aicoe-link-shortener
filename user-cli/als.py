@@ -394,5 +394,33 @@ def last(n: int):
         click.echo()
 
 
+@cli.command()
+def authors():
+    """List all authors in the database.
+
+    Shows each distinct author and how many articles they have.
+    """
+    resp = requests.get(f"{API_BASE}/list-authors", timeout=30)
+    if resp.status_code != 200:
+        click.echo(
+            f"Error fetching authors ({resp.status_code}): {resp.text}", err=True
+        )
+        sys.exit(1)
+
+    data = resp.json()
+    author_list = data.get("authors", [])
+
+    if not author_list:
+        click.echo("No authors found.")
+        return
+
+    click.echo(f"\nAuthors ({len(author_list)} total):\n")
+    for entry in author_list:
+        name = entry.get("name", "")
+        count = entry.get("article_count", 0)
+        click.echo(f"  {name}  ({count} article{'s' if count != 1 else ''})")
+    click.echo()
+
+
 if __name__ == "__main__":
     cli()
