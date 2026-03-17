@@ -236,6 +236,15 @@
     .loading { text-align: center; padding: 60px; color: var(--text-faint); }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 500; }
     .badge-you { background: var(--badge-bg); color: var(--badge-text); }
+    .compact-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 0.8em; border: 1px solid var(--border-light); border-radius: 6px; background: var(--card-bg); color: var(--text-muted); cursor: pointer; user-select: none; }
+    .compact-toggle .toggle-indicator { display: inline-block; width: 32px; height: 18px; border-radius: 9px; background: var(--btn-secondary-bg); position: relative; transition: background 0.2s; }
+    .compact-toggle .toggle-indicator::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: transform 0.2s; }
+    .compact-toggle.active .toggle-indicator { background: var(--accent); }
+    .compact-toggle.active .toggle-indicator::after { transform: translateX(14px); }
+    .expand-btn { background: none; border: 1px solid var(--border-light); border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 0.78em; color: var(--text-muted); transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px; }
+    .expand-btn:hover { background: var(--copy-btn-hover); border-color: var(--text-muted); }
+    .expand-btn .chevron { display: inline-block; transition: transform 0.2s; font-size: 0.9em; }
+    .expand-btn .chevron.open { transform: rotate(90deg); }
     #app { min-height: 60vh; }
     .stats-row { display: flex; gap: 16px; margin-bottom: 24px; }
     .stat-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px var(--card-shadow); flex: 1; text-align: center; }
@@ -385,6 +394,23 @@
     let analyticsEndDate = '';
     let analyticsChart = null;
     let analyticsLoading = false;
+    let compactView = true;
+    let expandedCards = new Set();
+
+    function toggleCompactView() {
+      compactView = !compactView;
+      expandedCards.clear();
+      rerenderDashboard();
+    }
+
+    function toggleCardExpanded(linkId) {
+      if (expandedCards.has(linkId)) {
+        expandedCards.delete(linkId);
+      } else {
+        expandedCards.add(linkId);
+      }
+      rerenderDashboard();
+    }
 
     async function rerenderDashboard() {
       const { data: { session } } = await sb.auth.getSession();
@@ -1205,6 +1231,10 @@
           <button class="btn btn-sm ${semanticSearch ? 'btn-primary' : 'btn-secondary'}" onclick="toggleSemanticSearch()" title="Toggle AI-powered semantic search">
             ${semanticLoading ? '⏳' : '🔍'} Semantic
           </button>
+          <button class="compact-toggle ${compactView ? 'active' : ''}" onclick="toggleCompactView()" title="Toggle compact view">
+            <span class="toggle-indicator"></span>
+            Compact
+          </button>
           <span class="filter-meta">${displayLinks.length} shown${semanticSearch && semanticResults ? ' (by relevance)' : ''}</span>
         </div>
         ${semanticError ? '<div class="error-box" style="margin-bottom:16px;padding:10px 14px;font-size:0.85em;">Semantic search error: <code>' + semanticError + '</code>. Falling back to fuzzy filter.</div>' : ''}
@@ -1275,29 +1305,41 @@
             })),
           };
 
+          const cardExpanded = !compactView || expandedCards.has(link.id);
+          const variantClickTotal = displayVariants.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0);
+
           h += `
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
-              <span style="font-size:0.8em; color:#888; font-weight:500">Tracking variants</span>
-              <button class="copy-btn" onclick="copyCardTable(this, '${cardId}')">Copy table</button>
+              <button class="expand-btn" onclick="toggleCardExpanded('${link.id}')">
+                <span class="chevron ${cardExpanded ? 'open' : ''}">&#9656;</span>
+                ${cardExpanded ? 'Hide links' : 'Show links'}
+              </button>
+              <span style="font-size:0.8em; color:var(--text-faint); font-weight:500">${displayVariants.length} variant${displayVariants.length !== 1 ? 's' : ''} &middot; ${variantClickTotal} click${variantClickTotal !== 1 ? 's' : ''}</span>
+              ${cardExpanded ? `<button class="copy-btn" onclick="copyCardTable(this, '${cardId}')">Copy table</button>` : ''}
             </div>
-            <table class="variant-table">
-              <thead><tr><th>Person</th><th>Short URL</th><th>Source</th><th>Clicks</th></tr></thead>
-              <tbody>
           `;
-          for (const v of displayVariants) {
-            const isMine = v.ref === mySlug;
-            const url = 'https://' + DOMAIN + '/' + link.slug + '-' + v.suffix;
-            const vc = clicksByVariant[v.id] || 0;
+
+          if (cardExpanded) {
             h += `
-              <tr class="${isMine ? 'mine' : ''}">
-                <td>${v.ref || '-'} ${isMine ? '<span class="badge badge-you">you</span>' : ''}</td>
-                <td><span class="short-url-wrap"><a class="short-url" href="${url}" target="_blank" rel="noopener">${url}</a>${renderCopyIconButton(url)}</span></td>
-                <td>${renderSourceSummary(v)}</td>
-                <td class="clicks">${vc}</td>
-              </tr>
+              <table class="variant-table">
+                <thead><tr><th>Person</th><th>Short URL</th><th>Source</th><th>Clicks</th></tr></thead>
+                <tbody>
             `;
+            for (const v of displayVariants) {
+              const isMine = v.ref === mySlug;
+              const url = 'https://' + DOMAIN + '/' + link.slug + '-' + v.suffix;
+              const vc = clicksByVariant[v.id] || 0;
+              h += `
+                <tr class="${isMine ? 'mine' : ''}">
+                  <td>${v.ref || '-'} ${isMine ? '<span class="badge badge-you">you</span>' : ''}</td>
+                  <td><span class="short-url-wrap"><a class="short-url" href="${url}" target="_blank" rel="noopener">${url}</a>${renderCopyIconButton(url)}</span></td>
+                  <td>${renderSourceSummary(v)}</td>
+                  <td class="clicks">${vc}</td>
+                </tr>
+              `;
+            }
+            h += '</tbody></table>';
           }
-          h += '</tbody></table>';
         }
 
         h += '</div>';
