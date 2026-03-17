@@ -341,6 +341,7 @@
       return '<div class="nav-links">' +
         '<a class="nav-link ' + (currentPage === 'links' ? 'active' : '') + '" onclick="navigateTo(\'links\')">Links</a>' +
         '<a class="nav-link ' + (currentPage === 'analytics' ? 'active' : '') + '" onclick="navigateTo(\'analytics\')">Analytics</a>' +
+        '<a class="nav-link ' + (currentPage === 'api-key' ? 'active' : '') + '" onclick="navigateTo(\'api-key\')">My API Key</a>' +
         '</div>';
     }
 
@@ -409,17 +410,20 @@
     let analyticsLoading = false;
     let compactView = true;
     let expandedCards = new Set();
-    let currentPage = 'links'; // 'links' or 'analytics'
+    let currentPage = 'links'; // 'links', 'analytics', or 'api-key'
 
     function getPageFromHash() {
       const hash = window.location.hash;
       if (hash === '#/analytics') return 'analytics';
+      if (hash === '#/api-key') return 'api-key';
       return 'links';
     }
 
     function navigateTo(page) {
       if (page === 'analytics') {
         window.location.hash = '#/analytics';
+      } else if (page === 'api-key') {
+        window.location.hash = '#/api-key';
       } else {
         window.location.hash = '';
       }
@@ -433,6 +437,8 @@
         if (session) {
           if (currentPage === 'analytics') {
             await renderAnalyticsPage(session);
+          } else if (currentPage === 'api-key') {
+            await renderApiKeyPage(session);
           } else {
             await renderDashboard(session);
           }
@@ -460,6 +466,8 @@
       if (session) {
         if (currentPage === 'analytics') {
           await renderAnalyticsPage(session);
+        } else if (currentPage === 'api-key') {
+          await renderApiKeyPage(session);
         } else {
           await renderDashboard(session);
         }
@@ -1072,6 +1080,8 @@
 
         if (currentPage === 'analytics') {
           await renderAnalyticsPage(session);
+        } else if (currentPage === 'api-key') {
+          await renderApiKeyPage(session);
         } else {
           await renderDashboard(session, true);
         }
@@ -1506,6 +1516,130 @@
           btn.textContent = personRef;
           btn.classList.remove('copied');
         }, 2000);
+      });
+    }
+
+    let apiKeyVisible = false;
+
+    function toggleApiKeyVisibility() {
+      apiKeyVisible = !apiKeyVisible;
+      rerenderDashboard();
+    }
+
+    function maskApiKey(key) {
+      if (!key) return '(no key found)';
+      if (key.length <= 8) return key;
+      return key.substring(0, 4) + '\u2022'.repeat(key.length - 8) + key.substring(key.length - 4);
+    }
+
+    async function renderApiKeyPage(session) {
+      const user = session.user;
+      const avatarUrl = user.user_metadata?.avatar_url || '';
+      const displayName = currentPerson.name || user.email;
+
+      let apiKey = '';
+      try {
+        const { data, error } = await sb.from('people').select('api_key').eq('id', currentPerson.id).single();
+        if (error) throw error;
+        apiKey = data?.api_key || '';
+      } catch (err) {
+        console.error('Failed to fetch API key:', err);
+      }
+
+      const skillsMd = `# als - AICOE Link Shortener CLI
+
+Get personalised tracking links for AI Center of Excellence blog articles.
+
+## Commands
+- \`als shorten <url>\` - Get your personalised short link for an article
+- \`als search <query>\` - Search articles semantically, returns top 3 with your short links
+- \`als whoami\` - Show your current identity
+
+## Setup
+Run \`als login --api-key <key>\` (get your key from admin.aicoe.fit)
+Credentials stored in ~/.als.credentials`;
+
+      const h = `
+        <header>
+          <div class="header-left">
+            <h1>aicoe.fit</h1>
+            ${renderNavLinks()}
+          </div>
+          <div class="user-info">
+            ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
+            ${displayName}
+            <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
+            ${renderThemeControl()}
+          </div>
+        </header>
+
+        <div style="max-width:640px;margin:0 auto;">
+          <div class="link-card" style="margin-bottom:20px;">
+            <h3 style="color:var(--text-title);margin-bottom:16px;">My API Key</h3>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+              <code style="font-family:monospace;font-size:1em;background:var(--bg);padding:8px 14px;border-radius:6px;border:1px solid var(--border-light);color:var(--text);flex:1;min-width:200px;word-break:break-all;">${apiKeyVisible ? escapeAttr(apiKey || '(no key found)') : escapeAttr(maskApiKey(apiKey))}</code>
+              <button class="btn btn-sm btn-secondary" onclick="toggleApiKeyVisibility()">${apiKeyVisible ? 'Hide' : 'Show'}</button>
+              <button class="btn btn-sm btn-primary" onclick="copyApiKey('${escapeAttr(apiKey)}')" id="copy-api-key-btn">Copy</button>
+            </div>
+          </div>
+
+          <div class="link-card" style="margin-bottom:20px;">
+            <h3 style="color:var(--text-title);margin-bottom:12px;">Setup Instructions</h3>
+            <ol style="margin-left:20px;display:grid;gap:10px;font-size:0.92em;color:var(--text);">
+              <li>Install the CLI: <code style="background:var(--bg);padding:2px 6px;border-radius:3px;font-size:0.9em;">cd user-cli && uv tool install .</code></li>
+              <li>Run: <code style="background:var(--bg);padding:2px 6px;border-radius:3px;font-size:0.9em;">als login --api-key &lt;your-key&gt;</code></li>
+              <li>Test: <code style="background:var(--bg);padding:2px 6px;border-radius:3px;font-size:0.9em;">als whoami</code></li>
+            </ol>
+          </div>
+
+          <div class="link-card" style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+              <h3 style="color:var(--text-title);margin:0;">SKILLS.md</h3>
+              <button class="btn btn-sm btn-primary" onclick="copySkillsMd()" id="copy-skills-btn">Copy</button>
+            </div>
+            <pre style="background:var(--bg);border:1px solid var(--border-light);border-radius:8px;padding:14px;font-size:0.84em;overflow-x:auto;white-space:pre-wrap;word-break:break-word;color:var(--text);font-family:monospace;line-height:1.5;margin:0;">${escapeAttr(skillsMd)}</pre>
+          </div>
+
+          <button class="btn btn-secondary" onclick="navigateTo('links')" style="margin-top:8px;">Back to Dashboard</button>
+        </div>
+      `;
+
+      app.innerHTML = h;
+    }
+
+    function copyApiKey(key) {
+      if (!key) return;
+      navigator.clipboard.writeText(key).then(() => {
+        const btn = document.getElementById('copy-api-key-btn');
+        if (btn) {
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+        }
+      });
+    }
+
+    function copySkillsMd() {
+      const skillsMd = `# als - AICOE Link Shortener CLI
+
+Get personalised tracking links for AI Center of Excellence blog articles.
+
+## Commands
+- \`als shorten <url>\` - Get your personalised short link for an article
+- \`als search <query>\` - Search articles semantically, returns top 3 with your short links
+- \`als whoami\` - Show your current identity
+
+## Setup
+Run \`als login --api-key <key>\` (get your key from admin.aicoe.fit)
+Credentials stored in ~/.als.credentials`;
+
+      navigator.clipboard.writeText(skillsMd).then(() => {
+        const btn = document.getElementById('copy-skills-btn');
+        if (btn) {
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+        }
       });
     }
 
