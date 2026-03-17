@@ -156,6 +156,7 @@
     .container { max-width: 900px; margin: 0 auto; padding: 20px; }
     header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
     header h1 { font-size: 1.4em; font-weight: 700; }
+    header .header-left { display: flex; align-items: center; gap: 0; }
     header .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.9em; color: var(--text-muted); }
     header .user-info img { width: 32px; height: 32px; border-radius: 50%; }
     .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; transition: all 0.15s; }
@@ -236,6 +237,10 @@
     .loading { text-align: center; padding: 60px; color: var(--text-faint); }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 500; }
     .badge-you { background: var(--badge-bg); color: var(--badge-text); }
+    .nav-links { display: flex; align-items: center; gap: 4px; margin-left: 16px; }
+    .nav-link { padding: 4px 12px; font-size: 0.85em; font-weight: 500; color: var(--text-muted); text-decoration: none; border-radius: 6px; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+    .nav-link:hover { background: var(--copy-btn-hover); color: var(--text); }
+    .nav-link.active { background: var(--accent); color: white; border-color: var(--accent); }
     .compact-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 0.8em; border: 1px solid var(--border-light); border-radius: 6px; background: var(--card-bg); color: var(--text-muted); cursor: pointer; user-select: none; }
     .compact-toggle .toggle-indicator { display: inline-block; width: 32px; height: 18px; border-radius: 9px; background: var(--btn-secondary-bg); position: relative; transition: background 0.2s; }
     .compact-toggle .toggle-indicator::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: transform 0.2s; }
@@ -278,6 +283,7 @@
       .source-form { grid-template-columns: 1fr; }
       .source-form .wide, .source-form .full { grid-column: auto; }
       header { align-items: flex-start; }
+      header .header-left { flex-wrap: wrap; }
       header .user-info { flex-wrap: wrap; justify-content: flex-end; }
     }
   </style>
@@ -329,6 +335,13 @@
       return '<div class="theme-control"><span class="theme-label">Theme</span><select class="theme-select" onchange="setTheme(this.value)">' +
         options.map(([value, label]) => '<option value="' + value + '"' + (currentTheme === value ? ' selected' : '') + '>' + label + '</option>').join('') +
         '</select></div>';
+    }
+
+    function renderNavLinks() {
+      return '<div class="nav-links">' +
+        '<a class="nav-link ' + (currentPage === 'links' ? 'active' : '') + '" onclick="navigateTo(\'links\')">Links</a>' +
+        '<a class="nav-link ' + (currentPage === 'analytics' ? 'active' : '') + '" onclick="navigateTo(\'analytics\')">Analytics</a>' +
+        '</div>';
     }
 
     function renderCopyIconButton(url) {
@@ -396,6 +409,36 @@
     let analyticsLoading = false;
     let compactView = true;
     let expandedCards = new Set();
+    let currentPage = 'links'; // 'links' or 'analytics'
+
+    function getPageFromHash() {
+      const hash = window.location.hash;
+      if (hash === '#/analytics') return 'analytics';
+      return 'links';
+    }
+
+    function navigateTo(page) {
+      if (page === 'analytics') {
+        window.location.hash = '#/analytics';
+      } else {
+        window.location.hash = '';
+      }
+    }
+
+    window.addEventListener('hashchange', async () => {
+      const newPage = getPageFromHash();
+      if (newPage !== currentPage) {
+        currentPage = newPage;
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
+          if (currentPage === 'analytics') {
+            await renderAnalyticsPage(session);
+          } else {
+            await renderDashboard(session);
+          }
+        }
+      }
+    });
 
     function toggleCompactView() {
       compactView = !compactView;
@@ -414,7 +457,13 @@
 
     async function rerenderDashboard() {
       const { data: { session } } = await sb.auth.getSession();
-      if (session) await renderDashboard(session);
+      if (session) {
+        if (currentPage === 'analytics') {
+          await renderAnalyticsPage(session);
+        } else {
+          await renderDashboard(session);
+        }
+      }
     }
 
     async function refreshDashboardData() {
@@ -887,6 +936,7 @@
     }
 
     async function init() {
+      currentPage = getPageFromHash();
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (session) {
@@ -1020,7 +1070,11 @@
         if (sourcesErr) throw sourcesErr;
         mySources = sourcesData || [];
 
-        await renderDashboard(session, true);
+        if (currentPage === 'analytics') {
+          await renderAnalyticsPage(session);
+        } else {
+          await renderDashboard(session, true);
+        }
         dashboardLoaded = true;
       } catch (err) {
         app.innerHTML = '<div class="error-box">Error loading dashboard: <code>' + err.message + '</code></div>';
@@ -1117,7 +1171,10 @@
 
       let h = `
         <header>
-          <h1>aicoe.fit</h1>
+          <div class="header-left">
+            <h1>aicoe.fit</h1>
+            ${renderNavLinks()}
+          </div>
           <div class="user-info">
             ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
             ${displayName}
@@ -1142,35 +1199,6 @@
           <div class="stat-card">
             <div class="num">${myClicks}</div>
             <div class="label">My Clicks</div>
-          </div>
-        </div>
-
-        <div class="analytics-panel">
-          <div class="analytics-header">
-            <div class="analytics-title">Click Analytics Over Time</div>
-            <div class="analytics-filters">
-              <select class="analytics-select" onchange="setAnalyticsInterval(this.value)">
-                <option value="hour" ${analyticsInterval === 'hour' ? 'selected' : ''}>Hourly</option>
-                <option value="day" ${analyticsInterval === 'day' ? 'selected' : ''}>Daily</option>
-                <option value="week" ${analyticsInterval === 'week' ? 'selected' : ''}>Weekly</option>
-                <option value="month" ${analyticsInterval === 'month' ? 'selected' : ''}>Monthly</option>
-              </select>
-              <select class="analytics-select" onchange="setAnalyticsLinkFilter(this.value)">
-                <option value="">All Links</option>
-                ${(dashboardData.links || []).map(l => `<option value="${l.id}" ${analyticsLinkFilter === l.id ? 'selected' : ''}>${l.title || l.slug}</option>`).join('')}
-              </select>
-              ${analyticsLinkFilter ? `
-                <select class="analytics-select" onchange="setAnalyticsVariantFilter(this.value)">
-                  <option value="">All Variants</option>
-                  ${(dashboardData.variants || []).filter(v => v.link_id === analyticsLinkFilter).map(v => `<option value="${v.id}" ${analyticsVariantFilter === v.id ? 'selected' : ''}>${v.ref || 'unknown'} - ${v.utm_source || ''}</option>`).join('')}
-                </select>
-              ` : ''}
-              <input type="date" class="analytics-input" value="${analyticsStartDate}" onchange="setAnalyticsStartDate(this.value)" title="Start date" placeholder="From">
-              <input type="date" class="analytics-input" value="${analyticsEndDate}" onchange="setAnalyticsEndDate(this.value)" title="End date" placeholder="To">
-            </div>
-          </div>
-          <div class="chart-container">
-            <canvas id="analytics-canvas"></canvas>
           </div>
         </div>
 
@@ -1347,8 +1375,6 @@
 
       app.innerHTML = h;
 
-      renderAnalyticsChart();
-
       if (shouldRestoreFilterFocus) {
         const filterInput = app.querySelector('.filter-input');
         if (filterInput) {
@@ -1481,6 +1507,136 @@
           btn.classList.remove('copied');
         }, 2000);
       });
+    }
+
+    async function renderAnalyticsPage(session) {
+      const user = session.user;
+      const avatarUrl = user.user_metadata?.avatar_url || '';
+      const displayName = currentPerson ? (currentPerson.name || user.email) : user.email;
+
+      if (!dashboardData) {
+        await refreshDashboardData();
+      }
+
+      const links = dashboardData.links;
+      const variants = dashboardData.variants;
+      const clicks = dashboardData.clicks;
+
+      const clicksByVariant = {};
+      const clicksByLink = {};
+      (clicks || []).forEach(c => {
+        if (c.variant_id) {
+          clicksByVariant[c.variant_id] = (clicksByVariant[c.variant_id] || 0) + 1;
+        }
+        clicksByLink[c.link_id] = (clicksByLink[c.link_id] || 0) + 1;
+      });
+
+      const variantsByLink = {};
+      (variants || []).forEach(v => {
+        if (!variantsByLink[v.link_id]) variantsByLink[v.link_id] = [];
+        variantsByLink[v.link_id].push(v);
+      });
+
+      const mySlug = currentPerson ? currentPerson.slug : '';
+      const myVariants = (variants || []).filter(v => v.ref === mySlug);
+      const myClicks = myVariants.reduce((sum, v) => sum + (clicksByVariant[v.id] || 0), 0);
+      const totalClicks = clicks ? clicks.length : 0;
+
+      // Build per-link click summary sorted by clicks descending
+      const linkClickSummary = (links || []).map(link => {
+        const lClicks = clicksByLink[link.id] || 0;
+        const lvs = variantsByLink[link.id] || [];
+        const variantClicks = lvs.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0);
+        const directClicks = lClicks - variantClicks;
+        return { link, totalClicks: lClicks, variantClicks, directClicks, variantCount: lvs.length };
+      }).filter(s => s.totalClicks > 0).sort((a, b) => b.totalClicks - a.totalClicks);
+
+      let h = `
+        <header>
+          <div class="header-left">
+            <h1>aicoe.fit</h1>
+            ${renderNavLinks()}
+          </div>
+          <div class="user-info">
+            ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
+            ${displayName}
+            <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
+            ${renderThemeControl()}
+          </div>
+        </header>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="num">${totalClicks}</div>
+            <div class="label">Total Clicks</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${myClicks}</div>
+            <div class="label">My Clicks</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${linkClickSummary.length}</div>
+            <div class="label">Articles with Clicks</div>
+          </div>
+        </div>
+
+        <div class="analytics-panel">
+          <div class="analytics-header">
+            <div class="analytics-title">Click Analytics Over Time</div>
+            <div class="analytics-filters">
+              <select class="analytics-select" onchange="setAnalyticsInterval(this.value)">
+                <option value="hour" ${analyticsInterval === 'hour' ? 'selected' : ''}>Hourly</option>
+                <option value="day" ${analyticsInterval === 'day' ? 'selected' : ''}>Daily</option>
+                <option value="week" ${analyticsInterval === 'week' ? 'selected' : ''}>Weekly</option>
+                <option value="month" ${analyticsInterval === 'month' ? 'selected' : ''}>Monthly</option>
+              </select>
+              <select class="analytics-select" onchange="setAnalyticsLinkFilter(this.value)">
+                <option value="">All Links</option>
+                ${(dashboardData.links || []).map(l => `<option value="${l.id}" ${analyticsLinkFilter === l.id ? 'selected' : ''}>${l.title || l.slug}</option>`).join('')}
+              </select>
+              ${analyticsLinkFilter ? `
+                <select class="analytics-select" onchange="setAnalyticsVariantFilter(this.value)">
+                  <option value="">All Variants</option>
+                  ${(dashboardData.variants || []).filter(v => v.link_id === analyticsLinkFilter).map(v => `<option value="${v.id}" ${analyticsVariantFilter === v.id ? 'selected' : ''}>${v.ref || 'unknown'} - ${v.utm_source || ''}</option>`).join('')}
+                </select>
+              ` : ''}
+              <input type="date" class="analytics-input" value="${analyticsStartDate}" onchange="setAnalyticsStartDate(this.value)" title="Start date" placeholder="From">
+              <input type="date" class="analytics-input" value="${analyticsEndDate}" onchange="setAnalyticsEndDate(this.value)" title="End date" placeholder="To">
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="analytics-canvas"></canvas>
+          </div>
+        </div>
+      `;
+
+      if (linkClickSummary.length > 0) {
+        h += `
+          <div class="analytics-panel">
+            <div class="analytics-header">
+              <div class="analytics-title">Clicks by Article</div>
+            </div>
+            <table class="variant-table">
+              <thead><tr><th>Article</th><th>Author</th><th>Variants</th><th class="clicks">Clicks</th></tr></thead>
+              <tbody>
+        `;
+        for (const s of linkClickSummary) {
+          const title = s.link.title || s.link.slug;
+          const author = s.link.author || '-';
+          h += `
+            <tr>
+              <td><a href="${s.link.destination_url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${title}</a></td>
+              <td style="color:var(--author)">${author}</td>
+              <td>${s.variantCount}</td>
+              <td class="clicks">${s.totalClicks}</td>
+            </tr>
+          `;
+        }
+        h += '</tbody></table></div>';
+      }
+
+      app.innerHTML = h;
+      renderAnalyticsChart();
     }
 
     init();
