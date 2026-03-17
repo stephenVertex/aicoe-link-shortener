@@ -345,6 +345,8 @@
     let sourceComposerOpen = false;
     let sourceSaving = false;
     let sourceNotice = '';
+    let syncRunning = false;
+    let syncNotice = '';
     let sourceDraft = {
       icon: '',
       label: '',
@@ -623,6 +625,42 @@
       showLogin();
     }
 
+    async function refreshArticles() {
+      if (syncRunning) return;
+      syncRunning = true;
+      syncNotice = '';
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { syncRunning = false; return; }
+
+      // Re-render to show loading state
+      await renderDashboard(session, false);
+
+      try {
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/sync-substack?force=true', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + session.access_token },
+        });
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result.error || 'Sync failed');
+
+        const createdCount = (result.created || []).length;
+        const updatedCount = (result.updated || []).length;
+        syncNotice = createdCount + ' created, ' + updatedCount + ' updated';
+
+        // Refresh dashboard data to reflect changes
+        await loadDashboard(session);
+      } catch (err) {
+        syncNotice = 'Sync error: ' + err.message;
+        console.error(err);
+      } finally {
+        syncRunning = false;
+        const { data: { session: s } } = await sb.auth.getSession();
+        if (s) await renderDashboard(s, false);
+        // Clear notice after 6 seconds
+        setTimeout(() => { syncNotice = ''; }, 6000);
+      }
+    }
+
     async function loadDashboard(session) {
       if (dashboardLoading) return;
       dashboardLoading = true;
@@ -715,10 +753,12 @@
           <div class="user-info">
             ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
             ${displayName}
+            <button class="btn btn-sm btn-primary" onclick="refreshArticles()" ${syncRunning ? 'disabled' : ''}>${syncRunning ? 'Syncing...' : 'Refresh Articles'}</button>
             <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
             ${renderThemeControl()}
           </div>
         </header>
+        ${syncNotice ? '<div class="notice" style="background:var(--badge-bg);color:var(--badge-text);padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9em;">' + syncNotice + '</div>' : ''}
 
         <div class="stats-row">
           <div class="stat-card">

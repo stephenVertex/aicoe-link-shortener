@@ -56,26 +56,54 @@ async function fetchAllPostMeta(): Promise<Map<string, ApiPost>> {
   return posts;
 }
 
-Deno.serve(async () => {
+async function authenticateRequest(req: Request): Promise<boolean> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return false;
+  const token = authHeader.slice(7);
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  return !error && !!user;
+}
+
+Deno.serve(async (req) => {
+  // CORS headers for browser requests
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  };
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  // Check for force param (manual trigger)
+  const url = new URL(req.url);
+  const force = url.searchParams.get("force") === "true";
+
+  // If Authorization header is present, validate it
+  const authHeader = req.headers.get("Authorization");
+  if (authHeader) {
+    const isAuthenticated = await authenticateRequest(req);
+    if (!isAuthenticated) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+  }
+
   try {
     const [sitemapEntries, postMeta] = await Promise.all([
       fetchSitemapEntries(),
       fetchAllPostMeta(),
     ]);
 
-    const { data: existingLinks } = await supabase.from("links").select("slug");
-    const existingSlugs = new Set((existingLinks || []).map((l) => l.slug));
-
-    const newEntries = sitemapEntries.filter((entry) => {
-      const slug = entry.url.split("/p/").pop()?.replace(/\/$/, "") || "";
-      return !existingSlugs.has(slug);
-    });
-
-    if (newEntries.length === 0) {
-      return new Response(JSON.stringify({ message: "No new articles", checked: sitemapEntries.length }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    const { data: existingLinks } = await supabase
+      .from("links")
+      .select("id, slug, title, author, published_at, destination_url, last_synced_at");
+    const existingBySlug = new Map(
+      (existingLinks || []).map((l) => [l.slug, l]),
+    );
 
     const { data: personSources, error: sourcesError } = await supabase
       .from("person_sources")
@@ -87,59 +115,102 @@ Deno.serve(async () => {
     const peopleById = new Map((people || []).map((p) => [p.id, p.slug]));
 
     const created: string[] = [];
+    const updated: string[] = [];
+    const now = new Date().toISOString();
 
-    for (const entry of newEntries) {
+    for (const entry of sitemapEntries) {
       const slug = entry.url.split("/p/").pop()?.replace(/\/$/, "") || "";
       const meta = postMeta.get(slug);
-      const insertData: Record<string, unknown> = {
-        slug,
-        destination_url: meta?.canonical_url || entry.url,
-        title: meta?.title || slug,
-        author: meta?.publishedBylines?.[0]?.name || null,
-      };
-      if (entry.lastmod) insertData.published_at = entry.lastmod;
+      const newTitle = meta?.title || slug;
+      const newAuthor = meta?.publishedBylines?.[0]?.name || null;
+      const newPublishedAt = entry.lastmod || null;
+      const newDestUrl = meta?.canonical_url || entry.url;
 
-      const { data: linkData, error: linkError } = await supabase
-        .from("links")
-        .insert(insertData)
-        .select()
-        .single();
-      if (linkError) {
-        console.error(`Error creating link ${slug}:`, linkError);
-        continue;
-      }
+      const existing = existingBySlug.get(slug);
 
-      created.push(slug);
+      if (!existing) {
+        // INSERT new article
+        const insertData: Record<string, unknown> = {
+          slug,
+          destination_url: newDestUrl,
+          title: newTitle,
+          author: newAuthor,
+          last_synced_at: now,
+        };
+        if (newPublishedAt) insertData.published_at = newPublishedAt;
 
-      for (const source of personSources || []) {
-        const ref = peopleById.get(source.person_id);
-        if (!ref) continue;
-        const { error } = await supabase.rpc("ensure_tracking_variant", {
-          p_link_id: linkData.id,
-          p_ref: ref,
-          p_source: source.utm_source,
-          p_medium: source.utm_medium,
-          p_content: source.utm_content,
-          p_term: source.utm_term,
-        });
-        if (error) {
-          console.error(`Error creating variant for ${slug}/${ref}:`, error);
+        const { data: linkData, error: linkError } = await supabase
+          .from("links")
+          .insert(insertData)
+          .select()
+          .single();
+        if (linkError) {
+          console.error(`Error creating link ${slug}:`, linkError);
+          continue;
+        }
+
+        created.push(slug);
+
+        // Create tracking variants for all person sources
+        for (const source of personSources || []) {
+          const ref = peopleById.get(source.person_id);
+          if (!ref) continue;
+          const { error } = await supabase.rpc("ensure_tracking_variant", {
+            p_link_id: linkData.id,
+            p_ref: ref,
+            p_source: source.utm_source,
+            p_medium: source.utm_medium,
+            p_content: source.utm_content,
+            p_term: source.utm_term,
+          });
+          if (error) {
+            console.error(`Error creating variant for ${slug}/${ref}:`, error);
+          }
+        }
+      } else if (force || !existing.last_synced_at) {
+        // UPDATE existing article if metadata changed
+        const changes: Record<string, unknown> = {};
+
+        if (existing.title !== newTitle) changes.title = newTitle;
+        if (existing.author !== newAuthor) changes.author = newAuthor;
+        if (existing.destination_url !== newDestUrl) changes.destination_url = newDestUrl;
+        if (newPublishedAt && existing.published_at !== newPublishedAt) {
+          changes.published_at = newPublishedAt;
+        }
+
+        // Always update last_synced_at
+        changes.last_synced_at = now;
+
+        const hasMetadataChanges = Object.keys(changes).length > 1; // more than just last_synced_at
+
+        const { error: updateError } = await supabase
+          .from("links")
+          .update(changes)
+          .eq("id", existing.id);
+        if (updateError) {
+          console.error(`Error updating link ${slug}:`, updateError);
+          continue;
+        }
+
+        if (hasMetadataChanges) {
+          updated.push(slug);
         }
       }
     }
 
     return new Response(JSON.stringify({
-      message: `Created ${created.length} new links`,
+      message: `Created ${created.length}, updated ${updated.length} links`,
       created,
+      updated,
       checked: sitemapEntries.length,
     }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (error) {
     console.error("Sync error:", error);
     return new Response(JSON.stringify({ error: String(error) }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   }
 });
