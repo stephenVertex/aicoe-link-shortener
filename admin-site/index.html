@@ -538,11 +538,21 @@
       // Author '@' mention dropdown
       const atIdx = value.lastIndexOf('@');
       if (atIdx !== -1) {
-        const authorQuery = value.substring(atIdx + 1).toLowerCase();
-        const allAuthors = [...new Set((dashboardData && dashboardData.links || []).map(l => l.author).filter(Boolean))].sort();
-        authorDropdownItems = allAuthors.filter(a => a.toLowerCase().includes(authorQuery));
-        authorDropdownOpen = authorDropdownItems.length > 0;
-        authorDropdownIndex = -1;
+        const afterAt = value.substring(atIdx + 1);
+        // If the token is already closed with @[Name], don't show dropdown
+        const closedBracket = afterAt.indexOf(']');
+        if (afterAt.startsWith('[') && closedBracket !== -1) {
+          authorDropdownOpen = false;
+          authorDropdownItems = [];
+          authorDropdownIndex = -1;
+        } else {
+          // Strip leading '[' if user is mid-token
+          const authorQuery = (afterAt.startsWith('[') ? afterAt.substring(1) : afterAt).toLowerCase();
+          const allAuthors = [...new Set((dashboardData && dashboardData.links || []).map(l => l.author).filter(Boolean))].sort();
+          authorDropdownItems = allAuthors.filter(a => a.toLowerCase().includes(authorQuery));
+          authorDropdownOpen = authorDropdownItems.length > 0;
+          authorDropdownIndex = -1;
+        }
       } else {
         authorDropdownOpen = false;
         authorDropdownItems = [];
@@ -554,9 +564,9 @@
     function selectAuthor(author) {
       const atIdx = searchQuery.lastIndexOf('@');
       if (atIdx !== -1) {
-        searchQuery = searchQuery.substring(0, atIdx) + '@' + author;
+        searchQuery = searchQuery.substring(0, atIdx) + '@[' + author + ']';
       } else {
-        searchQuery = '@' + author;
+        searchQuery = '@[' + author + ']';
       }
       authorDropdownOpen = false;
       authorDropdownItems = [];
@@ -569,11 +579,11 @@
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         authorDropdownIndex = Math.min(authorDropdownIndex + 1, authorDropdownItems.length - 1);
-        rerenderDashboard();
+        updateAuthorDropdownActive();
       } else if (event.key === 'ArrowUp') {
         event.preventDefault();
         authorDropdownIndex = Math.max(authorDropdownIndex - 1, 0);
-        rerenderDashboard();
+        updateAuthorDropdownActive();
       } else if (event.key === 'Enter' && authorDropdownIndex >= 0) {
         event.preventDefault();
         selectAuthor(authorDropdownItems[authorDropdownIndex]);
@@ -584,6 +594,20 @@
         authorDropdownIndex = -1;
         rerenderDashboard();
       }
+    }
+
+    function updateAuthorDropdownActive() {
+      const dropdown = document.querySelector('.author-dropdown');
+      if (!dropdown) return;
+      const items = dropdown.querySelectorAll('.author-dropdown-item');
+      items.forEach((item, i) => {
+        if (i === authorDropdownIndex) {
+          item.classList.add('active');
+          item.scrollIntoView({ block: 'nearest' });
+        } else {
+          item.classList.remove('active');
+        }
+      });
     }
 
     function closeAuthorDropdown() {
@@ -1130,19 +1154,28 @@
       }
 
       if (searchQuery.trim()) {
-        // Extract author filter from '@mention' if present
+        // Extract author filter from '@[Name]' or '@mention' if present
         let textQuery = searchQuery;
         let authorFilter = null;
-        const atIdx = searchQuery.lastIndexOf('@');
-        if (atIdx !== -1) {
-          authorFilter = searchQuery.substring(atIdx + 1).trim().toLowerCase();
-          textQuery = searchQuery.substring(0, atIdx).trim();
+        const bracketMatch = searchQuery.match(/@\[([^\]]+)\]/);
+        if (bracketMatch) {
+          authorFilter = bracketMatch[1].trim().toLowerCase();
+          textQuery = searchQuery.replace(/@\[[^\]]*\]/, '').trim();
+        } else {
+          const atIdx = searchQuery.lastIndexOf('@');
+          if (atIdx !== -1) {
+            authorFilter = searchQuery.substring(atIdx + 1).trim().toLowerCase();
+            textQuery = searchQuery.substring(0, atIdx).trim();
+          }
         }
 
         if (authorFilter) {
-          displayLinks = displayLinks.filter(link =>
-            link.author && link.author.toLowerCase().startsWith(authorFilter)
-          );
+          const exactAuthor = bracketMatch != null;
+          displayLinks = displayLinks.filter(link => {
+            if (!link.author) return false;
+            const a = link.author.toLowerCase();
+            return exactAuthor ? a === authorFilter : a.startsWith(authorFilter);
+          });
         }
 
         if (textQuery) {
