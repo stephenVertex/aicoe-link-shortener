@@ -117,7 +117,15 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("Search error:", error);
-    return new Response(JSON.stringify({ error: String(error) }), {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" && error !== null && "message" in error
+          ? (error as { message: string }).message
+          : typeof error === "string"
+            ? error
+            : JSON.stringify(error);
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });

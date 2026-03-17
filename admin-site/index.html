@@ -653,7 +653,7 @@
         }
       } catch (err) {
         console.error('Semantic search error:', err);
-        semanticError = err.message;
+        semanticError = (err && err.message) ? err.message : (typeof err === 'string' ? err : JSON.stringify(err));
         semanticResults = null;
       } finally {
         semanticLoading = false;
