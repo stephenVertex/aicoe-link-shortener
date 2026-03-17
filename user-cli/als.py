@@ -251,5 +251,59 @@ def search(query: str, count: int):
         click.echo()
 
 
+@cli.command()
+@click.option("--days", default=7, help="Number of recent days to report on")
+def stats(days: int):
+    """Show statistics about the link shortener database.
+
+    Displays article count, author count, click totals, your personal
+    stats, and top articles by recent clicks.
+    """
+    resp = _api_request("get-stats", method="POST", json_body={"days": days})
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    overview = data.get("overview", {})
+    top_articles = data.get("top_articles", [])
+    your_stats = data.get("your_stats", {})
+
+    # --- Overview ---
+    click.echo(f"\n{click.style('Database Overview', bold=True)}")
+    click.echo(f"  Articles:           {overview.get('articles', 0)}")
+    click.echo(f"  Authors:            {overview.get('authors', 0)}")
+    click.echo(f"  Team members:       {overview.get('people', 0)}")
+    click.echo(f"  Tracking variants:  {overview.get('tracking_variants', 0)}")
+
+    # --- Click stats ---
+    click.echo(f"\n{click.style('Click Statistics', bold=True)}")
+    click.echo(f"  Total (all time):   {overview.get('total_clicks', 0)}")
+    click.echo(f"  Recent ({days}d):        {overview.get('recent_clicks', 0)}")
+
+    # --- Your stats ---
+    if your_stats:
+        click.echo(
+            f"\n{click.style('Your Stats', bold=True)} ({your_stats.get('name', '?')})"
+        )
+        click.echo(f"  Your total clicks:  {your_stats.get('total_clicks', 0)}")
+        click.echo(f"  Your recent ({days}d):   {your_stats.get('recent_clicks', 0)}")
+        click.echo(f"  Your variants:      {your_stats.get('tracking_variants', 0)}")
+
+    # --- Top articles ---
+    if top_articles:
+        click.echo(f"\n{click.style(f'Top Articles (last {days} days)', bold=True)}")
+        for i, article in enumerate(top_articles, 1):
+            title = article.get("title") or article.get("slug", "?")
+            clicks = article.get("clicks", 0)
+            click.echo(f"  {i}. {title} ({clicks} clicks)")
+
+    click.echo()
+
+
 if __name__ == "__main__":
     cli()
