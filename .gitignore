@@ -13,3 +13,10 @@ worker/.wrangler/
 
 # Misc
 .DS_Store
+
+# Runtime / agent state
+.beads/
+.claude/
+.runtime/
+.dolt/
+*.db
