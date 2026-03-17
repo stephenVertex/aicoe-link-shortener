@@ -173,12 +173,13 @@ The admin site is a static HTML app in `admin-site/`. Deployed to AWS Amplify:
 - **Domain:** `admin.aicoe.fit`
 - **Amplify URL:** `main.d3er9dt9913cnv.amplifyapp.com`
 
-Deploy with the helper script:
-```bash
-./scripts/deploy-admin.sh
-```
+Deployment is automatic via git-connected Amplify CI/CD — pushing to `main` triggers a
+build and deploy using the `amplify.yml` build spec in the repo root.
 
-The script packages `admin-site/`, uploads the zip to Amplify, starts the deployment, and waits for it to finish. It defaults to AWS profile `cf2`, app `d3er9dt9913cnv`, branch `main`, and region `us-east-1`.
+> **Manual step (one-time):** Connect this repository to Amplify app `d3er9dt9913cnv` in
+> the AWS Amplify console (Settings > Repository) so that pushes to `main` trigger builds.
+
+The previous manual deploy script is archived at `scripts/deploy-admin.sh.archived`.
 
 ## Infrastructure
 

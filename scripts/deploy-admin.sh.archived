@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ARCHIVED: This script has been replaced by git-connected Amplify CI/CD.
+# Pushing to the main branch now triggers automatic deployment via the
+# amplify.yml build spec in the repo root. See README.md for details.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
