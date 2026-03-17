@@ -218,56 +218,6 @@ def whoami():
 
 
 @cli.command()
-@click.argument("url")
-@click.option(
-    "--source", default=None, help="Filter to a specific source (e.g. linkedin)"
-)
-def shorten(url: str, source: str | None):
-    """Get your personalised tracking link for an article.
-
-    URL can be a full article URL or a slug (e.g. 'cursor-mar26').
-    """
-    body: dict = {"article_url": url}
-    if source:
-        body["source"] = source
-
-    resp = _api_request("get-link", json_body=body)
-
-    if resp.status_code == 401:
-        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    if resp.status_code == 404:
-        data = resp.json()
-        click.echo(f"Article not found: {data.get('error', url)}", err=True)
-        click.echo("Try: als search <query> to find the article.", err=True)
-        sys.exit(1)
-    if resp.status_code != 200:
-        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
-        sys.exit(1)
-
-    data = resp.json()
-    article = data.get("article", {})
-    links = data.get("links", [])
-    person = data.get("person", {})
-
-    click.echo(f"\n{click.style(article.get('title', ''), bold=True)}")
-    if article.get("author"):
-        click.echo(f"  by {article['author']}")
-    click.echo(f"  Original: {article.get('url', '')}")
-    click.echo()
-
-    if links:
-        click.echo(f"  Your tracking links ({person.get('name', '')}):")
-        for link in links:
-            label = link.get("label") or link.get("source", "")
-            click.echo(f"    {label:12s}  {link['short_url']}")
-    else:
-        click.echo("  No tracking links generated.")
-
-    click.echo()
-
-
-@cli.command()
 @click.argument("query")
 @click.option("--count", default=3, help="Number of results to return")
 def search(query: str, count: int):
