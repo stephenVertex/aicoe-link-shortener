@@ -1,0 +1,16 @@
+[project]
+name = "als"
+version = "0.1.0"
+description = "User CLI for aicoe.fit link shortener — shorten and search with personal tracking"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "requests>=2.31",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+als = "als:cli"

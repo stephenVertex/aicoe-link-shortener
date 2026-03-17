@@ -8,96 +8,251 @@ const supabase = createClient(
 
 const DOMAIN = "aicoe.fit";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
+interface PersonInfo {
+  id: string;
+  name: string;
+  slug: string;
+  email: string;
+}
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
+/**
+ * Validate an API key and return the person info.
+ */
+async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
+  const { data, error } = await supabase.rpc("validate_api_key", {
+    p_api_key: apiKey,
   });
+  if (error || !data) return null;
+  return data as PersonInfo;
+}
+
+/**
+ * Find a link by article URL or slug.
+ */
+async function findLink(
+  articleUrl: string,
+): Promise<{ id: string; slug: string; destination_url: string; title: string | null; author: string | null } | null> {
+  // Try exact slug match first
+  const { data: bySlug } = await supabase
+    .from("links")
+    .select("id, slug, destination_url, title, author")
+    .eq("slug", articleUrl)
+    .maybeSingle();
+
+  if (bySlug) return bySlug;
+
+  // Try matching by destination URL
+  const { data: byUrl } = await supabase
+    .from("links")
+    .select("id, slug, destination_url, title, author")
+    .eq("destination_url", articleUrl)
+    .maybeSingle();
+
+  if (byUrl) return byUrl;
+
+  // Try matching URL with/without trailing slash
+  const urlVariant = articleUrl.endsWith("/")
+    ? articleUrl.slice(0, -1)
+    : articleUrl + "/";
+  const { data: byUrlVariant } = await supabase
+    .from("links")
+    .select("id, slug, destination_url, title, author")
+    .eq("destination_url", urlVariant)
+    .maybeSingle();
+
+  if (byUrlVariant) return byUrlVariant;
+
+  // Try extracting slug from a Substack URL pattern: .../p/<slug>
+  const substackMatch = articleUrl.match(/\/p\/([^/?#]+)/);
+  if (substackMatch) {
+    const extractedSlug = substackMatch[1];
+    const { data: byExtractedSlug } = await supabase
+      .from("links")
+      .select("id, slug, destination_url, title, author")
+      .eq("slug", extractedSlug)
+      .maybeSingle();
+
+    if (byExtractedSlug) return byExtractedSlug;
+  }
+
+  return null;
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-api-key",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  };
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+  // Extract API key from header or body
+  let apiKey = req.headers.get("x-api-key") || "";
+  let articleUrl = "";
+  let source = ""; // optional: specific source to get variant for
+
+  if (req.method === "POST") {
+    try {
+      const body = await req.json();
+      apiKey = apiKey || body.api_key || "";
+      articleUrl = body.article_url || body.url || body.slug || "";
+      source = body.source || "";
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+  } else {
+    const url = new URL(req.url);
+    apiKey = apiKey || url.searchParams.get("api_key") || "";
+    articleUrl = url.searchParams.get("url") || url.searchParams.get("slug") || "";
+    source = url.searchParams.get("source") || "";
   }
 
-  try {
-    const { api_key, url } = await req.json();
+  // Validate API key
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({ error: "API key required. Pass via x-api-key header or api_key parameter." }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
 
-    if (!api_key || !url) {
-      return jsonResponse({ error: "api_key and url are required" }, 400);
-    }
+  const person = await validateApiKey(apiKey);
+  if (!person) {
+    return new Response(
+      JSON.stringify({ error: "Invalid API key" }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
 
-    // Validate api_key against people table
-    const { data: person, error: personError } = await supabase
-      .from("people")
-      .select("id, slug, name")
-      .eq("api_key", api_key)
-      .single();
+  // Find the link
+  if (!articleUrl) {
+    return new Response(
+      JSON.stringify({ error: "article_url or slug parameter required" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
 
-    if (personError || !person) {
-      return jsonResponse({ error: "Invalid API key" }, 401);
-    }
+  const link = await findLink(articleUrl);
+  if (!link) {
+    return new Response(
+      JSON.stringify({ error: `No article found for: ${articleUrl}` }),
+      {
+        status: 404,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
 
-    // Extract slug from URL: split on /p/ for Substack URLs, or use raw value
-    let slug: string;
-    if (url.includes("/p/")) {
-      slug = url.split("/p/").pop()?.replace(/\/$/, "") || "";
-    } else {
-      slug = url;
-    }
+  // Get person's source profiles
+  const { data: sources } = await supabase
+    .from("person_sources")
+    .select("id, label, utm_source, utm_medium, utm_content, utm_term")
+    .eq("person_id", person.id)
+    .order("label");
 
-    if (!slug) {
-      return jsonResponse({ error: "Could not extract slug from URL" }, 400);
-    }
+  const personSources = sources || [];
 
-    // Look up the link by slug
-    const { data: link, error: linkError } = await supabase
-      .from("links")
-      .select("id, slug, title, author")
-      .eq("slug", slug)
-      .single();
+  // Filter to specific source if requested
+  const filteredSources = source
+    ? personSources.filter((s: { utm_source: string }) => s.utm_source === source.toLowerCase())
+    : personSources;
 
-    if (linkError || !link) {
-      return jsonResponse({ error: `Link not found for slug: ${slug}` }, 404);
-    }
+  if (filteredSources.length === 0) {
+    // Fall back to a default source if none configured
+    const defaultSource = source || "linkedin";
+    const { data: variant } = await supabase.rpc("ensure_tracking_variant", {
+      p_link_id: link.id,
+      p_ref: person.slug,
+      p_source: defaultSource,
+      p_medium: "social",
+    });
 
-    // Find existing tracking variant for this person + link (first match)
-    const { data: variants, error: variantError } = await supabase
-      .from("tracking_variants")
-      .select("id, suffix")
-      .eq("link_id", link.id)
-      .eq("ref", person.slug)
-      .limit(1);
+    const suffix = variant?.suffix;
+    const shortUrl = `https://${DOMAIN}/${link.slug}-${suffix}`;
+
+    return new Response(
+      JSON.stringify({
+        article: {
+          title: link.title,
+          author: link.author,
+          slug: link.slug,
+          url: link.destination_url,
+        },
+        links: [
+          {
+            source: defaultSource,
+            short_url: shortUrl,
+            suffix,
+          },
+        ],
+        person: { name: person.name, slug: person.slug },
+      }),
+      {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
+
+  // Generate/get tracking variants for each source profile
+  const links = [];
+  for (const src of filteredSources) {
+    const { data: variant, error: variantError } = await supabase.rpc(
+      "ensure_tracking_variant",
+      {
+        p_link_id: link.id,
+        p_ref: person.slug,
+        p_source: src.utm_source,
+        p_medium: src.utm_medium || "social",
+        p_content: src.utm_content || null,
+        p_term: src.utm_term || null,
+      },
+    );
 
     if (variantError) {
-      return jsonResponse({ error: "Error looking up variant" }, 500);
+      console.error(`Error generating variant for ${src.label}:`, variantError);
+      continue;
     }
 
-    let short_url: string;
-    if (variants && variants.length > 0) {
-      short_url = `https://${DOMAIN}/${link.slug}-${variants[0].suffix}`;
-    } else {
-      short_url = `https://${DOMAIN}/${link.slug}`;
-    }
-
-    return jsonResponse({
-      short_url,
-      title: link.title,
-      author: link.author,
+    const suffix = variant?.suffix;
+    links.push({
+      source: src.utm_source,
+      label: src.label,
+      short_url: `https://${DOMAIN}/${link.slug}-${suffix}`,
+      suffix,
     });
-  } catch (error) {
-    console.error("get-link error:", error);
-    return jsonResponse({ error: String(error) }, 500);
   }
+
+  return new Response(
+    JSON.stringify({
+      article: {
+        title: link.title,
+        author: link.author,
+        slug: link.slug,
+        url: link.destination_url,
+      },
+      links,
+      person: { name: person.name, slug: person.slug },
+    }),
+    {
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    },
+  );
 });
