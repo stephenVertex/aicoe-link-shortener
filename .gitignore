@@ -20,3 +20,4 @@ worker/.wrangler/
 .logs/
 __pycache__/
 state.json
+.beads/
