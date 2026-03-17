@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+ADMIN_DIR="$REPO_ROOT/admin-site"
+
+AWS_PROFILE=${AWS_PROFILE:-cf2}
+AWS_REGION=${AWS_REGION:-us-east-1}
+AMPLIFY_APP_ID=${AMPLIFY_APP_ID:-d3er9dt9913cnv}
+AMPLIFY_BRANCH_NAME=${AMPLIFY_BRANCH_NAME:-main}
+ZIP_PATH=${ZIP_PATH:-"${TMPDIR:-/tmp}/aicoe-admin-site.zip"}
+DEPLOY_JSON=$(mktemp "${TMPDIR:-/tmp}/amplify-deploy.XXXXXX.json")
+
+cleanup() {
+  rm -f "$DEPLOY_JSON"
+}
+
+trap cleanup EXIT
+
+if ! command -v aws >/dev/null 2>&1; then
+  echo "aws CLI is required" >&2
+  exit 1
+fi
+
+if ! command -v zip >/dev/null 2>&1; then
+  echo "zip is required" >&2
+  exit 1
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required" >&2
+  exit 1
+fi
+
+if [ ! -d "$ADMIN_DIR" ]; then
+  echo "admin-site directory not found at $ADMIN_DIR" >&2
+  exit 1
+fi
+
+echo "Packaging admin site from $ADMIN_DIR"
+rm -f "$ZIP_PATH"
+(
+  cd "$ADMIN_DIR"
+  zip -qr "$ZIP_PATH" .
+)
+
+echo "Creating Amplify deployment"
+aws --profile "$AWS_PROFILE" amplify create-deployment \
+  --app-id "$AMPLIFY_APP_ID" \
+  --branch-name "$AMPLIFY_BRANCH_NAME" \
+  --region "$AWS_REGION" \
+  --output json > "$DEPLOY_JSON"
+
+JOB_ID=$(python3 - <<'PY' "$DEPLOY_JSON"
+import json
+import sys
+from pathlib import Path
+
+info = json.loads(Path(sys.argv[1]).read_text())
+print(info["jobId"])
+PY
+)
+
+echo "Uploading deployment artifact for job $JOB_ID"
+python3 - <<'PY' "$DEPLOY_JSON" "$ZIP_PATH"
+import json
+import sys
+import urllib.request
+from pathlib import Path
+
+info = json.loads(Path(sys.argv[1]).read_text())
+zip_path = Path(sys.argv[2])
+req = urllib.request.Request(
+    info["zipUploadUrl"],
+    data=zip_path.read_bytes(),
+    method="PUT",
+    headers={"Content-Type": "application/zip"},
+)
+with urllib.request.urlopen(req, timeout=120) as response:
+    status = getattr(response, "status", None) or response.getcode()
+    if status not in (200, 201):
+        raise SystemExit(f"Upload failed with HTTP {status}")
+PY
+
+echo "Starting Amplify deployment"
+aws --profile "$AWS_PROFILE" amplify start-deployment \
+  --app-id "$AMPLIFY_APP_ID" \
+  --branch-name "$AMPLIFY_BRANCH_NAME" \
+  --job-id "$JOB_ID" \
+  --region "$AWS_REGION" \
+  --output json >/dev/null
+
+echo "Waiting for deployment to finish"
+while true; do
+  STATUS=$(aws --profile "$AWS_PROFILE" amplify get-job \
+    --app-id "$AMPLIFY_APP_ID" \
+    --branch-name "$AMPLIFY_BRANCH_NAME" \
+    --job-id "$JOB_ID" \
+    --region "$AWS_REGION" \
+    --output json | python3 -c 'import json, sys; print(json.load(sys.stdin)["job"]["summary"]["status"])'
+  )
+
+  echo "Job $JOB_ID: $STATUS"
+  case "$STATUS" in
+    SUCCEED)
+      echo "Deploy complete: https://admin.aicoe.fit"
+      break
+      ;;
+    FAILED|CANCELLED)
+      echo "Deploy failed with status $STATUS" >&2
+      exit 1
+      ;;
+  esac
+
+  sleep 5
+done
