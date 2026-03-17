@@ -443,5 +443,28 @@ def authors():
     click.echo()
 
 
+@cli.command()
+def stats():
+    """Show statistics about the link shortener database.
+
+    Displays counts of articles, authors, people, tracking variants,
+    and total clicks recorded.
+    """
+    resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
+    if resp.status_code != 200:
+        click.echo(f"Error fetching stats ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    click.echo("\nDatabase statistics:\n")
+    click.echo(f"  Articles:          {data.get('articles', 0)}")
+    click.echo(f"  Authors:           {data.get('authors', 0)}")
+    click.echo(f"  People:            {data.get('people', 0)}")
+    click.echo(f"  Tracking variants: {data.get('tracking_variants', 0)}")
+    click.echo(f"  Total clicks:      {data.get('clicks', 0)}")
+    click.echo()
+
+
 if __name__ == "__main__":
     cli()
