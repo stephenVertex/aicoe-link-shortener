@@ -329,5 +329,70 @@ def search(query: str, count: int):
         click.echo()
 
 
+@cli.command()
+@click.argument("n", default=10, type=int)
+def last(n: int):
+    """Show the last N articles with your personalised tracking links.
+
+    N defaults to 10. Shows the most recently published articles in the
+    database, with your personalised tracking link for each one.
+    """
+    api_key = _get_api_key()
+
+    # Step 1: Fetch last N articles
+    last_resp = requests.post(
+        f"{API_BASE}/last-articles",
+        json={"count": n},
+        timeout=30,
+    )
+    if last_resp.status_code != 200:
+        click.echo(
+            f"Error fetching articles ({last_resp.status_code}): {last_resp.text}",
+            err=True,
+        )
+        sys.exit(1)
+
+    last_data = last_resp.json()
+    results = last_data.get("results", [])
+
+    if not results:
+        click.echo("No articles found.")
+        return
+
+    click.echo(f"\nLast {len(results)} article(s):\n")
+
+    # Step 2: For each article, get personalised tracking link
+    for i, result in enumerate(results, 1):
+        title = result.get("title") or result.get("slug", "")
+        author = result.get("author", "")
+        slug = result.get("slug", "")
+        published_at = result.get("published_at") or result.get("created_at", "")
+        # Trim to date portion if present
+        date_str = published_at[:10] if published_at else ""
+
+        click.echo(f"  {i}. {click.style(title, bold=True)}")
+        if author:
+            click.echo(f"     by {author}")
+        if date_str:
+            click.echo(f"     {date_str}")
+
+        # Get tracking link for this article
+        link_resp = _api_request(
+            "get-link",
+            api_key=api_key,
+            json_body={"article_url": slug},
+        )
+        if link_resp.status_code == 200:
+            link_data = link_resp.json()
+            links = link_data.get("links", [])
+            for link in links:
+                label = link.get("label") or link.get("source", "")
+                click.echo(f"     {label:12s}  {link['short_url']}")
+        else:
+            click.echo(f"     (could not generate tracking link)")
+
+        click.echo()
+
+
 if __name__ == "__main__":
     cli()
