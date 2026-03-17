@@ -13,3 +13,8 @@ worker/.wrangler/
 
 # Misc
 .DS_Store
+images/.mvr.latest
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
