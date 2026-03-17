@@ -3,6 +3,7 @@
 
 import hashlib
 import os
+import secrets
 import xml.etree.ElementTree as ET
 
 import click
@@ -447,6 +448,69 @@ def click_stats(slug: str | None, days: int):
 
 
 @cli.command()
+@click.option("--person-slug", required=True, help="Slug of the person")
+@click.option("--regenerate", is_flag=True, help="Regenerate key even if one exists")
+def generate_api_key(person_slug: str, regenerate: bool):
+    """Generate or regenerate an API key for a person."""
+    # Look up the person
+    result = (
+        supabase.table("people")
+        .select("id, name, slug, api_key")
+        .eq("slug", person_slug)
+        .single()
+        .execute()
+    )
+    person = result.data
+
+    if person.get("api_key") and not regenerate:
+        click.echo(f"Person {person['name']} already has an API key.")
+        click.echo(f"  Key: {person['api_key']}")
+        click.echo("Use --regenerate to create a new one.")
+        return
+
+    # Generate new key: als_ prefix + 32 hex chars
+    new_key = f"als_{secrets.token_hex(16)}"
+
+    supabase.table("people").update({"api_key": new_key}).eq(
+        "id", person["id"]
+    ).execute()
+
+    action = "Regenerated" if person.get("api_key") else "Generated"
+    click.echo(f"{action} API key for {person['name']} ({person['slug']})")
+    click.echo(f"  Key: {new_key}")
+    click.echo(f"\nTo use: als login --api-key {new_key}")
+
+
+@cli.command()
+def generate_all_api_keys():
+    """Generate API keys for all people who don't have one."""
+    people = (
+        supabase.table("people")
+        .select("id, name, slug, api_key")
+        .order("name")
+        .execute()
+    )
+    if not people.data:
+        click.echo("No people configured.")
+        return
+
+    generated = 0
+    for person in people.data:
+        if person.get("api_key"):
+            click.echo(f"  {person['name']:15s}  (already has key)")
+            continue
+
+        new_key = f"als_{secrets.token_hex(16)}"
+        supabase.table("people").update({"api_key": new_key}).eq(
+            "id", person["id"]
+        ).execute()
+        click.echo(f"  {person['name']:15s}  {new_key}")
+        generated += 1
+
+    click.echo(f"\nGenerated {generated} new key(s).")
+
+
+@cli.command()
 @click.option(
     "--substack-url",
     default="https://trilogyai.substack.com",
@@ -613,6 +677,16 @@ def sync_substack(substack_url: str, utm_source: str, utm_medium: str):
             click.echo(f"  ERROR: {e}", err=True)
 
     click.echo("Sync complete.")
+
+
+@cli.command()
+@click.option("--person-slug", required=True, help="Slug of the person to generate a key for")
+def generate_api_key(person_slug: str):
+    """Generate an API key for a person (for use with the als CLI)."""
+    key = "als_" + secrets.token_hex(16)
+    supabase.table("people").update({"api_key": key}).eq("slug", person_slug).execute()
+    click.echo(f"API key for {person_slug}:")
+    click.echo(f"  {key}")
 
 
 if __name__ == "__main__":
