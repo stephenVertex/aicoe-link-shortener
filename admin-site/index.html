@@ -365,6 +365,8 @@
     let analyticsInterval = 'day';
     let analyticsLinkFilter = '';
     let analyticsVariantFilter = '';
+    let analyticsStartDate = '';
+    let analyticsEndDate = '';
     let analyticsChart = null;
     let analyticsLoading = false;
 
@@ -572,6 +574,8 @@
         };
         if (analyticsLinkFilter) params.p_link_id = analyticsLinkFilter;
         if (analyticsVariantFilter) params.p_variant_id = analyticsVariantFilter;
+        if (analyticsStartDate) params.p_start_date = new Date(analyticsStartDate).toISOString();
+        if (analyticsEndDate) params.p_end_date = new Date(analyticsEndDate + 'T23:59:59').toISOString();
         
         const { data, error } = await sb.rpc('get_click_analytics', params);
         if (error) throw error;
@@ -597,6 +601,16 @@
 
     function setAnalyticsVariantFilter(value) {
       analyticsVariantFilter = value;
+      rerenderDashboard();
+    }
+
+    function setAnalyticsStartDate(value) {
+      analyticsStartDate = value;
+      rerenderDashboard();
+    }
+
+    function setAnalyticsEndDate(value) {
+      analyticsEndDate = value;
       rerenderDashboard();
     }
 
@@ -924,6 +938,8 @@
                   ${(dashboardData.variants || []).filter(v => v.link_id === analyticsLinkFilter).map(v => `<option value="${v.id}" ${analyticsVariantFilter === v.id ? 'selected' : ''}>${v.ref || 'unknown'} - ${v.utm_source || ''}</option>`).join('')}
                 </select>
               ` : ''}
+              <input type="date" class="analytics-input" value="${analyticsStartDate}" onchange="setAnalyticsStartDate(this.value)" title="Start date" placeholder="From">
+              <input type="date" class="analytics-input" value="${analyticsEndDate}" onchange="setAnalyticsEndDate(this.value)" title="End date" placeholder="To">
             </div>
           </div>
           <div class="chart-container">
