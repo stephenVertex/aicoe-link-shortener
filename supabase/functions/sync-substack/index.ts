@@ -116,10 +116,20 @@ Deno.serve(async (req) => {
 
     const created: string[] = [];
     const updated: string[] = [];
+    const skipped: string[] = [];
     const now = new Date().toISOString();
 
     for (const entry of sitemapEntries) {
       const slug = entry.url.split("/p/").pop()?.replace(/\/$/, "") || "";
+
+      // Skip restacks: only the Substack posts API returns original posts.
+      // Any sitemap slug not found in postMeta is a restack (someone else's
+      // post reshared to the trilogyai feed) and should not be imported.
+      if (!postMeta.has(slug)) {
+        skipped.push(slug);
+        continue;
+      }
+
       const meta = postMeta.get(slug);
       const newTitle = meta?.title || slug;
       const newAuthor = meta?.publishedBylines?.[0]?.name || null;
@@ -199,9 +209,10 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      message: `Created ${created.length}, updated ${updated.length} links`,
+      message: `Created ${created.length}, updated ${updated.length} links (skipped ${skipped.length} restacks)`,
       created,
       updated,
+      skipped,
       checked: sitemapEntries.length,
     }), {
       headers: { "Content-Type": "application/json", ...corsHeaders },
