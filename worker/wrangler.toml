@@ -1,6 +1,7 @@
 name = "aicoe-redirect"
 main = "src/worker.js"
 compatibility_date = "2024-01-01"
+account_id = "f241401ee583fa4361d8e5f4fa6510a7"
 
 [[routes]]
 pattern = "aicoe.fit/*"
