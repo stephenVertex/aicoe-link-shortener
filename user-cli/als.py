@@ -220,6 +220,56 @@ def whoami():
 
 
 @cli.command()
+@click.argument("url")
+@click.option(
+    "--source", default=None, help="Filter to a specific source (e.g. linkedin)"
+)
+def shorten(url: str, source: str | None):
+    """Get your personalised tracking link(s) for any URL.
+
+    Accepts any URL — article, blog post, website, etc. — and returns
+    your personalised aicoe.fit short tracking links. Calling with the
+    same URL always returns the same set of links (idempotent).
+    """
+    body: dict = {"url": url}
+    if source:
+        body["source"] = source
+
+    resp = _api_request("shorten-url", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    links = data.get("links", [])
+    person = data.get("person", {})
+    slug = data.get("slug", "")
+    destination = data.get("url", url)
+
+    click.echo(f"\n{click.style(destination, bold=True)}")
+    click.echo(f"  Slug: {slug}")
+    click.echo()
+
+    if links:
+        click.echo(f"  Your tracking links ({person.get('name', '')}):")
+        for link in links:
+            label = link.get("label") or link.get("source", "")
+            click.echo(f"    {label:12s}  {link['short_url']}")
+    else:
+        click.echo("  No tracking links generated.")
+
+    click.echo()
+
+
+@cli.command()
 @click.argument("query")
 @click.option("--count", default=3, help="Number of results to return")
 def search(query: str, count: int):
