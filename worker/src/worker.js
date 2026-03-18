@@ -1,3 +1,175 @@
+// README-als.md — LLM-readable install + usage guide for als CLI
+const README_ALS_MD = `# als — aicoe.fit Link Shortener CLI
+
+\`als\` is a command-line tool for getting personalised tracking links to AI-related
+articles indexed at [aicoe.fit](https://aicoe.fit). It uses semantic search to find
+articles and returns short, trackable URLs unique to you.
+
+## Install
+
+\`\`\`bash
+curl -fsSL aicoe.fit/install | bash
+\`\`\`
+
+Or with wget:
+
+\`\`\`bash
+wget -qO- aicoe.fit/install | bash
+\`\`\`
+
+**Requirements:** Python 3.12+ and [uv](https://docs.astral.sh/uv/). The install
+script will install \`uv\` automatically if it is not present.
+
+After installation, add \`~/.local/bin\` to your PATH if it is not already:
+
+\`\`\`bash
+export PATH="$HOME/.local/bin:$PATH"
+\`\`\`
+
+## Authentication
+
+Get your personal API key from your admin at aicoe.fit, then log in:
+
+\`\`\`bash
+als login --api-key als_your_key_here
+\`\`\`
+
+Credentials are stored in \`~/.als.credentials\`.
+
+## Commands
+
+### als login
+
+Save your API key for future use.
+
+\`\`\`bash
+als login --api-key als_your_key_here
+\`\`\`
+
+### als search
+
+Search articles using semantic search and get your personalised tracking links.
+
+\`\`\`bash
+als search "GLM-5"
+als search "reinforcement learning from human feedback" --count 5
+als search "multimodal models"
+\`\`\`
+
+Options:
+- \`--count INTEGER\` — Number of results to return (default: 3)
+
+### als last
+
+Show the most recently published articles with your personalised tracking links.
+
+\`\`\`bash
+als last
+als last 5
+als last 10 --author "Simon"
+als last 3 --author "Anthropic"
+\`\`\`
+
+Options:
+- \`N\` — Number of articles to show (default: 10)
+- \`--author TEXT\` — Filter by author name (case-insensitive substring match)
+
+### als authors
+
+List all authors in the database with their article counts.
+
+\`\`\`bash
+als authors
+\`\`\`
+
+### als stats
+
+Show statistics about the link shortener database.
+
+\`\`\`bash
+als stats
+\`\`\`
+
+Output includes:
+- Total articles
+- Number of authors
+- Number of people (tracked users)
+- Tracking variants (personalised link variants)
+- Total clicks recorded
+
+### als whoami
+
+Show the currently authenticated user.
+
+\`\`\`bash
+als whoami
+\`\`\`
+
+### als upgrade
+
+Upgrade als to the latest version.
+
+\`\`\`bash
+als upgrade
+\`\`\`
+
+### als --version
+
+Show the installed version of als.
+
+\`\`\`bash
+als --version
+\`\`\`
+
+### als --help
+
+Show all available commands.
+
+\`\`\`bash
+als --help
+als search --help
+als last --help
+\`\`\`
+
+## Quick Start
+
+\`\`\`bash
+# 1. Install
+curl -fsSL aicoe.fit/install | bash
+
+# 2. Log in with your API key
+als login --api-key als_your_key_here
+
+# 3. Search for articles
+als search "GLM-5"
+
+# 4. See the latest 5 articles
+als last 5
+
+# 5. See articles by a specific author
+als last 5 --author "Simon"
+
+# 6. Browse all authors
+als authors
+
+# 7. Check database stats
+als stats
+
+# 8. Upgrade when a new version is available
+als upgrade
+\`\`\`
+
+## Notes for LLMs
+
+- \`als search\` uses semantic (embedding-based) search, not keyword search.
+  Natural-language queries work well.
+- Each short URL is personalised: the same article produces different short URLs
+  for different users, enabling per-user click tracking.
+- API keys start with \`als_\` and are issued per-user by an administrator.
+- The CLI stores credentials at \`~/.als.credentials\` (mode 0600).
+- \`als upgrade\` reinstalls from the canonical wheel on S3; it does not require git.
+`;
+
 // Install script served at aicoe.fit/install
 // Keep in sync with scripts/install.sh
 const INSTALL_SCRIPT = `#!/usr/bin/env bash
@@ -166,6 +338,17 @@ export default {
     // Skip favicon and robots
     if (path === "/favicon.ico" || path === "/robots.txt") {
       return new Response("", { status: 404 });
+    }
+
+    // README-als.md — LLM-readable install + usage guide
+    if (path === "/README-als.md") {
+      return new Response(README_ALS_MD, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+        },
+      });
     }
 
     // Install script — serve inline for: curl aicoe.fit/install | bash
