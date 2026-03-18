@@ -178,7 +178,7 @@ const INSTALL_SCRIPT = `#!/usr/bin/env bash
 #    or: wget -qO- aicoe.fit/install | bash
 set -euo pipefail
 
-WHEEL_URL="https://post-genius-media.s3.amazonaws.com/shup/project/aicoe-link-shortener/als-022-py3-none-any.whl"
+WHEEL_URL="https://post-genius-media.s3.amazonaws.com/shup/project/aicoe-link-shortener/als-023-py3-none-any.whl"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=12
 

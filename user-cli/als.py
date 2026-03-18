@@ -116,7 +116,7 @@ def login(api_key: str):
 # Canonical install source — public wheel hosted on S3.
 _WHEEL_URL = (
     "https://post-genius-media.s3.amazonaws.com/shup/project/"
-    "aicoe-link-shortener/als-022-py3-none-any.whl"
+    "aicoe-link-shortener/als-023-py3-none-any.whl"
 )
 
 
