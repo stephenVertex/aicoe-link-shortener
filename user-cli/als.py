@@ -257,10 +257,14 @@ def search(query: str, count: int):
         author = result.get("author", "")
         slug = result.get("slug", "")
         similarity = result.get("similarity", 0)
+        published_at = result.get("published_at") or result.get("created_at", "")
+        date_str = published_at[:10] if published_at else ""
 
         click.echo(f"  {i}. {click.style(title, bold=True)}")
         if author:
             click.echo(f"     by {author}")
+        if date_str:
+            click.echo(f"     {date_str}")
         click.echo(f"     Score: {similarity:.2f}")
 
         # Get tracking link for this article
