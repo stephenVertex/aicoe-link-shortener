@@ -19,11 +19,13 @@ Deno.serve(async (req) => {
   }
 
   let count = 10;
+  let author: string | null = null;
 
   if (req.method === "POST") {
     try {
       const body = await req.json();
       if (body.count !== undefined) count = Math.min(Math.max(1, parseInt(body.count, 10)), 100);
+      if (body.author && typeof body.author === "string") author = body.author.trim();
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid JSON body" }),
@@ -37,15 +39,23 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const countParam = url.searchParams.get("count");
     if (countParam) count = Math.min(Math.max(1, parseInt(countParam, 10)), 100);
+    const authorParam = url.searchParams.get("author");
+    if (authorParam) author = authorParam.trim();
   }
 
   try {
     // Fetch the last N articles ordered by published_at (falling back to created_at)
-    const { data: articles, error } = await supabase
+    let query = supabase
       .from("links")
       .select("id, slug, title, author, destination_url, published_at, created_at")
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(count);
+
+    if (author) {
+      query = query.ilike("author", `%${author}%`);
+    }
+
+    const { data: articles, error } = await query;
 
     if (error) throw error;
 

@@ -58,6 +58,38 @@ def _get_api_key() -> str:
     return api_key
 
 
+def _resolve_my_author_name(api_key: str) -> str | None:
+    """Resolve the logged-in user's author name by probing the get-link endpoint.
+
+    Returns the person's name (as stored in the people table, e.g. "Simon Thornton")
+    or None if it cannot be determined.
+    """
+    # Find any article slug to use as a probe
+    search_resp = requests.post(
+        f"{API_BASE}/search-articles",
+        json={"query": "article", "match_count": 1},
+        timeout=30,
+    )
+    if search_resp.status_code != 200:
+        return None
+    results = search_resp.json().get("results", [])
+    if not results:
+        return None
+    slug = results[0].get("slug", "")
+    if not slug:
+        return None
+    # Call get-link with the slug to retrieve person info
+    link_resp = requests.post(
+        f"{API_BASE}/get-link",
+        json={"article_url": slug},
+        headers={"x-api-key": api_key},
+        timeout=30,
+    )
+    if link_resp.status_code != 200:
+        return None
+    return link_resp.json().get("person", {}).get("name") or None
+
+
 def _api_request(
     function: str,
     *,
@@ -343,7 +375,14 @@ def search(query: str, count: int):
     default=None,
     help="Filter articles by author name (case-insensitive substring match).",
 )
-def last(n: int, author: str | None):
+@click.option(
+    "--me",
+    "filter_me",
+    is_flag=True,
+    default=False,
+    help="Filter to articles written by the logged-in user.",
+)
+def last(n: int, author: str | None, filter_me: bool):
     """Show the last N articles with your personalised tracking links.
 
     N defaults to 10. Shows the most recently published articles in the
@@ -352,8 +391,27 @@ def last(n: int, author: str | None):
     Use --author to filter to a specific author, e.g.:
 
         als last 5 --author "Simon"
+
+    Use --me to filter to your own articles automatically:
+
+        als last 5 --me
     """
     api_key = _get_api_key()
+
+    # Resolve --me to the logged-in user's author name
+    if filter_me:
+        if author:
+            click.echo("Error: --me and --author cannot be used together.", err=True)
+            sys.exit(1)
+        my_name = _resolve_my_author_name(api_key)
+        if not my_name:
+            click.echo(
+                "Could not determine your author name. "
+                "Make sure you are logged in and have articles in the database.",
+                err=True,
+            )
+            sys.exit(1)
+        author = my_name
 
     # Step 1: Fetch last N articles (optionally filtered by author)
     body: dict = {"count": n}
@@ -376,13 +434,19 @@ def last(n: int, author: str | None):
     results = last_data.get("results", [])
 
     if not results:
-        if author:
+        if filter_me:
+            click.echo(f"No articles found for you ({author}).")
+        elif author:
             click.echo(f"No articles found for author: {author}")
         else:
             click.echo("No articles found.")
         return
 
-    if author:
+    if filter_me:
+        click.echo(
+            f"\nLast {len(results)} article(s) by you ({click.style(author, bold=True)}):\n"
+        )
+    elif author:
         click.echo(
             f"\nLast {len(results)} article(s) by {click.style(author, bold=True)}:\n"
         )
