@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
   const { data: variants } = await supabase
     .from("tracking_variants")
     .select("link_id, suffix, utm_source, utm_medium, utm_content, utm_term")
-    .in("link_id", linkIds.length > 0 ? linkIds : ["00000000-0000-0000-0000-000000000000"])
+    .in("link_id", linkIds.length > 0 ? linkIds : ["lnk-0000000000"])
     .eq("ref", person.slug)
     .order("utm_source");
 
