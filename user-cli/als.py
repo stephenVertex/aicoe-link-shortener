@@ -543,5 +543,73 @@ def custom_links(count: int, show_all: bool):
         click.echo()
 
 
+@cli.command("sync-substack")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Force re-sync of existing articles (updates metadata even if already imported).",
+)
+def sync_substack(force: bool):
+    """Trigger a sync of the latest articles from the Trilogy Substack.
+
+    Calls the sync-substack edge function to fetch the Substack RSS/sitemap
+    feed and import any new articles into the database.  Shows how many
+    articles were checked and how many new ones were imported.
+
+    Examples:
+
+        als sync-substack          # import any new articles
+        als sync-substack --force  # re-sync and update existing article metadata
+    """
+    api_key = _get_api_key()
+
+    click.echo("Syncing Trilogy Substack articles...")
+
+    # The sync-substack function accepts `force=true` as a query param.
+    # We always POST (the function accepts GET and POST equally).
+    url = f"{API_BASE}/sync-substack"
+    if force:
+        url += "?force=true"
+
+    headers = {"x-api-key": api_key}
+    try:
+        resp = requests.post(url, headers=headers, timeout=120)
+    except requests.exceptions.Timeout:
+        click.echo("Error: request timed out (sync may still be running).", err=True)
+        sys.exit(1)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    message = data.get("message", "")
+    checked = data.get("checked", 0)
+    created = data.get("created", [])
+    updated = data.get("updated", [])
+
+    click.echo(f"\nResult: {message}")
+    click.echo(f"  Checked:  {checked} article(s) in feed")
+    click.echo(f"  Imported: {len(created)} new article(s)")
+    if updated:
+        click.echo(f"  Updated:  {len(updated)} existing article(s)")
+
+    if created:
+        click.echo("\nNewly imported articles:")
+        for slug in created:
+            click.echo(f"  - {slug}")
+
+    if updated:
+        click.echo("\nUpdated articles:")
+        for slug in updated:
+            click.echo(f"  - {slug}")
+
+    click.echo()
+
+
 if __name__ == "__main__":
     cli()
