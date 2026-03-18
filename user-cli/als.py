@@ -48,6 +48,18 @@ def _write_credentials(api_key: str) -> None:
     os.chmod(CREDENTIALS_FILE, 0o600)
 
 
+def _update_credentials(**fields: str) -> None:
+    """Update specific fields in ~/.als.credentials, preserving existing values."""
+    creds = _read_credentials()
+    creds.update(fields)
+    config = configparser.ConfigParser()
+    config["default"] = creds
+    CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CREDENTIALS_FILE, "w") as f:
+        config.write(f)
+    os.chmod(CREDENTIALS_FILE, 0o600)
+
+
 def _get_api_key() -> str:
     """Get the API key from credentials file, or exit with an error."""
     creds = _read_credentials()
@@ -59,12 +71,21 @@ def _get_api_key() -> str:
 
 
 def _resolve_my_author_name(api_key: str) -> str | None:
-    """Resolve the logged-in user's author name by probing the get-link endpoint.
+    """Resolve the logged-in user's author name.
+
+    Checks ~/.als.credentials for a cached author_name first.  If not
+    cached, falls back to probing the get-link endpoint via the API.
 
     Returns the person's name (as stored in the people table, e.g. "Simon Thornton")
     or None if it cannot be determined.
     """
-    # Find any article slug to use as a probe
+    # Check credentials cache first — avoids API call overhead
+    creds = _read_credentials()
+    cached = creds.get("author_name", "").strip()
+    if cached:
+        return cached
+
+    # Fall back to auto-resolve via API
     search_resp = requests.post(
         f"{API_BASE}/search-articles",
         json={"query": "article", "match_count": 1},
@@ -252,6 +273,41 @@ def whoami():
     click.echo(f"API key is valid. Credentials: {CREDENTIALS_FILE}")
 
 
+@cli.command("set-author-name")
+@click.argument("name")
+def set_author_name(name: str):
+    """Cache your author name in credentials for use with --me.
+
+    Stores NAME in ~/.als.credentials so that 'als last --me' can look up
+    your articles without making an extra API call.  This is especially useful
+    in bot/automation contexts or when working offline.
+
+    To find your exact author name as it appears in the database, run:
+
+        als authors
+
+    Then cache it with:
+
+        als set-author-name "Your Name"
+
+    To clear the cached name (revert to API auto-resolve), pass an empty string:
+
+        als set-author-name ""
+    """
+    if not CREDENTIALS_FILE.exists():
+        click.echo("Not logged in. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+
+    name = name.strip()
+    _update_credentials(author_name=name)
+
+    if name:
+        click.echo(f"Author name cached: {name!r}")
+        click.echo(f"Credentials updated: {CREDENTIALS_FILE}")
+    else:
+        click.echo("Author name cleared. 'als last --me' will auto-resolve via API.")
+
+
 @cli.command()
 @click.argument("url")
 @click.option(
@@ -380,7 +436,12 @@ def search(query: str, count: int):
     "filter_me",
     is_flag=True,
     default=False,
-    help="Filter to articles written by the logged-in user.",
+    help=(
+        "Filter to articles written by the logged-in user. "
+        "Uses cached author name if set (see 'als set-author-name'), "
+        "otherwise auto-resolves via API. "
+        "Run 'als authors' to find your name."
+    ),
 )
 def last(n: int, author: str | None, filter_me: bool):
     """Show the last N articles with your personalised tracking links.
