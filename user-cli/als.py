@@ -139,7 +139,18 @@ def _api_request(
 @click.group()
 @click.version_option(version=__version__, prog_name="als")
 def cli():
-    """aicoe.fit link shortener - get your personalised tracking links."""
+    """aicoe.fit link shortener - get your personalised tracking links.
+
+    \b
+    Usage:
+      First time:  als login --api-key <key>
+                   als authors              # find your name
+                   als set-author-name "Your Name"
+      Search:      als search "GLM-5"
+      My articles: als last --me 5
+      Shorten URL: als shorten <url>
+      Upgrade:     als upgrade
+    """
     pass
 
 
