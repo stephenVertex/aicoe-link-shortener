@@ -473,5 +473,75 @@ def stats():
     click.echo()
 
 
+@cli.command("custom-links")
+@click.option(
+    "--count", default=10, show_default=True, help="Number of results to return."
+)
+@click.option(
+    "--all", "show_all", is_flag=True, help="Show all custom links (ignores --count)."
+)
+def custom_links(count: int, show_all: bool):
+    """List your custom short links created via 'als shorten'.
+
+    Shows only manually-created links (not auto-imported Substack articles),
+    with the original URL, short slug, creation date, and your tracking links
+    per channel.
+
+    Examples:
+
+        als custom-links           # last 10 custom links
+        als custom-links --count 5 # last 5 custom links
+        als custom-links --all     # all custom links
+    """
+    body: dict = {"count": count}
+    if show_all:
+        body["all"] = True
+
+    resp = _api_request("list-custom-links", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    results = data.get("results", [])
+    person = data.get("person", {})
+
+    if not results:
+        click.echo("No custom links found. Use 'als shorten <url>' to create one.")
+        return
+
+    label = "all" if show_all else str(len(results))
+    click.echo(
+        f"\nCustom links for {click.style(person.get('name', ''), bold=True)}"
+        f" ({label}):\n"
+    )
+
+    for result in results:
+        url = result.get("url", "")
+        slug = result.get("slug", "")
+        created_at = result.get("created_at", "")
+        date_str = created_at[:10] if created_at else ""
+        links = result.get("links", [])
+
+        click.echo(f"  {click.style(url, bold=True)}")
+        click.echo(f"    Slug:    {slug}")
+        if date_str:
+            click.echo(f"    Created: {date_str}")
+
+        if links:
+            click.echo(f"    Tracking links:")
+            for link in links:
+                label_str = link.get("label") or link.get("utm_source", "")
+                click.echo(f"      {label_str:12s}  {link['short_url']}")
+        else:
+            click.echo(f"    (no tracking links)")
+
+        click.echo()
+
+
 if __name__ == "__main__":
     cli()
