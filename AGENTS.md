@@ -148,3 +148,22 @@ For more details, see README.md and docs/QUICKSTART.md.
 - If push fails, resolve and retry until it succeeds
 
 <!-- END BEADS INTEGRATION -->
+
+## Releasing a New Version
+
+To release a new version of the `als` CLI:
+
+1. Bump the version in `user-cli/pyproject.toml`
+2. Commit and push to main
+3. Tag and push:
+   ```bash
+   git tag v0.2.5
+   git push origin v0.2.5
+   ```
+
+GitHub Actions will automatically:
+- Build the wheel
+- Create a GitHub release with the wheel attached as `als-py3-none-any.whl`
+- Deploy the Cloudflare Worker (`aicoe.fit/*`)
+
+The install script and `als upgrade` always pull from `releases/latest/download/` so no URL updates are needed.
