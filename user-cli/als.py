@@ -675,5 +675,243 @@ def sync_substack(force: bool):
     click.echo()
 
 
+@cli.group("tracking-variants")
+def tracking_variants():
+    """Manage your tracking variant channels (Discord, LinkedIn, X, etc.).
+
+    Tracking variants are the per-channel configurations used to generate
+    personalised tracking links.  Each variant maps to a source (e.g.
+    'linkedin') with optional UTM parameters.
+
+    Default/system variants (Discord, LinkedIn, X, YouTube) cannot be
+    deleted.  Only custom variants you create can be removed.
+
+    Examples:
+
+        als tracking-variants list
+        als tracking-variants add --source whatsapp --label "WhatsApp Group"
+        als tracking-variants delete --label "WhatsApp Group"
+    """
+    pass
+
+
+@tracking_variants.command("list")
+def tracking_variants_list():
+    """List all your tracking variant channels.
+
+    Shows each channel with its label, UTM source, and whether it is a
+    default system variant or a custom one you created.
+
+    Example:
+
+        als tracking-variants list
+    """
+    resp = _api_request("manage-tracking-variants", json_body={"action": "list"})
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    variants = data.get("variants", [])
+    person = data.get("person", {})
+
+    if not variants:
+        click.echo("No tracking variants found.")
+        return
+
+    click.echo(
+        f"\nTracking variants for {click.style(person.get('name', ''), bold=True)}"
+        f" ({len(variants)} total):\n"
+    )
+
+    for v in variants:
+        label = v.get("label", "")
+        source = v.get("utm_source", "")
+        medium = v.get("utm_medium", "social")
+        content = v.get("utm_content") or ""
+        term = v.get("utm_term") or ""
+        icon = v.get("icon") or ""
+        is_default = v.get("is_default", False)
+
+        default_marker = " [default]" if is_default else " [custom]"
+        prefix = f"{icon} " if icon else ""
+        click.echo(f"  {prefix}{click.style(label, bold=True)}{default_marker}")
+        click.echo(f"    source={source}  medium={medium}", nl=False)
+        if content:
+            click.echo(f"  content={content}", nl=False)
+        if term:
+            click.echo(f"  term={term}", nl=False)
+        click.echo()
+
+    click.echo()
+
+
+@tracking_variants.command("add")
+@click.option(
+    "--source",
+    required=True,
+    help="UTM source value (e.g. linkedin, discord, whatsapp).",
+)
+@click.option(
+    "--label",
+    default="",
+    help="Human-readable label (defaults to capitalised source name).",
+)
+@click.option(
+    "--medium",
+    default="social",
+    show_default=True,
+    help="UTM medium (e.g. social, email).",
+)
+@click.option(
+    "--content",
+    default="",
+    help="UTM content for sub-channel targeting (e.g. ai-coe-general).",
+)
+@click.option(
+    "--term",
+    default="",
+    help="UTM term for keyword targeting.",
+)
+@click.option(
+    "--icon",
+    default="",
+    help="Icon emoji for the variant (auto-assigned if omitted).",
+)
+def tracking_variants_add(
+    source: str,
+    label: str,
+    medium: str,
+    content: str,
+    term: str,
+    icon: str,
+):
+    """Add a new custom tracking variant channel.
+
+    Creates a new per-channel tracking configuration.  The SOURCE is the
+    UTM source value used in tracking links (e.g. 'whatsapp', 'slack').
+
+    Examples:
+
+        als tracking-variants add --source whatsapp --label "WhatsApp Group"
+        als tracking-variants add --source slack --content eng-team
+    """
+    body: dict = {"action": "add", "source": source}
+    if label:
+        body["label"] = label
+    if medium:
+        body["medium"] = medium
+    if content:
+        body["content"] = content
+    if term:
+        body["term"] = term
+    if icon:
+        body["icon"] = icon
+
+    resp = _api_request("manage-tracking-variants", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 409:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code not in (200, 201):
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    variant = data.get("variant", {})
+    click.echo(f"\n{data.get('message', 'Created.')}")
+    if variant:
+        lbl = variant.get("label", "")
+        src = variant.get("utm_source", "")
+        med = variant.get("utm_medium", "social")
+        cnt = variant.get("utm_content") or ""
+        trm = variant.get("utm_term") or ""
+        click.echo(f"  Label:  {lbl}")
+        click.echo(f"  Source: {src}  Medium: {med}", nl=False)
+        if cnt:
+            click.echo(f"  Content: {cnt}", nl=False)
+        if trm:
+            click.echo(f"  Term: {trm}", nl=False)
+        click.echo()
+    click.echo()
+
+
+@tracking_variants.command("delete")
+@click.option(
+    "--label",
+    default="",
+    help="Label of the variant to delete (case-insensitive).",
+)
+@click.option(
+    "--source",
+    default="",
+    help="UTM source of the variant to delete (if label not provided).",
+)
+def tracking_variants_delete(label: str, source: str):
+    """Delete a custom tracking variant channel.
+
+    Default/system variants (Discord, LinkedIn, X, YouTube) are protected
+    and cannot be deleted.  Only custom variants you have created can be
+    removed.
+
+    Examples:
+
+        als tracking-variants delete --label "WhatsApp Group"
+        als tracking-variants delete --source slack
+    """
+    if not label and not source:
+        click.echo(
+            "Error: provide --label or --source to identify the variant.", err=True
+        )
+        sys.exit(1)
+
+    body: dict = {"action": "delete"}
+    if label:
+        body["label"] = label
+    if source:
+        body["source"] = source
+
+    resp = _api_request("manage-tracking-variants", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 403:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code == 409:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        matches = data.get("matches", [])
+        if matches:
+            click.echo("Matching variants:", err=True)
+            for m in matches:
+                click.echo(f"  {m.get('label')} (source={m.get('source')})", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    click.echo(f"\n{data.get('message', 'Deleted.')}\n")
+
+
 if __name__ == "__main__":
     cli()
