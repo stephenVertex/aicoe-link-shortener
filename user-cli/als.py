@@ -113,10 +113,10 @@ def login(api_key: str):
 # Upgrade
 # ---------------------------------------------------------------------------
 
-# Canonical install source — GitHub repo subdirectory for the user CLI.
-_GITHUB_INSTALL_SRC = (
-    "als @ git+https://github.com/stephenVertex/aicoe-link-shortener.git"
-    "#subdirectory=user-cli"
+# Canonical install source — public wheel hosted on S3.
+_WHEEL_URL = (
+    "https://post-genius-media.s3.amazonaws.com/shup/project/"
+    "aicoe-link-shortener/als-022-py3-none-any.whl"
 )
 
 
@@ -140,13 +140,14 @@ def upgrade(force: bool):
 
     old_version = __version__
     click.echo(f"Current version: {old_version}")
-    click.echo("Upgrading als from GitHub (main branch)...")
+    click.echo("Upgrading als...")
 
+    env = {**os.environ, "UV_SKIP_WHEEL_FILENAME_CHECK": "1"}
     cmd = [
         uv_path,
         "tool",
         "install",
-        _GITHUB_INSTALL_SRC,
+        _WHEEL_URL,
         "--force",
         "--reinstall",
     ]
@@ -157,6 +158,7 @@ def upgrade(force: bool):
             capture_output=True,
             text=True,
             timeout=120,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         click.echo("Error: upgrade timed out after 120 seconds.", err=True)
