@@ -23,7 +23,7 @@ jobs:
         working-directory: user-cli
         run: |
           uv build --wheel
-          echo "WHEEL_FILE=$(ls dist/*.whl | head -1)" >> "$GITHUB_ENV"
+          echo "WHEEL_FILE=$(ls $PWD/dist/*.whl | head -1)" >> "$GITHUB_ENV"
 
       - name: Rename wheel to generic name
         run: |
