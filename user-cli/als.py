@@ -113,20 +113,21 @@ def login(api_key: str):
 # Upgrade
 # ---------------------------------------------------------------------------
 
-# Canonical install source — public wheel hosted on S3.
+# Canonical install source — wheel hosted on GitHub Releases.
+# This URL is stable: always points to the latest release asset.
 _WHEEL_URL = (
-    "https://post-genius-media.s3.amazonaws.com/shup/project/"
-    "aicoe-link-shortener/als-023-py3-none-any.whl"
+    "https://github.com/stephenVertex/aicoe-link-shortener/"
+    "releases/latest/download/als-py3-none-any.whl"
 )
 
 
 @cli.command()
 @click.option("--force", is_flag=True, help="Force reinstall even if up to date.")
 def upgrade(force: bool):
-    """Upgrade als to the latest version from GitHub.
+    """Upgrade als to the latest version from GitHub Releases.
 
-    Fetches the latest code from the main branch of the GitHub repository
-    and reinstalls the CLI tool via uv.
+    Downloads the latest wheel from the GitHub Releases page and
+    reinstalls the CLI tool via uv.
     """
     # Ensure uv is available
     uv_path = shutil.which("uv")

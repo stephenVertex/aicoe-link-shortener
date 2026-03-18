@@ -167,7 +167,7 @@ als upgrade
   for different users, enabling per-user click tracking.
 - API keys start with \`als_\` and are issued per-user by an administrator.
 - The CLI stores credentials at \`~/.als.credentials\` (mode 0600).
-- \`als upgrade\` reinstalls from the canonical wheel on S3; it does not require git.
+- \`als upgrade\` reinstalls from the canonical wheel on GitHub Releases; it does not require git.
 `;
 
 // Install script served at aicoe.fit/install
@@ -178,7 +178,7 @@ const INSTALL_SCRIPT = `#!/usr/bin/env bash
 #    or: wget -qO- aicoe.fit/install | bash
 set -euo pipefail
 
-WHEEL_URL="https://post-genius-media.s3.amazonaws.com/shup/project/aicoe-link-shortener/als-023-py3-none-any.whl"
+WHEEL_URL="https://github.com/stephenVertex/aicoe-link-shortener/releases/latest/download/als-py3-none-any.whl"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=12
 
