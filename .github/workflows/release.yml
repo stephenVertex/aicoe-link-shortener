@@ -27,8 +27,8 @@ jobs:
 
       - name: Rename wheel to generic name
         run: |
-          cp "$WHEEL_FILE" user-cli/dist/als-py3-none-any.whl
-          echo "GENERIC_WHEEL=user-cli/dist/als-py3-none-any.whl" >> "$GITHUB_ENV"
+          cp "$WHEEL_FILE" user-cli/dist/als-0-py3-none-any.whl
+          echo "GENERIC_WHEEL=user-cli/dist/als-0-py3-none-any.whl" >> "$GITHUB_ENV"
 
       - name: Create GitHub release and upload wheel
         uses: softprops/action-gh-release@v2

@@ -117,7 +117,7 @@ def login(api_key: str):
 # This URL is stable: always points to the latest release asset.
 _WHEEL_URL = (
     "https://github.com/stephenVertex/aicoe-link-shortener/"
-    "releases/latest/download/als-py3-none-any.whl"
+    "releases/latest/download/als-0-py3-none-any.whl"
 )
 
 
