@@ -100,8 +100,8 @@ ensure_uv() {
 # --- als installation -------------------------------------------------------
 
 install_als() {
-    info "Installing als CLI from GitHub..."
-    uv tool install "$WHEEL_URL" --force
+    info "Installing als CLI..."
+    UV_SKIP_WHEEL_FILENAME_CHECK=1 uv tool install "$WHEEL_URL" --force
 
     # Verify
     export PATH="$HOME/.local/bin:$PATH"
