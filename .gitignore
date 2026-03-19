@@ -4,6 +4,9 @@ cli/__pycache__/
 cli/.env
 user-cli/.venv/
 user-cli/__pycache__/
+mcp/.venv/
+mcp/__pycache__/
+mcp/als_mcp/__pycache__/
 *.pyc
 
 # Node
