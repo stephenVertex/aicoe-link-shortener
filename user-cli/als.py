@@ -924,6 +924,96 @@ def sync_youtube(force: bool, limit: int):
     click.echo()
 
 
+@cli.command("update-transcript")
+@click.option(
+    "--url",
+    required=True,
+    help="YouTube video URL (destination_url to match in the database).",
+)
+@click.option(
+    "--transcript-file",
+    type=click.Path(exists=True),
+    help="Path to a file containing the transcript text.",
+)
+@click.option(
+    "--transcript",
+    "transcript_text",
+    help="Transcript text to set (alternative to --transcript-file).",
+)
+def update_transcript(
+    url: str, transcript_file: str | None, transcript_text: str | None
+):
+    """Update or add a transcript for an existing video.
+
+    Looks up the link by its destination URL and sets the transcript column.
+    Use this to backfill transcripts for videos that were imported without one
+    (e.g. from aysp/Clip Together exports).
+
+    Provide the transcript via --transcript-file (reads from a file) or
+    --transcript (inline text). Exactly one must be specified.
+
+    Examples:
+
+        als update-transcript --url "https://www.youtube.com/watch?v=abc123" \\
+            --transcript-file transcript.txt
+
+        als update-transcript --url "https://www.youtube.com/watch?v=abc123" \\
+            --transcript "Hello and welcome to the show..."
+    """
+    if transcript_file and transcript_text:
+        click.echo(
+            "Error: specify either --transcript-file or --transcript, not both.",
+            err=True,
+        )
+        sys.exit(1)
+
+    if not transcript_file and not transcript_text:
+        click.echo(
+            "Error: one of --transcript-file or --transcript is required.", err=True
+        )
+        sys.exit(1)
+
+    if transcript_file:
+        with open(transcript_file, "r", encoding="utf-8") as f:
+            transcript_content = f.read().strip()
+    else:
+        transcript_content = (transcript_text or "").strip()
+
+    if not transcript_content:
+        click.echo("Error: transcript is empty.", err=True)
+        sys.exit(1)
+
+    api_key = _get_api_key()
+
+    click.echo(f"Updating transcript for: {url}")
+    click.echo(f"  Transcript length: {len(transcript_content)} characters")
+
+    resp = _api_request(
+        "update-transcript",
+        json_body={"url": url, "transcript": transcript_content},
+    )
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        click.echo(f"Error: no link found for URL: {url}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    click.echo(f"\nResult: {data.get('message', 'OK')}")
+    click.echo(f"  Slug:     {data.get('slug', '?')}")
+    click.echo(f"  Title:    {data.get('title', '?')}")
+    click.echo(f"  Length:   {data.get('transcript_length', 0)} chars")
+    if data.get("replaced_existing"):
+        click.echo("  (Replaced existing transcript)")
+    click.echo()
+
+
 @cli.group("tags")
 def tags():
     """Manage article tags for categorization and filtering.
