@@ -15,6 +15,8 @@ import sys
 
 import httpx
 from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 API_BASE = "https://dumhbtxskncofwwzrmfx.supabase.co/functions/v1"
 
@@ -22,6 +24,18 @@ mcp = FastMCP(
     "als-mcp",
     instructions="aicoe.fit link shortener – search articles, get tracking links, shorten URLs",
 )
+
+
+# ---------------------------------------------------------------------------
+# Health check (for ALB / ECS health probes)
+# ---------------------------------------------------------------------------
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request: Request) -> JSONResponse:
+    """Health endpoint for ALB target group and ECS container health checks."""
+    return JSONResponse({"status": "ok"})
+
 
 # ---------------------------------------------------------------------------
 # HTTP helpers
@@ -254,11 +268,21 @@ async def shorten(url: str, source: str | None = None) -> dict:
 
 
 def main():
-    """Run the MCP server."""
+    """Run the MCP server.
+
+    In SSE mode, respects ALS_MCP_HOST and ALS_MCP_PORT environment variables
+    (defaults: 0.0.0.0:8000) for container/Fargate deployment.
+    """
     transport = "stdio"
     if "--sse" in sys.argv:
         transport = "sse"
-    mcp.run(transport=transport)
+
+    kwargs: dict = {}
+    if transport == "sse":
+        kwargs["host"] = os.environ.get("ALS_MCP_HOST", "0.0.0.0")
+        kwargs["port"] = int(os.environ.get("ALS_MCP_PORT", "8000"))
+
+    mcp.run(transport=transport, **kwargs)
 
 
 if __name__ == "__main__":
