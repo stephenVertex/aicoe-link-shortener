@@ -819,6 +819,73 @@ def sync_substack(force: bool):
     click.echo()
 
 
+@cli.command("sync-youtube")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Force re-sync of existing videos (updates metadata and re-fetches transcripts).",
+)
+def sync_youtube(force: bool):
+    """Trigger a sync of videos from the AI-First Show YouTube channel.
+
+    Calls the sync-youtube edge function to fetch the channel's video list,
+    descriptions, and transcripts, then imports them into the database.
+
+    Examples:
+
+        als sync-youtube          # import any new videos
+        als sync-youtube --force  # re-sync and update existing video metadata
+    """
+    api_key = _get_api_key()
+
+    click.echo("Syncing AI-First Show YouTube videos...")
+
+    url = f"{API_BASE}/sync-youtube"
+    if force:
+        url += "?force=true"
+
+    headers = {"x-api-key": api_key}
+    try:
+        resp = requests.post(url, headers=headers, timeout=300)
+    except requests.exceptions.Timeout:
+        click.echo("Error: request timed out (sync may still be running).", err=True)
+        sys.exit(1)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    message = data.get("message", "")
+    checked = data.get("checked", 0)
+    created = data.get("created", [])
+    updated = data.get("updated", [])
+    transcripts = data.get("transcripts_fetched", 0)
+
+    click.echo(f"\nResult: {message}")
+    click.echo(f"  Checked:      {checked} video(s) on channel")
+    click.echo(f"  Imported:     {len(created)} new video(s)")
+    if updated:
+        click.echo(f"  Updated:      {len(updated)} existing video(s)")
+    click.echo(f"  Transcripts:  {transcripts} fetched")
+
+    if created:
+        click.echo("\nNewly imported videos:")
+        for slug in created:
+            click.echo(f"  - {slug}")
+
+    if updated:
+        click.echo("\nUpdated videos:")
+        for slug in updated:
+            click.echo(f"  - {slug}")
+
+    click.echo()
+
+
 @cli.group("tags")
 def tags():
     """Manage article tags for categorization and filtering.
@@ -1037,6 +1104,7 @@ def tags_remove(article: str, tag: str):
 
     data = resp.json()
     click.echo(f"\n{data.get('message', 'Removed.')}\n")
+
 
 
 @cli.group("tracking-variants")
