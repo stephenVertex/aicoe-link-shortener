@@ -149,6 +149,18 @@ For more details, see README.md and docs/QUICKSTART.md.
 
 <!-- END BEADS INTEGRATION -->
 
+## Supabase MCP Access
+
+This project uses the `supabase_aicoe` MCP server for direct database operations (queries, migrations, edge function deployment).
+
+**If `supabase_aicoe` MCP tools are not available in your session:**
+
+- **DO NOT** go searching for config files, env vars, or try to work around it
+- **DO NOT** try to use the Supabase CLI, psql, or other alternatives
+- **STOP and tell the human**: "I need the `supabase_aicoe` MCP server but it's not available. Please reconnect it (run `/mcp` in Claude Code)."
+
+The human can fix this in seconds. Chasing it yourself wastes time and context.
+
 ## Releasing a New Version
 
 To release a new version of the `als` CLI:
