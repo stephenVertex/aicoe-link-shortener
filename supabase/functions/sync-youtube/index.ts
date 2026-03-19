@@ -197,6 +197,8 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "true";
+  const limitParam = url.searchParams.get("limit");
+  const limit = limitParam ? parseInt(limitParam, 10) : 0;
 
   // Validate auth if provided
   const authHeader = req.headers.get("Authorization");
@@ -256,6 +258,8 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
 
     for (const video of videos) {
+      if (limit > 0 && created.length >= limit) break;
+
       const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
       const slug = slugify(video.title);
       const existing = existingByUrl.get(videoUrl);

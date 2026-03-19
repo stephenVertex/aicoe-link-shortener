@@ -851,7 +851,13 @@ def sync_substack(force: bool):
     is_flag=True,
     help="Force re-sync of existing videos (updates metadata and re-fetches transcripts).",
 )
-def sync_youtube(force: bool):
+@click.option(
+    "--limit",
+    type=int,
+    default=0,
+    help="Limit the number of new videos to import (0 = no limit).",
+)
+def sync_youtube(force: bool, limit: int):
     """Trigger a sync of videos from the AI-First Show YouTube channel.
 
     Calls the sync-youtube edge function to fetch the channel's video list,
@@ -859,16 +865,22 @@ def sync_youtube(force: bool):
 
     Examples:
 
-        als sync-youtube          # import any new videos
-        als sync-youtube --force  # re-sync and update existing video metadata
+        als sync-youtube              # import any new videos
+        als sync-youtube --limit 3    # import up to 3 new videos
+        als sync-youtube --force      # re-sync and update existing video metadata
     """
     api_key = _get_api_key()
 
     click.echo("Syncing AI-First Show YouTube videos...")
 
-    url = f"{API_BASE}/sync-youtube"
+    params = []
     if force:
-        url += "?force=true"
+        params.append("force=true")
+    if limit > 0:
+        params.append(f"limit={limit}")
+    url = f"{API_BASE}/sync-youtube"
+    if params:
+        url += "?" + "&".join(params)
 
     headers = {"x-api-key": api_key}
     try:
