@@ -372,18 +372,32 @@ def shorten(url: str, source: str | None):
 @cli.command()
 @click.argument("query")
 @click.option("--count", default=3, help="Number of results to return")
-def search(query: str, count: int):
+@click.option(
+    "--source",
+    type=click.Choice(["aifs", "blog", "both"], case_sensitive=False),
+    default="both",
+    help="Filter by content source: aifs (AI-First Show videos), blog (AI COE blog posts), or both (default).",
+)
+def search(query: str, count: int, source: str):
     """Search articles and get your personalised tracking links.
 
     Uses semantic search to find matching articles, then returns
     your personalised tracking link for each result.
+
+    Use --source to filter by content type:
+    - aifs: AI-First Show YouTube videos only
+    - blog: AI COE blog posts only
+    - both: All content (default)
     """
     api_key = _get_api_key()
 
-    # Step 1: Search for articles
+    search_body: dict = {"query": query, "match_count": count}
+    if source != "both":
+        search_body["content_type"] = "video" if source == "aifs" else "article"
+
     search_resp = requests.post(
         f"{API_BASE}/search-articles",
-        json={"query": query, "match_count": count},
+        json=search_body,
         timeout=30,
     )
     if search_resp.status_code != 200:
@@ -409,8 +423,11 @@ def search(query: str, count: int):
         similarity = result.get("similarity", 0)
         published_at = result.get("published_at") or result.get("created_at", "")
         date_str = published_at[:10] if published_at else ""
+        content_type = result.get("content_type", "article")
 
-        click.echo(f"  {i}. {click.style(title, bold=True)}")
+        type_label = "📺" if content_type == "video" else "📝"
+
+        click.echo(f"  {i}. {type_label} {click.style(title, bold=True)}")
         if author:
             click.echo(f"     by {author}")
         if date_str:
@@ -588,7 +605,12 @@ def authors():
 
 @cli.command()
 @click.argument("article", default="")
-@click.option("--days", default=30, show_default=True, help="Number of days to look back for click history.")
+@click.option(
+    "--days",
+    default=30,
+    show_default=True,
+    help="Number of days to look back for click history.",
+)
 def stats(article: str, days: int):
     """Show statistics for a specific article, or overall database stats.
 
@@ -609,7 +631,9 @@ def stats(article: str, days: int):
         # Database-level stats (original behaviour)
         resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
         if resp.status_code != 200:
-            click.echo(f"Error fetching stats ({resp.status_code}): {resp.text}", err=True)
+            click.echo(
+                f"Error fetching stats ({resp.status_code}): {resp.text}", err=True
+            )
             sys.exit(1)
 
         data = resp.json()
@@ -645,7 +669,9 @@ def stats(article: str, days: int):
     by_variant = data.get("by_variant", [])
 
     # Header
-    click.echo(f"\n{click.style(art.get('title') or art.get('slug', article), bold=True)}")
+    click.echo(
+        f"\n{click.style(art.get('title') or art.get('slug', article), bold=True)}"
+    )
     if art.get("author"):
         click.echo(f"  by {art['author']}")
     click.echo(f"  URL:  {art.get('url', '')}")
@@ -955,7 +981,7 @@ def tags_list(article: str):
         tag_list = data.get("tags", [])
         click.echo(f"\nAll tags ({len(tag_list)} total):\n")
         if not tag_list:
-            click.echo("  (no tags yet — create one with: als tags create \"Name\")")
+            click.echo('  (no tags yet — create one with: als tags create "Name")')
         else:
             for t in tag_list:
                 count = t.get("article_count", 0)
@@ -969,7 +995,9 @@ def tags_list(article: str):
 
 @tags.command("create")
 @click.argument("name")
-@click.option("--slug", default="", help="Custom slug (auto-generated from name if omitted).")
+@click.option(
+    "--slug", default="", help="Custom slug (auto-generated from name if omitted)."
+)
 def tags_create(name: str, slug: str):
     """Create a new tag.
 
@@ -1104,7 +1132,6 @@ def tags_remove(article: str, tag: str):
 
     data = resp.json()
     click.echo(f"\n{data.get('message', 'Removed.')}\n")
-
 
 
 @cli.group("tracking-variants")
