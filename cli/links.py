@@ -547,9 +547,10 @@ def import_substack(
         if entry["url"]
     }
 
-    # Get existing links to avoid duplicates
-    existing = supabase.table("links").select("slug").execute()
+    # Get existing links to avoid duplicates (check both slug and destination_url)
+    existing = supabase.table("links").select("slug, destination_url").execute()
     existing_slugs = {l["slug"] for l in existing.data}
+    existing_urls = {l["destination_url"].rstrip("/") for l in existing.data}
 
     variant_profiles = []
     if generate_variants:
@@ -568,7 +569,7 @@ def import_substack(
         author = post_author(meta)
         destination_url = (meta or {}).get("canonical_url") or post_url
 
-        if substack_slug in existing_slugs:
+        if substack_slug in existing_slugs or destination_url.rstrip("/") in existing_urls:
             skipped += 1
             continue
 
@@ -630,13 +631,17 @@ def sync_substack(substack_url: str, utm_source: str, utm_medium: str):
         if entry["url"]
     }
 
-    # Get existing links
-    existing = supabase.table("links").select("slug").execute()
+    # Get existing links (check both slug and destination_url to detect custom links)
+    existing = supabase.table("links").select("slug, destination_url").execute()
     existing_slugs = {l["slug"] for l in existing.data}
+    existing_urls = {l["destination_url"].rstrip("/") for l in existing.data}
 
-    # Find new articles
+    # Find new articles (not already present by slug OR by destination URL)
     new_urls = [
-        u for u in post_urls if u.split("/p/")[-1].rstrip("/") not in existing_slugs
+        u
+        for u in post_urls
+        if u.split("/p/")[-1].rstrip("/") not in existing_slugs
+        and u.rstrip("/") not in existing_urls
     ]
 
     if not new_urls:

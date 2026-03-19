@@ -104,6 +104,12 @@ Deno.serve(async (req) => {
     const existingBySlug = new Map(
       (existingLinks || []).map((l) => [l.slug, l]),
     );
+    // Also index by destination_url (normalised without trailing slash) so we
+    // can detect custom links that point to the same Substack article URL but
+    // were created with a random slug via "als shorten".
+    const existingByUrl = new Map(
+      (existingLinks || []).map((l) => [l.destination_url.replace(/\/+$/, ""), l]),
+    );
 
     const { data: personSources, error: sourcesError } = await supabase
       .from("person_sources")
@@ -137,9 +143,13 @@ Deno.serve(async (req) => {
       const newDestUrl = meta?.canonical_url || entry.url;
 
       const existing = existingBySlug.get(slug);
+      // Check if a link already exists for this URL under a different slug
+      // (e.g. created via "als shorten" with a random slug).
+      const urlNorm = newDestUrl.replace(/\/+$/, "");
+      const existingByUrlMatch = !existing ? existingByUrl.get(urlNorm) : null;
 
-      if (!existing) {
-        // INSERT new article
+      if (!existing && !existingByUrlMatch) {
+        // INSERT new article — no match by slug or URL
         const insertData: Record<string, unknown> = {
           slug,
           destination_url: newDestUrl,
@@ -177,7 +187,47 @@ Deno.serve(async (req) => {
             console.error(`Error creating variant for ${slug}/${ref}:`, error);
           }
         }
-      } else if (force || !existing.last_synced_at) {
+      } else if (existingByUrlMatch && !existing) {
+        // A link exists for this URL but under a different slug (custom link).
+        // Update its metadata with Substack info so it becomes a "proper" synced article.
+        const changes: Record<string, unknown> = { last_synced_at: now };
+        if (existingByUrlMatch.title !== newTitle) changes.title = newTitle;
+        if (existingByUrlMatch.author !== newAuthor) changes.author = newAuthor;
+        if (newPublishedAt && existingByUrlMatch.published_at !== newPublishedAt) {
+          changes.published_at = newPublishedAt;
+        }
+
+        const { error: updateError } = await supabase
+          .from("links")
+          .update(changes)
+          .eq("id", existingByUrlMatch.id);
+        if (updateError) {
+          console.error(`Error updating custom link for ${slug}:`, updateError);
+          continue;
+        }
+
+        const hasMetadataChanges = Object.keys(changes).length > 1;
+        if (hasMetadataChanges) {
+          updated.push(slug);
+        }
+
+        // Ensure tracking variants exist for the custom link too
+        for (const source of personSources || []) {
+          const ref = peopleById.get(source.person_id);
+          if (!ref) continue;
+          const { error } = await supabase.rpc("ensure_tracking_variant", {
+            p_link_id: existingByUrlMatch.id,
+            p_ref: ref,
+            p_source: source.utm_source,
+            p_medium: source.utm_medium,
+            p_content: source.utm_content,
+            p_term: source.utm_term,
+          });
+          if (error) {
+            console.error(`Error creating variant for ${slug}/${ref}:`, error);
+          }
+        }
+      } else if (existing && (force || !existing.last_synced_at)) {
         // UPDATE existing article if metadata changed
         const changes: Record<string, unknown> = {};
 
