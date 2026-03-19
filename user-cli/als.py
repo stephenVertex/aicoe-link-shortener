@@ -819,6 +819,226 @@ def sync_substack(force: bool):
     click.echo()
 
 
+@cli.group("tags")
+def tags():
+    """Manage article tags for categorization and filtering.
+
+    Tags are reusable labels that can be assigned to articles. Use them
+    to categorize your article collection by topic, project, or any
+    other grouping.
+
+    Examples:
+
+        als tags list
+        als tags create "Machine Learning"
+        als tags assign --article my-article-slug --tag machine-learning
+        als tags remove --article my-article-slug --tag machine-learning
+        als tags delete "Machine Learning"
+    """
+    pass
+
+
+@tags.command("list")
+@click.option(
+    "--article",
+    default="",
+    help="Filter to tags on a specific article (by slug).",
+)
+def tags_list(article: str):
+    """List all tags, or list tags on a specific article.
+
+    Without --article, shows all tags with article counts.
+    With --article, shows only the tags assigned to that article.
+
+    Examples:
+
+        als tags list
+        als tags list --article my-article-slug
+    """
+    body: dict = {"action": "list"}
+    if article:
+        body["article"] = article
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    if article:
+        art = data.get("article", {})
+        tag_list = data.get("tags", [])
+        title = art.get("title") or art.get("slug", article)
+        click.echo(f"\nTags on {click.style(title, bold=True)}:\n")
+        if not tag_list:
+            click.echo("  (no tags)")
+        else:
+            for t in tag_list:
+                click.echo(f"  {t.get('name', '')}  ({t.get('slug', '')})")
+    else:
+        tag_list = data.get("tags", [])
+        click.echo(f"\nAll tags ({len(tag_list)} total):\n")
+        if not tag_list:
+            click.echo("  (no tags yet — create one with: als tags create \"Name\")")
+        else:
+            for t in tag_list:
+                count = t.get("article_count", 0)
+                click.echo(
+                    f"  {click.style(t.get('name', ''), bold=True)}  "
+                    f"({t.get('slug', '')})  "
+                    f"{count} article{'s' if count != 1 else ''}"
+                )
+    click.echo()
+
+
+@tags.command("create")
+@click.argument("name")
+@click.option("--slug", default="", help="Custom slug (auto-generated from name if omitted).")
+def tags_create(name: str, slug: str):
+    """Create a new tag.
+
+    NAME is the human-readable tag name. A URL-friendly slug is
+    auto-generated from the name unless --slug is provided.
+
+    Examples:
+
+        als tags create "Machine Learning"
+        als tags create "GenAI" --slug gen-ai
+    """
+    body: dict = {"action": "create", "name": name}
+    if slug:
+        body["slug"] = slug
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 409:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code not in (200, 201):
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    tag = data.get("tag", {})
+    click.echo(f"\n{data.get('message', 'Created.')}")
+    if tag:
+        click.echo(f"  Name: {tag.get('name', '')}")
+        click.echo(f"  Slug: {tag.get('slug', '')}")
+    click.echo()
+
+
+@tags.command("delete")
+@click.argument("name")
+def tags_delete(name: str):
+    """Delete a tag and remove it from all articles.
+
+    Identifies the tag by name (converted to slug). All article
+    associations are removed automatically.
+
+    Example:
+
+        als tags delete "Machine Learning"
+    """
+    body: dict = {"action": "delete", "name": name}
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    click.echo(f"\n{data.get('message', 'Deleted.')}\n")
+
+
+@tags.command("assign")
+@click.option("--article", required=True, help="Article slug to tag.")
+@click.option("--tag", required=True, help="Tag name or slug to assign.")
+def tags_assign(article: str, tag: str):
+    """Assign a tag to an article.
+
+    Both --article and --tag are required. The tag is identified by
+    name (converted to slug) or directly by slug.
+
+    Example:
+
+        als tags assign --article my-article-slug --tag machine-learning
+    """
+    body: dict = {"action": "tag", "article": article, "tag": tag}
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code not in (200, 201):
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    click.echo(f"\n{data.get('message', 'Tagged.')}\n")
+
+
+@tags.command("remove")
+@click.option("--article", required=True, help="Article slug to untag.")
+@click.option("--tag", required=True, help="Tag name or slug to remove.")
+def tags_remove(article: str, tag: str):
+    """Remove a tag from an article.
+
+    Both --article and --tag are required. The tag is identified by
+    name (converted to slug) or directly by slug.
+
+    Example:
+
+        als tags remove --article my-article-slug --tag machine-learning
+    """
+    body: dict = {"action": "untag", "article": article, "tag": tag}
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    click.echo(f"\n{data.get('message', 'Removed.')}\n")
+
+
 @cli.group("tracking-variants")
 def tracking_variants():
     """Manage your tracking variant channels (Discord, LinkedIn, X, etc.).
