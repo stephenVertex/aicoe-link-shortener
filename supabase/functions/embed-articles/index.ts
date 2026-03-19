@@ -42,12 +42,21 @@ function buildEmbeddingText(article: {
   title: string | null;
   slug: string;
   author: string | null;
+  description: string | null;
+  transcript: string | null;
 }): string {
   const parts: string[] = [];
   if (article.title) parts.push(article.title);
   if (article.author) parts.push(`by ${article.author}`);
   // Add slug as fallback context (slugs often contain descriptive words)
   parts.push(article.slug.replace(/-/g, " "));
+  // Include description and transcript for richer embeddings (YouTube videos)
+  if (article.description) parts.push(article.description);
+  if (article.transcript) {
+    // Truncate transcript to ~6000 chars to stay within token limits
+    const truncated = article.transcript.slice(0, 6000);
+    parts.push(truncated);
+  }
   return parts.join(". ");
 }
 
@@ -100,7 +109,7 @@ Deno.serve(async (req) => {
     // Fetch articles that need embeddings
     let query = supabase
       .from("links")
-      .select("id, slug, title, author")
+      .select("id, slug, title, author, description, transcript")
       .order("published_at", { ascending: false, nullsFirst: false });
 
     if (!forceAll) {

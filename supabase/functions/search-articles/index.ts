@@ -63,6 +63,7 @@ Deno.serve(async (req) => {
     let query = "";
     let matchThreshold = 0.3;
     let matchCount = 20;
+    let contentType: string | undefined;
 
     if (req.method === "POST") {
       const body = await req.json();
@@ -71,6 +72,7 @@ Deno.serve(async (req) => {
         matchThreshold = body.match_threshold;
       }
       if (body.match_count !== undefined) matchCount = body.match_count;
+      if (body.content_type !== undefined) contentType = body.content_type;
     } else {
       const url = new URL(req.url);
       query = url.searchParams.get("q") || "";
@@ -78,6 +80,8 @@ Deno.serve(async (req) => {
       if (th) matchThreshold = parseFloat(th);
       const ct = url.searchParams.get("count");
       if (ct) matchCount = parseInt(ct, 10);
+      const src = url.searchParams.get("content_type");
+      if (src) contentType = src;
     }
 
     if (!query.trim()) {
@@ -90,17 +94,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate embedding for the search query
     const queryEmbedding = await generateQueryEmbedding(query);
 
-    // Use the match_articles function for similarity search
+    const rpcParams: Record<string, unknown> = {
+      query_embedding: JSON.stringify(queryEmbedding),
+      match_threshold: matchThreshold,
+      match_count: matchCount,
+    };
+    if (contentType) {
+      rpcParams.content_type_filter = contentType;
+    }
+
     const { data: results, error: searchError } = await supabase.rpc(
       "match_articles",
-      {
-        query_embedding: JSON.stringify(queryEmbedding),
-        match_threshold: matchThreshold,
-        match_count: matchCount,
-      },
+      rpcParams,
     );
 
     if (searchError) throw searchError;

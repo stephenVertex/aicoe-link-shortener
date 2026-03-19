@@ -372,18 +372,32 @@ def shorten(url: str, source: str | None):
 @cli.command()
 @click.argument("query")
 @click.option("--count", default=3, help="Number of results to return")
-def search(query: str, count: int):
+@click.option(
+    "--source",
+    type=click.Choice(["aifs", "blog", "both"], case_sensitive=False),
+    default="both",
+    help="Filter by content source: aifs (AI-First Show videos), blog (AI COE blog posts), or both (default).",
+)
+def search(query: str, count: int, source: str):
     """Search articles and get your personalised tracking links.
 
     Uses semantic search to find matching articles, then returns
     your personalised tracking link for each result.
+
+    Use --source to filter by content type:
+    - aifs: AI-First Show YouTube videos only
+    - blog: AI COE blog posts only
+    - both: All content (default)
     """
     api_key = _get_api_key()
 
-    # Step 1: Search for articles
+    search_body: dict = {"query": query, "match_count": count}
+    if source != "both":
+        search_body["content_type"] = "video" if source == "aifs" else "article"
+
     search_resp = requests.post(
         f"{API_BASE}/search-articles",
-        json={"query": query, "match_count": count},
+        json=search_body,
         timeout=30,
     )
     if search_resp.status_code != 200:
@@ -409,8 +423,11 @@ def search(query: str, count: int):
         similarity = result.get("similarity", 0)
         published_at = result.get("published_at") or result.get("created_at", "")
         date_str = published_at[:10] if published_at else ""
+        content_type = result.get("content_type", "article")
 
-        click.echo(f"  {i}. {click.style(title, bold=True)}")
+        type_label = "📺" if content_type == "video" else "📝"
+
+        click.echo(f"  {i}. {type_label} {click.style(title, bold=True)}")
         if author:
             click.echo(f"     by {author}")
         if date_str:
@@ -587,25 +604,106 @@ def authors():
 
 
 @cli.command()
-def stats():
-    """Show statistics about the link shortener database.
+@click.argument("article", default="")
+@click.option(
+    "--days",
+    default=30,
+    show_default=True,
+    help="Number of days to look back for click history.",
+)
+def stats(article: str, days: int):
+    """Show statistics for a specific article, or overall database stats.
 
-    Displays counts of articles, authors, people, tracking variants,
-    and total clicks recorded.
+    \b
+    Without an argument, shows database-level statistics (article counts,
+    authors, people, tracking variants, total clicks).
+
+    With an ARTICLE argument (slug or URL), shows per-article statistics:
+    total clicks, daily click history, and per-variant breakdown.
+
+    \b
+    Examples:
+      als stats                        # database overview
+      als stats cursor-mar26           # article stats by slug
+      als stats cursor-mar26 --days 7  # last 7 days only
     """
-    resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
+    if not article:
+        # Database-level stats (original behaviour)
+        resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
+        if resp.status_code != 200:
+            click.echo(
+                f"Error fetching stats ({resp.status_code}): {resp.text}", err=True
+            )
+            sys.exit(1)
+
+        data = resp.json()
+
+        click.echo("\nDatabase statistics:\n")
+        click.echo(f"  Articles:          {data.get('articles', 0)}")
+        click.echo(f"  Authors:           {data.get('authors', 0)}")
+        click.echo(f"  People:            {data.get('people', 0)}")
+        click.echo(f"  Tracking variants: {data.get('tracking_variants', 0)}")
+        click.echo(f"  Total clicks:      {data.get('clicks', 0)}")
+        click.echo()
+        return
+
+    # Article-level stats
+    resp = requests.post(
+        f"{API_BASE}/article-stats",
+        json={"slug": article, "days": days},
+        timeout=30,
+    )
+
+    if resp.status_code == 404:
+        click.echo(f"Article not found: {article}", err=True)
+        sys.exit(1)
     if resp.status_code != 200:
-        click.echo(f"Error fetching stats ({resp.status_code}): {resp.text}", err=True)
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
         sys.exit(1)
 
     data = resp.json()
+    art = data.get("article", {})
+    total = data.get("total_clicks", 0)
+    variants = data.get("tracking_variants", 0)
+    daily = data.get("daily_clicks", [])
+    by_variant = data.get("by_variant", [])
 
-    click.echo("\nDatabase statistics:\n")
-    click.echo(f"  Articles:          {data.get('articles', 0)}")
-    click.echo(f"  Authors:           {data.get('authors', 0)}")
-    click.echo(f"  People:            {data.get('people', 0)}")
-    click.echo(f"  Tracking variants: {data.get('tracking_variants', 0)}")
-    click.echo(f"  Total clicks:      {data.get('clicks', 0)}")
+    # Header
+    click.echo(
+        f"\n{click.style(art.get('title') or art.get('slug', article), bold=True)}"
+    )
+    if art.get("author"):
+        click.echo(f"  by {art['author']}")
+    click.echo(f"  URL:  {art.get('url', '')}")
+    click.echo(f"  Slug: {art.get('slug', '')}")
+    click.echo(f"  Short: {art.get('short_url', '')}")
+    if art.get("published_at"):
+        click.echo(f"  Published: {art['published_at'][:10]}")
+
+    # Summary
+    click.echo(f"\n  Total clicks:      {total}")
+    click.echo(f"  Tracking variants: {variants}")
+
+    # Daily click history
+    if daily:
+        click.echo(f"\n  Daily clicks (last {days} days):")
+        max_clicks = max(row["clicks"] for row in daily)
+        bar_width = 20
+        for row in daily:
+            date_str = row["date"]
+            count = row["clicks"]
+            bar_len = int((count / max_clicks) * bar_width) if max_clicks > 0 else 0
+            bar = "#" * bar_len
+            click.echo(f"    {date_str}  {bar:>{bar_width}s}  {count}")
+    else:
+        click.echo(f"\n  No clicks in the last {days} days.")
+
+    # Per-variant breakdown
+    if by_variant:
+        click.echo(f"\n  Clicks by variant:")
+        for v in by_variant:
+            click.echo(f"    {v.get('label', '?'):30s}  {v['clicks']}")
+
     click.echo()
 
 
@@ -745,6 +843,397 @@ def sync_substack(force: bool):
             click.echo(f"  - {slug}")
 
     click.echo()
+
+
+@cli.command("sync-youtube")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Force re-sync of existing videos (updates metadata and re-fetches transcripts).",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=0,
+    help="Limit the number of new videos to import (0 = no limit).",
+)
+def sync_youtube(force: bool, limit: int):
+    """Trigger a sync of videos from the AI-First Show YouTube channel.
+
+    Calls the sync-youtube edge function to fetch the channel's video list,
+    descriptions, and transcripts, then imports them into the database.
+
+    Examples:
+
+        als sync-youtube              # import any new videos
+        als sync-youtube --limit 3    # import up to 3 new videos
+        als sync-youtube --force      # re-sync and update existing video metadata
+    """
+    api_key = _get_api_key()
+
+    click.echo("Syncing AI-First Show YouTube videos...")
+
+    params = []
+    if force:
+        params.append("force=true")
+    if limit > 0:
+        params.append(f"limit={limit}")
+    url = f"{API_BASE}/sync-youtube"
+    if params:
+        url += "?" + "&".join(params)
+
+    headers = {"x-api-key": api_key}
+    try:
+        resp = requests.post(url, headers=headers, timeout=300)
+    except requests.exceptions.Timeout:
+        click.echo("Error: request timed out (sync may still be running).", err=True)
+        sys.exit(1)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    message = data.get("message", "")
+    checked = data.get("checked", 0)
+    created = data.get("created", [])
+    updated = data.get("updated", [])
+    transcripts = data.get("transcripts_fetched", 0)
+
+    click.echo(f"\nResult: {message}")
+    click.echo(f"  Checked:      {checked} video(s) on channel")
+    click.echo(f"  Imported:     {len(created)} new video(s)")
+    if updated:
+        click.echo(f"  Updated:      {len(updated)} existing video(s)")
+    click.echo(f"  Transcripts:  {transcripts} fetched")
+
+    if created:
+        click.echo("\nNewly imported videos:")
+        for slug in created:
+            click.echo(f"  - {slug}")
+
+    if updated:
+        click.echo("\nUpdated videos:")
+        for slug in updated:
+            click.echo(f"  - {slug}")
+
+    click.echo()
+
+
+@cli.command("update-transcript")
+@click.option(
+    "--url",
+    required=True,
+    help="YouTube video URL (destination_url to match in the database).",
+)
+@click.option(
+    "--transcript-file",
+    type=click.Path(exists=True),
+    help="Path to a file containing the transcript text.",
+)
+@click.option(
+    "--transcript",
+    "transcript_text",
+    help="Transcript text to set (alternative to --transcript-file).",
+)
+def update_transcript(
+    url: str, transcript_file: str | None, transcript_text: str | None
+):
+    """Update or add a transcript for an existing video.
+
+    Looks up the link by its destination URL and sets the transcript column.
+    Use this to backfill transcripts for videos that were imported without one
+    (e.g. from aysp/Clip Together exports).
+
+    Provide the transcript via --transcript-file (reads from a file) or
+    --transcript (inline text). Exactly one must be specified.
+
+    Examples:
+
+        als update-transcript --url "https://www.youtube.com/watch?v=abc123" \\
+            --transcript-file transcript.txt
+
+        als update-transcript --url "https://www.youtube.com/watch?v=abc123" \\
+            --transcript "Hello and welcome to the show..."
+    """
+    if transcript_file and transcript_text:
+        click.echo(
+            "Error: specify either --transcript-file or --transcript, not both.",
+            err=True,
+        )
+        sys.exit(1)
+
+    if not transcript_file and not transcript_text:
+        click.echo(
+            "Error: one of --transcript-file or --transcript is required.", err=True
+        )
+        sys.exit(1)
+
+    if transcript_file:
+        with open(transcript_file, "r", encoding="utf-8") as f:
+            transcript_content = f.read().strip()
+    else:
+        transcript_content = (transcript_text or "").strip()
+
+    if not transcript_content:
+        click.echo("Error: transcript is empty.", err=True)
+        sys.exit(1)
+
+    api_key = _get_api_key()
+
+    click.echo(f"Updating transcript for: {url}")
+    click.echo(f"  Transcript length: {len(transcript_content)} characters")
+
+    resp = _api_request(
+        "update-transcript",
+        json_body={"url": url, "transcript": transcript_content},
+    )
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        click.echo(f"Error: no link found for URL: {url}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    click.echo(f"\nResult: {data.get('message', 'OK')}")
+    click.echo(f"  Slug:     {data.get('slug', '?')}")
+    click.echo(f"  Title:    {data.get('title', '?')}")
+    click.echo(f"  Length:   {data.get('transcript_length', 0)} chars")
+    if data.get("replaced_existing"):
+        click.echo("  (Replaced existing transcript)")
+    click.echo()
+
+
+@cli.group("tags")
+def tags():
+    """Manage article tags for categorization and filtering.
+
+    Tags are reusable labels that can be assigned to articles. Use them
+    to categorize your article collection by topic, project, or any
+    other grouping.
+
+    Examples:
+
+        als tags list
+        als tags create "Machine Learning"
+        als tags assign --article my-article-slug --tag machine-learning
+        als tags remove --article my-article-slug --tag machine-learning
+        als tags delete "Machine Learning"
+    """
+    pass
+
+
+@tags.command("list")
+@click.option(
+    "--article",
+    default="",
+    help="Filter to tags on a specific article (by slug).",
+)
+def tags_list(article: str):
+    """List all tags, or list tags on a specific article.
+
+    Without --article, shows all tags with article counts.
+    With --article, shows only the tags assigned to that article.
+
+    Examples:
+
+        als tags list
+        als tags list --article my-article-slug
+    """
+    body: dict = {"action": "list"}
+    if article:
+        body["article"] = article
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+
+    if article:
+        art = data.get("article", {})
+        tag_list = data.get("tags", [])
+        title = art.get("title") or art.get("slug", article)
+        click.echo(f"\nTags on {click.style(title, bold=True)}:\n")
+        if not tag_list:
+            click.echo("  (no tags)")
+        else:
+            for t in tag_list:
+                click.echo(f"  {t.get('name', '')}  ({t.get('slug', '')})")
+    else:
+        tag_list = data.get("tags", [])
+        click.echo(f"\nAll tags ({len(tag_list)} total):\n")
+        if not tag_list:
+            click.echo('  (no tags yet — create one with: als tags create "Name")')
+        else:
+            for t in tag_list:
+                count = t.get("article_count", 0)
+                click.echo(
+                    f"  {click.style(t.get('name', ''), bold=True)}  "
+                    f"({t.get('slug', '')})  "
+                    f"{count} article{'s' if count != 1 else ''}"
+                )
+    click.echo()
+
+
+@tags.command("create")
+@click.argument("name")
+@click.option(
+    "--slug", default="", help="Custom slug (auto-generated from name if omitted)."
+)
+def tags_create(name: str, slug: str):
+    """Create a new tag.
+
+    NAME is the human-readable tag name. A URL-friendly slug is
+    auto-generated from the name unless --slug is provided.
+
+    Examples:
+
+        als tags create "Machine Learning"
+        als tags create "GenAI" --slug gen-ai
+    """
+    body: dict = {"action": "create", "name": name}
+    if slug:
+        body["slug"] = slug
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 409:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code not in (200, 201):
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    tag = data.get("tag", {})
+    click.echo(f"\n{data.get('message', 'Created.')}")
+    if tag:
+        click.echo(f"  Name: {tag.get('name', '')}")
+        click.echo(f"  Slug: {tag.get('slug', '')}")
+    click.echo()
+
+
+@tags.command("delete")
+@click.argument("name")
+def tags_delete(name: str):
+    """Delete a tag and remove it from all articles.
+
+    Identifies the tag by name (converted to slug). All article
+    associations are removed automatically.
+
+    Example:
+
+        als tags delete "Machine Learning"
+    """
+    body: dict = {"action": "delete", "name": name}
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    click.echo(f"\n{data.get('message', 'Deleted.')}\n")
+
+
+@tags.command("assign")
+@click.option("--article", required=True, help="Article slug to tag.")
+@click.option("--tag", required=True, help="Tag name or slug to assign.")
+def tags_assign(article: str, tag: str):
+    """Assign a tag to an article.
+
+    Both --article and --tag are required. The tag is identified by
+    name (converted to slug) or directly by slug.
+
+    Example:
+
+        als tags assign --article my-article-slug --tag machine-learning
+    """
+    body: dict = {"action": "tag", "article": article, "tag": tag}
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code not in (200, 201):
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    click.echo(f"\n{data.get('message', 'Tagged.')}\n")
+
+
+@tags.command("remove")
+@click.option("--article", required=True, help="Article slug to untag.")
+@click.option("--tag", required=True, help="Tag name or slug to remove.")
+def tags_remove(article: str, tag: str):
+    """Remove a tag from an article.
+
+    Both --article and --tag are required. The tag is identified by
+    name (converted to slug) or directly by slug.
+
+    Example:
+
+        als tags remove --article my-article-slug --tag machine-learning
+    """
+    body: dict = {"action": "untag", "article": article, "tag": tag}
+
+    resp = _api_request("manage-tags", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    click.echo(f"\n{data.get('message', 'Removed.')}\n")
 
 
 @cli.group("tracking-variants")
