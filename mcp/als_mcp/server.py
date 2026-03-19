@@ -1,17 +1,22 @@
 """FastMCP server exposing aicoe.fit link shortener tools.
 
-Authenticates via ALS_API_KEY env var and proxies requests to the same
-Supabase edge-function backend used by the ``als`` CLI.
+Authenticates via ALS_API_KEY env var (single-user / ECS default) or via a
+per-connection ?api_key=als_... query parameter (multi-user shared server).
 
 Usage:
-    ALS_API_KEY=als_... uv run als-mcp          # stdio transport (default)
-    ALS_API_KEY=als_... uv run als-mcp --sse     # SSE transport
+    ALS_API_KEY=als_... uv run als-mcp          # stdio transport
+    ALS_API_KEY=als_... uv run als-mcp --sse     # SSE, single-user
+    uv run als-mcp --sse                          # SSE, multi-user (key in URL)
+
+Multi-user connect:
+    http://host:8000/sse?api_key=als_yourkey
 """
 
 from __future__ import annotations
 
 import os
 import sys
+from contextvars import ContextVar
 
 import httpx
 from fastmcp import FastMCP
@@ -24,6 +29,82 @@ mcp = FastMCP(
     "als-mcp",
     instructions="aicoe.fit link shortener – search articles, get tracking links, shorten URLs",
 )
+
+
+# ---------------------------------------------------------------------------
+# Per-connection API key resolution
+# ---------------------------------------------------------------------------
+
+# Maps SSE session_id → api_key for multi-user support
+_session_keys: dict[str, str] = {}
+
+# ContextVar set for the duration of each /messages/ POST request
+_current_api_key: ContextVar[str] = ContextVar("current_api_key", default="")
+
+
+class _APIKeyMiddleware:
+    """ASGI middleware that wires per-connection API keys to tool calls.
+
+    SSE flow:
+      1. Client GETs /sse?api_key=als_xxx
+      2. Server responds with: event: endpoint\\ndata: /messages/?session_id=YYY
+      3. We intercept that first SSE chunk → store session_id → api_key
+      4. Subsequent POSTs to /messages/?session_id=YYY → look up key → set ContextVar
+
+    Falls back to ALS_API_KEY env var if no query param is present.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        params = _parse_qs(scope.get("query_string", b""))
+
+        if path == "/sse":
+            api_key = params.get("api_key") or os.environ.get("ALS_API_KEY", "")
+            captured = False
+
+            async def capturing_send(message):
+                nonlocal captured
+                if not captured and message.get("type") == "http.response.body":
+                    chunk = message.get("body", b"").decode(errors="replace")
+                    for line in chunk.splitlines():
+                        if line.startswith("data: /messages/") and "session_id=" in line:
+                            sid = line.split("session_id=")[-1].strip()
+                            if sid:
+                                _session_keys[sid] = api_key
+                                captured = True
+                                break
+                await send(message)
+
+            await self.app(scope, receive, capturing_send)
+
+        elif path.startswith("/messages/"):
+            session_id = params.get("session_id", "")
+            api_key = _session_keys.get(session_id) or os.environ.get("ALS_API_KEY", "")
+            token = _current_api_key.set(api_key)
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                _current_api_key.reset(token)
+
+        else:
+            await self.app(scope, receive, send)
+
+
+def _parse_qs(query_string: bytes) -> dict[str, str]:
+    """Parse a URL query string into a dict (last value wins)."""
+    result: dict[str, str] = {}
+    for part in query_string.decode(errors="replace").split("&"):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            result[k] = v
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -45,11 +126,17 @@ _client: httpx.AsyncClient | None = None
 
 
 def _get_api_key() -> str:
-    key = os.environ.get("ALS_API_KEY", "")
+    """Return the API key for the current request.
+
+    Checks (in order):
+      1. ContextVar set by _APIKeyMiddleware for this SSE session
+      2. ALS_API_KEY environment variable (single-user / ECS default)
+    """
+    key = _current_api_key.get() or os.environ.get("ALS_API_KEY", "")
     if not key:
         raise RuntimeError(
-            "ALS_API_KEY environment variable is not set. "
-            "Set it to your als API key (als_...)."
+            "No API key for this session. "
+            "Connect via /sse?api_key=als_... or set ALS_API_KEY env var."
         )
     return key
 
@@ -109,15 +196,12 @@ async def search(query: str, count: int = 3) -> dict:
     Returns a dict with ``results`` – each containing title, author,
     similarity score, and personalised tracking links per channel.
     """
-    # Step 1: semantic search (no auth required)
     search_data = await _post(
         "search-articles",
         json_body={"query": query, "match_count": count},
     )
     results = search_data.get("results", [])
 
-    # Step 2: enrich each result with personalised tracking links
-    api_key = _get_api_key()
     enriched = []
     for r in results:
         slug = r.get("slug", "")
@@ -207,7 +291,6 @@ async def whoami() -> dict:
 
     Validates the API key and returns the person's name and slug.
     """
-    # Probe key validity: get-link with empty body → 400 means valid, 401 means invalid
     client = await _http()
     api_key = _get_api_key()
     headers = {"x-api-key": api_key}
@@ -216,7 +299,6 @@ async def whoami() -> dict:
     if probe.status_code == 401:
         return {"error": "Invalid API key", "authenticated": False}
 
-    # Grab any article slug to extract person info from get-link
     search_data = await _post(
         "search-articles", json_body={"query": "article", "match_count": 1}
     )
@@ -270,19 +352,23 @@ async def shorten(url: str, source: str | None = None) -> dict:
 def main():
     """Run the MCP server.
 
-    In SSE mode, respects ALS_MCP_HOST and ALS_MCP_PORT environment variables
-    (defaults: 0.0.0.0:8000) for container/Fargate deployment.
+    SSE mode wraps FastMCP's ASGI app with _APIKeyMiddleware so each
+    connecting user can supply their own API key via ?api_key=als_...
     """
     transport = "stdio"
     if "--sse" in sys.argv:
         transport = "sse"
 
-    kwargs: dict = {}
     if transport == "sse":
-        kwargs["host"] = os.environ.get("ALS_MCP_HOST", "0.0.0.0")
-        kwargs["port"] = int(os.environ.get("ALS_MCP_PORT", "8000"))
+        import uvicorn
 
-    mcp.run(transport=transport, **kwargs)
+        host = os.environ.get("ALS_MCP_HOST", "0.0.0.0")
+        port = int(os.environ.get("ALS_MCP_PORT", "8000"))
+        asgi_app = mcp.http_app(transport="sse")
+        wrapped = _APIKeyMiddleware(asgi_app)
+        uvicorn.run(wrapped, host=host, port=port)
+    else:
+        mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
