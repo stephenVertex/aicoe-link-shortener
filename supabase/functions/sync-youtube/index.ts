@@ -8,7 +8,7 @@ const supabase = createClient(
 
 const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY") ?? "";
 // The AI-First Show channel — override via env var if needed
-const YOUTUBE_CHANNEL_ID = Deno.env.get("YOUTUBE_CHANNEL_ID") ?? "UCaAzFwPi9K6DMxyDqkBFmQg";
+const YOUTUBE_CHANNEL_ID = Deno.env.get("YOUTUBE_CHANNEL_ID") ?? "UCxD6pUEKE3bAiZGYuRUhgew";
 
 interface YouTubeVideo {
   videoId: string;
