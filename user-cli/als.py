@@ -587,25 +587,97 @@ def authors():
 
 
 @cli.command()
-def stats():
-    """Show statistics about the link shortener database.
+@click.argument("article", default="")
+@click.option("--days", default=30, show_default=True, help="Number of days to look back for click history.")
+def stats(article: str, days: int):
+    """Show statistics for a specific article, or overall database stats.
 
-    Displays counts of articles, authors, people, tracking variants,
-    and total clicks recorded.
+    \b
+    Without an argument, shows database-level statistics (article counts,
+    authors, people, tracking variants, total clicks).
+
+    With an ARTICLE argument (slug or URL), shows per-article statistics:
+    total clicks, daily click history, and per-variant breakdown.
+
+    \b
+    Examples:
+      als stats                        # database overview
+      als stats cursor-mar26           # article stats by slug
+      als stats cursor-mar26 --days 7  # last 7 days only
     """
-    resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
+    if not article:
+        # Database-level stats (original behaviour)
+        resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
+        if resp.status_code != 200:
+            click.echo(f"Error fetching stats ({resp.status_code}): {resp.text}", err=True)
+            sys.exit(1)
+
+        data = resp.json()
+
+        click.echo("\nDatabase statistics:\n")
+        click.echo(f"  Articles:          {data.get('articles', 0)}")
+        click.echo(f"  Authors:           {data.get('authors', 0)}")
+        click.echo(f"  People:            {data.get('people', 0)}")
+        click.echo(f"  Tracking variants: {data.get('tracking_variants', 0)}")
+        click.echo(f"  Total clicks:      {data.get('clicks', 0)}")
+        click.echo()
+        return
+
+    # Article-level stats
+    resp = requests.post(
+        f"{API_BASE}/article-stats",
+        json={"slug": article, "days": days},
+        timeout=30,
+    )
+
+    if resp.status_code == 404:
+        click.echo(f"Article not found: {article}", err=True)
+        sys.exit(1)
     if resp.status_code != 200:
-        click.echo(f"Error fetching stats ({resp.status_code}): {resp.text}", err=True)
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
         sys.exit(1)
 
     data = resp.json()
+    art = data.get("article", {})
+    total = data.get("total_clicks", 0)
+    variants = data.get("tracking_variants", 0)
+    daily = data.get("daily_clicks", [])
+    by_variant = data.get("by_variant", [])
 
-    click.echo("\nDatabase statistics:\n")
-    click.echo(f"  Articles:          {data.get('articles', 0)}")
-    click.echo(f"  Authors:           {data.get('authors', 0)}")
-    click.echo(f"  People:            {data.get('people', 0)}")
-    click.echo(f"  Tracking variants: {data.get('tracking_variants', 0)}")
-    click.echo(f"  Total clicks:      {data.get('clicks', 0)}")
+    # Header
+    click.echo(f"\n{click.style(art.get('title') or art.get('slug', article), bold=True)}")
+    if art.get("author"):
+        click.echo(f"  by {art['author']}")
+    click.echo(f"  URL:  {art.get('url', '')}")
+    click.echo(f"  Slug: {art.get('slug', '')}")
+    click.echo(f"  Short: {art.get('short_url', '')}")
+    if art.get("published_at"):
+        click.echo(f"  Published: {art['published_at'][:10]}")
+
+    # Summary
+    click.echo(f"\n  Total clicks:      {total}")
+    click.echo(f"  Tracking variants: {variants}")
+
+    # Daily click history
+    if daily:
+        click.echo(f"\n  Daily clicks (last {days} days):")
+        max_clicks = max(row["clicks"] for row in daily)
+        bar_width = 20
+        for row in daily:
+            date_str = row["date"]
+            count = row["clicks"]
+            bar_len = int((count / max_clicks) * bar_width) if max_clicks > 0 else 0
+            bar = "#" * bar_len
+            click.echo(f"    {date_str}  {bar:>{bar_width}s}  {count}")
+    else:
+        click.echo(f"\n  No clicks in the last {days} days.")
+
+    # Per-variant breakdown
+    if by_variant:
+        click.echo(f"\n  Clicks by variant:")
+        for v in by_variant:
+            click.echo(f"    {v.get('label', '?'):30s}  {v['clicks']}")
+
     click.echo()
 
 
