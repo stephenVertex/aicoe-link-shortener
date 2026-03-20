@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>aicoe.fit - Transcript Audit</title>
+  <script src="./supabase.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --text: #333;
+      --text-muted: #666;
+      --card-bg: white;
+      --card-shadow: rgba(0,0,0,0.08);
+      --border: #e0e0e0;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --ok: #059669;
+      --warn: #d97706;
+      --missing: #dc2626;
+      --badge-ok: #dcfce7;
+      --badge-ok-text: #166534;
+      --badge-warn: #fef9c3;
+      --badge-warn-text: #92400e;
+      --badge-missing: #fee2e2;
+      --badge-missing-text: #991b1b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+    header h1 { font-size: 1.3em; font-weight: 700; }
+    header a { color: var(--accent); text-decoration: none; font-size: 0.9em; }
+    header a:hover { text-decoration: underline; }
+    .stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+    .stat { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; }
+    .stat-num { font-size: 1.6em; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 0.8em; color: var(--text-muted); margin-top: 2px; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .toolbar input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9em; background: var(--card-bg); }
+    .toolbar select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9em; background: var(--card-bg); }
+    .video-list { display: flex; flex-direction: column; gap: 10px; }
+    .video-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px var(--card-shadow); }
+    .video-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; user-select: none; }
+    .video-header:hover { background: #f8f9fa; }
+    .video-status { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .status-ok { background: var(--ok); }
+    .status-short { background: var(--warn); }
+    .status-missing { background: var(--missing); }
+    .video-title { font-weight: 600; font-size: 0.95em; flex: 1; }
+    .video-meta { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+    .badge { padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 600; }
+    .badge-ok { background: var(--badge-ok); color: var(--badge-ok-text); }
+    .badge-warn { background: var(--badge-warn); color: var(--badge-warn-text); }
+    .badge-missing { background: var(--badge-missing); color: var(--badge-missing-text); }
+    .video-duration { font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }
+    .video-date { font-size: 0.82em; color: var(--text-muted); white-space: nowrap; }
+    .chevron { font-size: 0.8em; color: var(--text-muted); transition: transform 0.2s; flex-shrink: 0; }
+    .video-card.open .chevron { transform: rotate(90deg); }
+    .video-body { display: none; padding: 0 16px 16px; border-top: 1px solid var(--border); }
+    .video-card.open .video-body { display: block; }
+    .video-links { display: flex; gap: 10px; margin: 12px 0 10px; flex-wrap: wrap; }
+    .video-links a { font-size: 0.85em; color: var(--accent); text-decoration: none; }
+    .video-links a:hover { text-decoration: underline; }
+    .transcript-section { margin-top: 8px; }
+    .transcript-label { font-size: 0.78em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .transcript-label span { font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .transcript-box { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.78em; line-height: 1.5; background: #f8f9fa; border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: #444; }
+    .transcript-missing { color: var(--missing); font-style: italic; padding: 10px; font-size: 0.9em; }
+    .show-more { margin-top: 6px; font-size: 0.82em; color: var(--accent); cursor: pointer; }
+    .show-more:hover { text-decoration: underline; }
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+    .login-prompt { text-align: center; padding: 80px 20px; }
+    .login-prompt h2 { margin-bottom: 12px; }
+    .login-prompt p { color: var(--text-muted); margin-bottom: 20px; }
+    .btn { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-google { background: white; border: 1px solid #dadce0; color: #3c4043; display: inline-flex; align-items: center; gap: 10px; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 0.95em; }
+    .btn-google:hover { background: #f8f9fa; }
+    .btn-google svg { width: 18px; height: 18px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>📋 Transcript Audit — aicoe.fit</h1>
+    <a href="./index.html">← Back to Dashboard</a>
+  </header>
+
+  <div id="app">
+    <div class="loading">Loading…</div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://dumhbtxskncofwwzrmfx.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let allVideos = [];
+
+function fmtDuration(secs) {
+  if (!secs) return '—';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return h ? `${h}h ${m}m` : `${m}m ${String(s).padStart(2,'0')}s`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  return iso.slice(0, 10);
+}
+
+function transcriptStatus(video) {
+  if (!video.transcript) return 'missing';
+  const stripped = video.transcript.replace(/\d+\n\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}\n/g, '').trim();
+  if (stripped.length < 200) return 'short';
+  return 'ok';
+}
+
+function stripSrt(text) {
+  return text
+    .replace(/^\d+\s*$/gm, '')
+    .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}.*/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function renderVideos(videos) {
+  const stats = {
+    total: videos.length,
+    ok: videos.filter(v => transcriptStatus(v) === 'ok').length,
+    short: videos.filter(v => transcriptStatus(v) === 'short').length,
+    missing: videos.filter(v => transcriptStatus(v) === 'missing').length,
+  };
+
+  const statsHtml = `
+    <div class="stats">
+      <div class="stat"><div class="stat-num">${stats.total}</div><div class="stat-label">Total videos</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--ok)">${stats.ok}</div><div class="stat-label">Good transcripts</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--warn)">${stats.short}</div><div class="stat-label">Short / suspect</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--missing)">${stats.missing}</div><div class="stat-label">Missing transcript</div></div>
+    </div>`;
+
+  const toolbarHtml = `
+    <div class="toolbar">
+      <input type="text" id="search-input" placeholder="Filter by title…" oninput="filterVideos()">
+      <select id="status-filter" onchange="filterVideos()">
+        <option value="all">All statuses</option>
+        <option value="ok">Good</option>
+        <option value="short">Short / suspect</option>
+        <option value="missing">Missing</option>
+      </select>
+    </div>`;
+
+  const listHtml = `<div class="video-list" id="video-list">${videos.map(renderCard).join('')}</div>`;
+
+  document.getElementById('app').innerHTML = statsHtml + toolbarHtml + listHtml;
+}
+
+function renderCard(video) {
+  const status = transcriptStatus(video);
+  const statusClass = { ok: 'status-ok', short: 'status-short', missing: 'status-missing' }[status];
+  const badgeClass = { ok: 'badge-ok', short: 'badge-warn', missing: 'badge-missing' }[status];
+  const badgeLabel = { ok: 'Good', short: 'Short', missing: 'Missing' }[status];
+
+  const ytId = (video.destination_url || '').match(/v=([^&]+)/)?.[1] || '';
+  const ytLink = ytId ? `https://youtube.com/watch?v=${ytId}` : video.destination_url;
+
+  let transcriptHtml;
+  if (!video.transcript) {
+    transcriptHtml = `<div class="transcript-missing">No transcript stored.</div>`;
+  } else {
+    const plain = stripSrt(video.transcript);
+    const wordCount = plain.trim().split(/\s+/).length;
+    const charCount = video.transcript.length;
+    const preview = plain.slice(0, 800);
+    transcriptHtml = `
+      <div class="transcript-label">
+        Plain text preview
+        <span>${wordCount.toLocaleString()} words · ${charCount.toLocaleString()} raw chars</span>
+      </div>
+      <div class="transcript-box" id="tbox-${video.id}">${escHtml(preview)}${plain.length > 800 ? '…' : ''}</div>
+      ${plain.length > 800 ? `<div class="show-more" onclick="expandTranscript('${video.id}', ${JSON.stringify(plain).replace(/'/g, "\\'")})">Show full transcript</div>` : ''}`;
+  }
+
+  return `
+    <div class="video-card" id="card-${video.id}" data-status="${status}" data-title="${escHtml((video.title || '').toLowerCase())}">
+      <div class="video-header" onclick="toggleCard('${video.id}')">
+        <div class="video-status ${statusClass}"></div>
+        <div class="video-title">${escHtml(video.title || video.slug)}</div>
+        <div class="video-meta">
+          <span class="video-duration">⏱ ${fmtDuration(video.duration_seconds)}</span>
+          <span class="video-date">${fmtDate(video.published_at || video.created_at)}</span>
+          <span class="badge ${badgeClass}">${badgeLabel}</span>
+          <span class="chevron">▶</span>
+        </div>
+      </div>
+      <div class="video-body">
+        <div class="video-links">
+          ${ytLink ? `<a href="${escHtml(ytLink)}" target="_blank">▶ Watch on YouTube</a>` : ''}
+          <a href="${escHtml(SUPABASE_URL)}/project/default/editor" target="_blank">DB record: ${escHtml(video.id)}</a>
+        </div>
+        <div class="transcript-section">${transcriptHtml}</div>
+      </div>
+    </div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleCard(id) {
+  const card = document.getElementById('card-' + id);
+  card.classList.toggle('open');
+}
+
+function expandTranscript(id, fullText) {
+  const box = document.getElementById('tbox-' + id);
+  if (box) box.textContent = fullText;
+  const btn = box.nextElementSibling;
+  if (btn && btn.classList.contains('show-more')) btn.remove();
+}
+
+function filterVideos() {
+  const q = (document.getElementById('search-input')?.value || '').toLowerCase();
+  const statusFilter = document.getElementById('status-filter')?.value || 'all';
+  document.querySelectorAll('.video-card').forEach(card => {
+    const titleMatch = !q || card.dataset.title.includes(q);
+    const statusMatch = statusFilter === 'all' || card.dataset.status === statusFilter;
+    card.style.display = (titleMatch && statusMatch) ? '' : 'none';
+  });
+}
+
+async function signIn() {
+  await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.href },
+  });
+}
+
+async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    document.getElementById('app').innerHTML = `
+      <div class="login-prompt">
+        <h2>Transcript Audit</h2>
+        <p>Sign in to review video transcripts.</p>
+        <button class="btn-google" onclick="signIn()">
+          <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Sign in with Google
+        </button>
+      </div>`;
+    return;
+  }
+
+  const { data, error } = await sb
+    .from('links')
+    .select('id, slug, title, author, destination_url, published_at, created_at, content_type, duration_seconds, transcript')
+    .eq('content_type', 'video')
+    .order('published_at', { ascending: false });
+
+  if (error) {
+    document.getElementById('app').innerHTML = `<div class="loading" style="color:red">Error: ${escHtml(error.message)}</div>`;
+    return;
+  }
+
+  allVideos = data || [];
+  renderVideos(allVideos);
+}
+
+init();
+</script>
+</body>
+</html>

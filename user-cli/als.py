@@ -430,12 +430,22 @@ def search(query: str, count: int, source: str):
         content_type = result.get("content_type", "article")
 
         type_label = "📺" if content_type == "video" else "📝"
+        duration_seconds = result.get("duration_seconds")
+        duration_str = ""
+        if duration_seconds:
+            mins, secs = divmod(duration_seconds, 60)
+            hours, mins = divmod(mins, 60)
+            if hours:
+                duration_str = f"  ⏱ {hours}h {mins}m"
+            else:
+                duration_str = f"  ⏱ {mins}m {secs:02d}s"
 
         click.echo(f"  {i}. {type_label} {click.style(title, bold=True)}")
         if author:
             click.echo(f"     by {author}")
-        if date_str:
-            click.echo(f"     {date_str}")
+        meta_line = "     " + "  ".join(filter(None, [date_str, duration_str.strip() if duration_str else ""]))
+        if meta_line.strip():
+            click.echo(meta_line)
         click.echo(f"     Score: {similarity:.2f}")
 
         # Get tracking link for this article
