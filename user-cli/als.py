@@ -393,7 +393,11 @@ def search(query: str, count: int, source: str):
 
     search_body: dict = {"query": query, "match_count": count}
     if source != "both":
-        search_body["content_type"] = "video" if source == "aifs" else "article"
+        content_type = "video" if source == "aifs" else "article"
+        search_body["content_type"] = content_type
+        # Videos are long multi-topic documents; lower threshold needed for single-topic queries
+        if content_type == "video":
+            search_body["match_threshold"] = 0.2
 
     search_resp = requests.post(
         f"{API_BASE}/search-articles",

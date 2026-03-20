@@ -38,6 +38,15 @@ async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   return result.data.sort((a, b) => a.index - b.index).map((d) => d.embedding);
 }
 
+/** Strip SRT/VTT timestamp lines and sequence numbers, returning plain dialogue text. */
+function stripSrt(text: string): string {
+  return text
+    .replace(/^\d+\s*$/gm, "")                                                          // sequence numbers on their own line
+    .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}.*/gm, "") // timestamp lines
+    .replace(/\n{3,}/g, "\n\n")                                                          // collapse blank lines
+    .trim();
+}
+
 function buildEmbeddingText(article: {
   title: string | null;
   slug: string;
@@ -53,8 +62,11 @@ function buildEmbeddingText(article: {
   // Include description and transcript for richer embeddings (YouTube videos)
   if (article.description) parts.push(article.description);
   if (article.transcript) {
-    // Truncate transcript to ~6000 chars to stay within token limits
-    const truncated = article.transcript.slice(0, 6000);
+    // Strip SRT timestamps before embedding to maximise semantic signal
+    const plainText = stripSrt(article.transcript);
+    // text-embedding-3-small supports ~8192 tokens (~32K chars); use 20K (~5K tokens) for transcript,
+    // leaving headroom for title/author/slug/description
+    const truncated = plainText.slice(0, 20000);
     parts.push(truncated);
   }
   return parts.join(". ");

@@ -1,6 +1,6 @@
 [project]
 name = "als"
-version = "0.4.0"
+version = "0.4.1"
 description = "User CLI for aicoe.fit link shortener — search and get personalised tracking links"
 requires-python = ">=3.12"
 dependencies = [
