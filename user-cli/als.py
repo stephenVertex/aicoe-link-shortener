@@ -441,6 +441,7 @@ def search(query: str, count: int, source: str):
                 duration_str = f"  ⏱ {mins}m {secs:02d}s"
 
         click.echo(f"  {i}. {type_label} {click.style(title, bold=True)}")
+        click.echo(f"     type: {content_type}")
         if author:
             click.echo(f"     by {author}")
         meta_line = "     " + "  ".join(filter(None, [date_str, duration_str.strip() if duration_str else ""]))
