@@ -623,12 +623,18 @@ def authors():
 @cli.command()
 @click.argument("article", default="")
 @click.option(
+    "--url",
+    "url_opt",
+    default=None,
+    help="Look up article by destination URL instead of slug.",
+)
+@click.option(
     "--days",
     default=30,
     show_default=True,
     help="Number of days to look back for click history.",
 )
-def stats(article: str, days: int):
+def stats(article: str, url_opt: str | None, days: int):
     """Show statistics for a specific article, or overall database stats.
 
     \b
@@ -643,10 +649,17 @@ def stats(article: str, days: int):
       als stats                        # database overview
       als stats cursor-mar26           # article stats by slug
       als stats cursor-mar26 --days 7  # last 7 days only
-      als stats https://aicoe.link/abc  # article stats by short URL
+      als stats --url https://trilogyai.substack.com/p/my-article
     """
+    if url_opt:
+        article = url_opt
+        is_url = True
+    elif article.startswith("http://") or article.startswith("https://"):
+        is_url = True
+    else:
+        is_url = False
+
     if not article:
-        # Database-level stats (original behaviour)
         resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
         if resp.status_code != 200:
             click.echo(
@@ -665,10 +678,8 @@ def stats(article: str, days: int):
         click.echo()
         return
 
-    # Article-level stats
-    # Detect if article is a URL and pass it as such to the edge function
     payload = {"days": days}
-    if article.startswith("http://") or article.startswith("https://"):
+    if is_url:
         payload["url"] = article
     else:
         payload["slug"] = article
