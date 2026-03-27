@@ -1,8 +1,14 @@
 # aicoe.fit - Link Shortener with UTM Campaign Attribution
 
-A link shortener for the AI Center of Excellence Substack ([trilogyai.substack.com](https://trilogyai.substack.com)). Every article gets per-person tracking variants with UTM parameters, so you can see who drove which clicks.
+A link shortener for the Trilogy AI Center of Excellence. Tracks clicks across all content we share:
 
-**Live:** [https://admin.aicoe.fit](https://admin.aicoe.fit)  
+- **Trilogy AI CoE Substack** ([trilogyai.substack.com](https://trilogyai.substack.com)) — auto-imported every 6 hours
+- **YouTube channel** — any video link can be shortened and tracked
+- **Any URL** — team members can shorten any link they want to share and track
+
+Every link gets per-person tracking variants with UTM parameters so you can see who drove which clicks. All `aicoe.fit` short links are **clean** — no UTM clutter in the URL you share. Parameters are appended transparently on redirect.
+
+**Live:** [https://admin.aicoe.fit](https://admin.aicoe.fit)
 **Short links:** `https://aicoe.fit/<slug>` (e.g. `https://aicoe.fit/workshop-cursor-practical-d7sc`)
 
 ## Architecture
@@ -39,7 +45,7 @@ A link shortener for the AI Center of Excellence Substack ([trilogyai.substack.c
 |-----------|------|---------|
 | **Redirect proxy** | Cloudflare Worker on `aicoe.fit` | Intercepts short link requests, proxies to Supabase edge function |
 | **Redirect logic** | Supabase Edge Function (`redirect`) | Resolves slug/suffix, appends UTM params, logs clicks, returns 302 |
-| **Substack sync** | Supabase Edge Function (`sync-substack`) | Crawls sitemap for new articles, creates links + variants (runs every 6h via pg_cron) |
+| **Substack sync** | Supabase Edge Function (`sync-substack`) | Crawls Substack sitemap for new articles, creates links + variants (runs every 6h via pg_cron) |
 | **Admin dashboard** | Static HTML on AWS Amplify (`admin.aicoe.fit`) | Google sign-in, view links/clicks, copy tracking URLs |
 | **CLI** | Python (typer/click, uv) | Create links, manage people, import articles, view stats |
 | **Database** | Supabase PostgreSQL | links, tracking_variants, click_log, people tables with RLS |
@@ -95,6 +101,9 @@ A link shortener for the AI Center of Excellence Substack ([trilogyai.substack.c
 ## How It Works
 
 ### Short link redirect
+
+All `aicoe.fit` links are clean — the URL you copy and share contains no tracking parameters. UTM attribution is added transparently at redirect time.
+
 1. User clicks `aicoe.fit/workshop-cursor-practical-d7sc`
 2. Cloudflare Worker proxies to Supabase edge function
 3. Edge function splits on last `-`: slug = `workshop-cursor-practical`, suffix = `d7sc`
