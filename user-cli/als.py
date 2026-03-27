@@ -444,7 +444,9 @@ def search(query: str, count: int, source: str):
         click.echo(f"     type: {content_type}")
         if author:
             click.echo(f"     by {author}")
-        meta_line = "     " + "  ".join(filter(None, [date_str, duration_str.strip() if duration_str else ""]))
+        meta_line = "     " + "  ".join(
+            filter(None, [date_str, duration_str.strip() if duration_str else ""])
+        )
         if meta_line.strip():
             click.echo(meta_line)
         click.echo(f"     Score: {similarity:.2f}")
@@ -641,6 +643,7 @@ def stats(article: str, days: int):
       als stats                        # database overview
       als stats cursor-mar26           # article stats by slug
       als stats cursor-mar26 --days 7  # last 7 days only
+      als stats https://aicoe.link/abc  # article stats by short URL
     """
     if not article:
         # Database-level stats (original behaviour)
@@ -663,9 +666,16 @@ def stats(article: str, days: int):
         return
 
     # Article-level stats
+    # Detect if article is a URL and pass it as such to the edge function
+    payload = {"days": days}
+    if article.startswith("http://") or article.startswith("https://"):
+        payload["url"] = article
+    else:
+        payload["slug"] = article
+
     resp = requests.post(
         f"{API_BASE}/article-stats",
-        json={"slug": article, "days": days},
+        json=payload,
         timeout=30,
     )
 
@@ -709,15 +719,24 @@ def stats(article: str, days: int):
             count = row["clicks"]
             bar_len = int((count / max_clicks) * bar_width) if max_clicks > 0 else 0
             bar = "#" * bar_len
-            click.echo(f"    {date_str}  {bar:>{bar_width}s}  {count}")
+            click.echo(f"    {date_str}  {bar:<{bar_width}s}  {count}")
     else:
         click.echo(f"\n  No clicks in the last {days} days.")
 
     # Per-variant breakdown
     if by_variant:
         click.echo(f"\n  Clicks by variant:")
+        max_variant_clicks = max(v["clicks"] for v in by_variant) if by_variant else 0
+        bar_width = 20
         for v in by_variant:
-            click.echo(f"    {v.get('label', '?'):30s}  {v['clicks']}")
+            count = v["clicks"]
+            bar_len = (
+                int((count / max_variant_clicks) * bar_width)
+                if max_variant_clicks > 0
+                else 0
+            )
+            bar = "#" * bar_len
+            click.echo(f"    {v.get('label', '?'):30s}  {bar:<{bar_width}s}  {count}")
 
     click.echo()
 
