@@ -204,6 +204,19 @@ Deno.serve(async (req) => {
 
     if (variantCountError) throw variantCountError;
 
+    const sourceCounts: Record<string, number> = {};
+    for (const row of variantClicks || []) {
+      let source = "direct";
+      if (row.variant_id && variantDetails[row.variant_id]?.utm_source) {
+        source = variantDetails[row.variant_id].utm_source;
+      }
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+    }
+
+    const bySource = Object.entries(sourceCounts)
+      .map(([source, clicks]) => ({ source, clicks }))
+      .sort((a, b) => b.clicks - a.clicks);
+
     return jsonResponse({
       article: {
         slug: link.slug,
@@ -224,6 +237,7 @@ Deno.serve(async (req) => {
         }),
       ),
       by_variant: byVariant,
+      by_source: bySource,
       days,
     });
   } catch (error) {

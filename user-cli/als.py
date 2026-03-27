@@ -692,6 +692,7 @@ def stats(article: str, days: int):
     variants = data.get("tracking_variants", 0)
     daily = data.get("daily_clicks", [])
     by_variant = data.get("by_variant", [])
+    by_source = data.get("by_source", [])
 
     # Header
     click.echo(
@@ -737,6 +738,20 @@ def stats(article: str, days: int):
             )
             bar = "#" * bar_len
             click.echo(f"    {v.get('label', '?'):30s}  {bar:<{bar_width}s}  {count}")
+
+    # Per-source breakdown (aggregated by variant utm_source)
+    if by_source:
+        click.echo(f"\n  Clicks by source:")
+        max_src_clicks = max(s["clicks"] for s in by_source) if by_source else 0
+        bar_width = 20
+        for s in by_source:
+            source = s.get("source", "?")
+            count = s["clicks"]
+            bar_len = (
+                int((count / max_src_clicks) * bar_width) if max_src_clicks > 0 else 0
+            )
+            bar = "#" * bar_len
+            click.echo(f"    {source:20s}  {bar:>{bar_width}s}  {count}")
 
     click.echo()
 
