@@ -1554,11 +1554,16 @@ def tracking_variants_delete(label: str, source: str):
 @cli.command("aifs")
 @click.argument("url_or_action", required=False)
 @click.option(
+    "--item",
+    default="",
+    help="Vote by short_id (e.g., aifs-a2c) instead of URL.",
+)
+@click.option(
     "--comment",
     default="",
-    help="Optional comment with your vote (when submitting a URL).",
+    help="Optional comment with your vote (when submitting a URL or voting by --item).",
 )
-def aifs(url_or_action: str | None, comment: str):
+def aifs(url_or_action: str | None, item: str, comment: str):
     """AI First Show episode candidate submission and voting.
 
     Submit URLs as candidates for the next AI First Show episode,
@@ -1566,11 +1571,12 @@ def aifs(url_or_action: str | None, comment: str):
 
     \b
     Examples:
-      als aifs https://example.com/article            # submit/vote
+      als aifs https://example.com/article            # submit/vote by URL
       als aifs https://example.com --comment '...'    # with comment
       als aifs list                                   # show candidates
+      als aifs --item aifs-a2c --comment '...'        # vote by short_id
     """
-    if not url_or_action:
+    if not url_or_action and not item:
         click.echo(click.get_current_context().get_help())
         raise SystemExit(1)
 
@@ -1578,7 +1584,10 @@ def aifs(url_or_action: str | None, comment: str):
         _aifs_list()
         return
 
-    # Treat as a URL submission
+    if item:
+        _aifs_vote_by_item(item, comment)
+        return
+
     _aifs_submit(url_or_action, comment)
 
 
@@ -1603,19 +1612,64 @@ def _aifs_submit(url: str, comment: str):
 
     data = resp.json()
     status = data.get("status", "")
+    short_id = data.get("short_id", "")
 
     if status == "submitted":
         click.echo(f"\n{click.style('Submitted!', fg='green', bold=True)}")
         click.echo(f"  URL: {url}")
+        click.echo(f"  Short ID: {short_id}")
         click.echo(f"  This is the first vote for this URL.")
     elif status == "voted":
         click.echo(f"\n{click.style('Voted!', fg='green', bold=True)}")
         click.echo(f"  URL: {url}")
+        click.echo(f"  Short ID: {short_id}")
         click.echo(f"  Your vote has been added to an existing submission.")
     elif status == "already_voted":
         click.echo(f"\n{click.style('Already voted', fg='yellow')}")
         click.echo(f"  URL: {url}")
+        click.echo(f"  Short ID: {short_id}")
         click.echo(f"  You have already voted for this URL.")
+
+    click.echo()
+
+
+def _aifs_vote_by_item(item: str, comment: str):
+    """Vote on a submission by its short_id."""
+    body: dict = {"action": "submit", "item": item}
+    if comment:
+        body["comment"] = comment
+
+    resp = _api_request("aifs", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 404:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    status = data.get("status", "")
+    url = data.get("url", "")
+
+    if status == "voted":
+        click.echo(f"\n{click.style('Voted!', fg='green', bold=True)}")
+        click.echo(f"  Short ID: {item}")
+        click.echo(f"  URL: {url}")
+        click.echo(f"  Your vote has been added.")
+    elif status == "already_voted":
+        click.echo(f"\n{click.style('Already voted', fg='yellow')}")
+        click.echo(f"  Short ID: {item}")
+        click.echo(f"  URL: {url}")
+        click.echo(f"  You have already voted for this submission.")
 
     click.echo()
 
@@ -1623,7 +1677,7 @@ def _aifs_submit(url: str, comment: str):
 def _aifs_list():
     """Show current AI First Show candidates sorted by vote count.
 
-    Displays all submitted URLs with their vote counts, the submitter,
+    Displays all submitted URLs with their short IDs, vote counts, the submitter,
     and any comments from voters.
 
     \b
@@ -1656,11 +1710,14 @@ def _aifs_list():
 
     for sub in submissions:
         vote_count = sub.get("vote_count", 0)
+        short_id = sub.get("short_id", "")
         url = sub.get("url", "")
         voters = sub.get("voters", [])
 
         vote_str = f"{vote_count} vote{'s' if vote_count != 1 else ''}"
-        click.echo(f"  {click.style(vote_str, fg='cyan', bold=True)}  {url}")
+        click.echo(
+            f"  {click.style(short_id, fg='cyan', bold=True)}  {click.style(vote_str, fg='cyan')}  {url}"
+        )
 
         if voters:
             first_voter = voters[0] if voters else None
@@ -1670,12 +1727,12 @@ def _aifs_list():
                     if first_voter.get("comment")
                     else f" → {first_voter['person_ref']}"
                 )
-                click.echo(f"           {comment_str}")
+                click.echo(f"              {comment_str}")
 
             other_voters = voters[1:] if len(voters) > 1 else []
             if other_voters:
                 refs = [v.get("person_ref", "?") for v in other_voters]
-                click.echo(f"           → {', '.join(refs)}")
+                click.echo(f"              → {', '.join(refs)}")
 
         click.echo()
 
