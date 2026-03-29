@@ -183,6 +183,33 @@ _WHEEL_URL = (
     "https://github.com/stephenVertex/aicoe-link-shortener/"
     "releases/latest/download/als-0-py3-none-any.whl"
 )
+_RELEASES_API = (
+    "https://api.github.com/repos/stephenVertex/aicoe-link-shortener/releases"
+)
+
+
+def _fetch_latest_release() -> dict | None:
+    """Fetch the latest release info from GitHub API.
+
+    Returns dict with 'tag_name' (e.g. 'v0.5.1') and 'body' (release notes),
+    or None if the request fails.
+    """
+    try:
+        resp = requests.get(
+            f"{_RELEASES_API}/latest",
+            headers={"Accept": "application/vnd.github.v3+json"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def _parse_version_from_tag(tag: str) -> str:
+    """Strip leading 'v' from a git tag to get the version number."""
+    return tag.lstrip("v")
 
 
 @cli.command()
@@ -193,7 +220,6 @@ def upgrade(force: bool):
     Downloads the latest wheel from the GitHub Releases page and
     reinstalls the CLI tool via uv.
     """
-    # Ensure uv is available
     uv_path = shutil.which("uv")
     if uv_path is None:
         click.echo(
@@ -205,7 +231,19 @@ def upgrade(force: bool):
 
     old_version = __version__
     click.echo(f"Current version: {old_version}")
+
+    release_info = _fetch_latest_release()
+    latest_tag = release_info.get("tag_name", "") if release_info else ""
+    latest_version = _parse_version_from_tag(latest_tag) if latest_tag else ""
+
+    if latest_version and latest_version == old_version and not force:
+        click.echo(f"Already up to date (v{old_version}).")
+        click.echo("Use --force to reinstall.")
+        return
+
     click.echo("Upgrading als...")
+    if latest_version:
+        click.echo(f"Latest release: {latest_tag}")
 
     env = {**os.environ, "UV_SKIP_WHEEL_FILENAME_CHECK": "1"}
     cmd = [
@@ -237,15 +275,18 @@ def upgrade(force: bool):
             click.echo(result.stdout.strip(), err=True)
         sys.exit(1)
 
-    # Show uv output (contains version info)
-    if result.stdout.strip():
-        click.echo(result.stdout.strip())
     if result.stderr.strip():
-        # uv prints progress to stderr
         click.echo(result.stderr.strip())
 
-    click.echo(f"\nUpgrade complete. (was: {old_version})")
-    click.echo("Run 'als --version' to check the new version.")
+    new_version = latest_version or "(unknown)"
+    click.echo(f"\nUpgraded als: {old_version} → {new_version}")
+
+    if release_info and release_info.get("body"):
+        click.echo(f"\nWhat's new in {latest_tag}:")
+        changelog = release_info["body"].strip()
+        for line in changelog.split("\n"):
+            if line.strip():
+                click.echo(f"  {line}")
 
 
 @cli.command()
