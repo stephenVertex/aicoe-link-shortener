@@ -1597,9 +1597,14 @@ def tracking_variants_delete(label: str, source: str):
 @click.option(
     "--comment",
     default="",
-    help="Optional comment with your vote (when submitting a URL).",
+    help="Optional comment with your vote.",
 )
-def aifs(url_or_action: str | None, comment: str):
+@click.option(
+    "--item",
+    default="",
+    help="Vote on an existing submission by its short ID (e.g., aifs-c6u).",
+)
+def aifs(url_or_action: str | None, comment: str, item: str):
     """AI First Show episode candidate submission and voting.
 
     Submit URLs as candidates for the next AI First Show episode,
@@ -1609,8 +1614,13 @@ def aifs(url_or_action: str | None, comment: str):
     Examples:
       als aifs https://example.com/article            # submit/vote
       als aifs https://example.com --comment '...'    # with comment
+      als aifs --item aifs-c6u --comment '...'        # vote by short ID
       als aifs list                                   # show candidates
     """
+    if item:
+        _aifs_submit(item, comment)
+        return
+
     if not url_or_action:
         click.echo(click.get_current_context().get_help())
         raise SystemExit(1)
@@ -1644,18 +1654,25 @@ def _aifs_submit(url: str, comment: str):
 
     data = resp.json()
     status = data.get("status", "")
+    short_id = data.get("short_id", "")
 
     if status == "submitted":
         click.echo(f"\n{click.style('Submitted!', fg='green', bold=True)}")
         click.echo(f"  URL: {url}")
+        if short_id:
+            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
         click.echo(f"  This is the first vote for this URL.")
     elif status == "voted":
         click.echo(f"\n{click.style('Voted!', fg='green', bold=True)}")
         click.echo(f"  URL: {url}")
+        if short_id:
+            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
         click.echo(f"  Your vote has been added to an existing submission.")
     elif status == "already_voted":
         click.echo(f"\n{click.style('Already voted', fg='yellow')}")
         click.echo(f"  URL: {url}")
+        if short_id:
+            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
         click.echo(f"  You have already voted for this URL.")
 
     click.echo()
@@ -1698,10 +1715,12 @@ def _aifs_list():
     for sub in submissions:
         vote_count = sub.get("vote_count", 0)
         url = sub.get("url", "")
+        short_id = sub.get("short_id", "")
         voters = sub.get("voters", [])
 
         vote_str = f"{vote_count} vote{'s' if vote_count != 1 else ''}"
-        click.echo(f"  {click.style(vote_str, fg='cyan', bold=True)}  {url}")
+        id_str = click.style(short_id, fg="magenta") if short_id else ""
+        click.echo(f"  {id_str}  {click.style(vote_str, fg='cyan', bold=True)}  {url}")
 
         if voters:
             first_voter = voters[0] if voters else None

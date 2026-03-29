@@ -28,6 +28,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
+async function generateShortId(url: string): Promise<string> {
+  const data = new TextEncoder().encode(url);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return "aifs-" + parseInt(hex.slice(0, 6), 16).toString(36).slice(0, 3);
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -74,105 +83,106 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === "submit") {
-    if (!url) {
+    // Accept either a URL or a short_id (for voting on existing items)
+    let existingSubmission: { id: string; url: string; short_id: string | null } | null = null;
+
+    if (url && url.startsWith("aifs-")) {
+      // Voting by short_id
+      const { data } = await supabase
+        .from("aifs_submissions")
+        .select("id, url, short_id")
+        .eq("short_id", url)
+        .maybeSingle();
+      existingSubmission = data;
+      if (!existingSubmission) {
+        return jsonResponse({ error: `No submission found for ${url}` }, 404);
+      }
+    } else if (url) {
+      try {
+        new URL(url);
+      } catch {
+        return jsonResponse({ error: `Invalid URL: ${url}` }, 400);
+      }
+      const normUrl = url.replace(/\/+$/, "");
+      const { data } = await supabase
+        .from("aifs_submissions")
+        .select("id, url, short_id")
+        .eq("url", normUrl)
+        .maybeSingle();
+      existingSubmission = data;
+
+      // Create new submission if URL not found
+      if (!existingSubmission) {
+        const shortId = await generateShortId(normUrl);
+
+        const { data: newSubmission, error: insertError } = await supabase
+          .from("aifs_submissions")
+          .insert({
+            url: normUrl,
+            submitted_by: person.slug,
+            short_id: shortId,
+          })
+          .select("id, url, short_id")
+          .single();
+
+        if (insertError || !newSubmission) {
+          console.error("Error creating submission:", insertError);
+          return jsonResponse({ error: "Failed to create submission" }, 500);
+        }
+
+        // Add the submitter's vote
+        await supabase.from("aifs_votes").insert({
+          submission_id: newSubmission.id,
+          person_ref: person.slug,
+          comment: comment || null,
+        });
+
+        return jsonResponse({
+          status: "submitted",
+          submission_id: newSubmission.id,
+          short_id: newSubmission.short_id,
+          message: "URL submitted successfully",
+        });
+      }
+    } else {
       return jsonResponse({ error: "url is required" }, 400);
     }
 
-    try {
-      new URL(url);
-    } catch {
-      return jsonResponse({ error: `Invalid URL: ${url}` }, 400);
-    }
-
-    const normUrl = url.replace(/\/+$/, "");
-
-    const { data: existingSubmission } = await supabase
-      .from("aifs_submissions")
-      .select("id, url")
-      .eq("url", normUrl)
+    // Vote on existing submission
+    const { data: existingVote } = await supabase
+      .from("aifs_votes")
+      .select("id")
+      .eq("submission_id", existingSubmission.id)
+      .eq("person_ref", person.slug)
       .maybeSingle();
 
-    let submissionId: string;
-    let status: string;
-
-    if (existingSubmission) {
-      submissionId = existingSubmission.id;
-
-      const { data: existingVote } = await supabase
-        .from("aifs_votes")
-        .select("id")
-        .eq("submission_id", submissionId)
-        .eq("person_ref", person.slug)
-        .maybeSingle();
-
-      if (existingVote) {
-        return jsonResponse({
-          status: "already_voted",
-          submission_id: submissionId,
-          message: "You have already voted for this URL",
-        });
-      }
-
-      const { error: voteError } = await supabase
-        .from("aifs_votes")
-        .insert({
-          submission_id: submissionId,
-          person_ref: person.slug,
-          comment: comment || null,
-        });
-
-      if (voteError) {
-        console.error("Error adding vote:", voteError);
-        return jsonResponse({ error: "Failed to add vote" }, 500);
-      }
-
-      status = "voted";
-    } else {
-      const { data: newSubmission, error: insertError } = await supabase
-        .from("aifs_submissions")
-        .insert({
-          url: normUrl,
-          submitted_by: person.slug,
-        })
-        .select("id")
-        .single();
-
-      if (insertError || !newSubmission) {
-        console.error("Error creating submission:", insertError);
-        return jsonResponse({ error: "Failed to create submission" }, 500);
-      }
-
-      submissionId = newSubmission.id;
-
-      const { error: voteError } = await supabase
-        .from("aifs_votes")
-        .insert({
-          submission_id: submissionId,
-          person_ref: person.slug,
-          comment: comment || null,
-        });
-
-      if (voteError) {
-        console.error("Error adding vote:", voteError);
-        return jsonResponse({ error: "Failed to add vote" }, 500);
-      }
-
-      status = "submitted";
+    if (existingVote) {
+      return jsonResponse({
+        status: "already_voted",
+        submission_id: existingSubmission.id,
+        short_id: existingSubmission.short_id,
+        message: "You have already voted for this URL",
+      });
     }
 
+    await supabase.from("aifs_votes").insert({
+      submission_id: existingSubmission.id,
+      person_ref: person.slug,
+      comment: comment || null,
+    });
+
     return jsonResponse({
-      status,
-      submission_id: submissionId,
-      message: status === "submitted"
-        ? "URL submitted successfully"
-        : "Vote added successfully",
+      status: "voted",
+      submission_id: existingSubmission.id,
+      short_id: existingSubmission.short_id,
+      message: "Vote added successfully",
     });
   }
 
   if (action === "list") {
     const { data: submissions, error: subError } = await supabase
       .from("aifs_submissions")
-      .select("id, url, title, submitted_by, submitted_at")
+      .select("id, url, title, submitted_by, submitted_at, short_id")
       .order("submitted_at", { ascending: false });
 
     if (subError) {
@@ -213,13 +223,14 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const result = submissions.map((s: { id: string; url: string; title: string | null; submitted_by: string; submitted_at: string }) => {
+    const result = submissions.map((s: { id: string; url: string; title: string | null; submitted_by: string; submitted_at: string; short_id: string | null }) => {
       const svotes = votesBySubmission[s.id] || [];
       const firstVote = svotes.find((v: { person_ref: string }) => v.person_ref === s.submitted_by);
       const otherVotes = svotes.filter((v: { person_ref: string }) => v.person_ref !== s.submitted_by);
 
       return {
         id: s.id,
+        short_id: s.short_id,
         url: s.url,
         title: s.title,
         submitted_by: s.submitted_by,
