@@ -1551,15 +1551,14 @@ def tracking_variants_delete(label: str, source: str):
     click.echo(f"\n{data.get('message', 'Deleted.')}\n")
 
 
-@cli.group("aifs", invoke_without_command=True)
-@click.pass_context
-@click.argument("url", required=False)
+@cli.command("aifs")
+@click.argument("url_or_action", required=False)
 @click.option(
     "--comment",
     default="",
     help="Optional comment with your vote (when submitting a URL).",
 )
-def aifs(ctx: click.Context, url: str | None, comment: str):
+def aifs(url_or_action: str | None, comment: str):
     """AI First Show episode candidate submission and voting.
 
     Submit URLs as candidates for the next AI First Show episode,
@@ -1567,36 +1566,24 @@ def aifs(ctx: click.Context, url: str | None, comment: str):
 
     \b
     Examples:
-      als aifs https://example.com/article          # submit/vote
-      als aifs https://example.com --comment '...'  # with comment
-      als aifs list                                 # show candidates
+      als aifs https://example.com/article            # submit/vote
+      als aifs https://example.com --comment '...'    # with comment
+      als aifs list                                   # show candidates
     """
-    if ctx.invoked_subcommand is None:
-        if url:
-            ctx.invoke(submit, url=url, comment=comment)
-        else:
-            click.echo(ctx.get_help())
-            ctx.exit(1)
+    if not url_or_action:
+        click.echo(click.get_current_context().get_help())
+        raise SystemExit(1)
+
+    if url_or_action == "list":
+        _aifs_list()
+        return
+
+    # Treat as a URL submission
+    _aifs_submit(url_or_action, comment)
 
 
-@aifs.command()
-@click.argument("url")
-@click.option(
-    "--comment",
-    default="",
-    help="Optional comment with your vote.",
-)
-def submit(url: str, comment: str):
-    """Submit a URL as a candidate for the next AI First Show episode.
-
-    If the URL has already been submitted by someone else, adds your vote.
-    If you have already voted for this URL, confirms you already voted.
-
-    \b
-    Examples:
-      als aifs submit https://example.com/article
-      als aifs submit https://example.com --comment "Great read!"
-    """
+def _aifs_submit(url: str, comment: str):
+    """Submit a URL as a candidate for the next AI First Show episode."""
     body: dict = {"action": "submit", "url": url}
     if comment:
         body["comment"] = comment
@@ -1616,7 +1603,6 @@ def submit(url: str, comment: str):
 
     data = resp.json()
     status = data.get("status", "")
-    message = data.get("message", "")
 
     if status == "submitted":
         click.echo(f"\n{click.style('Submitted!', fg='green', bold=True)}")
@@ -1634,8 +1620,7 @@ def submit(url: str, comment: str):
     click.echo()
 
 
-@aifs.command("list")
-def aifs_list():
+def _aifs_list():
     """Show current AI First Show candidates sorted by vote count.
 
     Displays all submitted URLs with their vote counts, the submitter,
