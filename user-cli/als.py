@@ -1668,12 +1668,19 @@ def _aifs_submit(url: str, comment: str):
         if short_id:
             click.echo(f"  ID:  {click.style(short_id, bold=True)}")
         click.echo(f"  Your vote has been added to an existing submission.")
+    elif status == "comment_added":
+        click.echo(f"\n{click.style('Comment added!', fg='green', bold=True)}")
+        click.echo(f"  URL: {url}")
+        if short_id:
+            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
+        click.echo(f"  You already voted — comment added separately.")
     elif status == "already_voted":
         click.echo(f"\n{click.style('Already voted', fg='yellow')}")
         click.echo(f"  URL: {url}")
         if short_id:
             click.echo(f"  ID:  {click.style(short_id, bold=True)}")
         click.echo(f"  You have already voted for this URL.")
+        click.echo(f"  Tip: add --comment to attach a comment.")
 
     click.echo()
 

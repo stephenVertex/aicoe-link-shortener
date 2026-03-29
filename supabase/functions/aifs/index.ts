@@ -148,15 +148,33 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "url is required" }, 400);
     }
 
-    // Vote on existing submission
+    // Check if already voted
     const { data: existingVote } = await supabase
       .from("aifs_votes")
       .select("id")
       .eq("submission_id", existingSubmission.id)
       .eq("person_ref", person.slug)
+      .eq("type", "vote")
       .maybeSingle();
 
     if (existingVote) {
+      // Already voted — if comment provided, add it as a comment-type entry
+      if (comment) {
+        await supabase.from("aifs_votes").insert({
+          submission_id: existingSubmission.id,
+          person_ref: person.slug,
+          comment,
+          type: "comment",
+        });
+
+        return jsonResponse({
+          status: "comment_added",
+          submission_id: existingSubmission.id,
+          short_id: existingSubmission.short_id,
+          message: "Comment added (you already voted)",
+        });
+      }
+
       return jsonResponse({
         status: "already_voted",
         submission_id: existingSubmission.id,
@@ -169,6 +187,7 @@ Deno.serve(async (req: Request) => {
       submission_id: existingSubmission.id,
       person_ref: person.slug,
       comment: comment || null,
+      type: "vote",
     });
 
     return jsonResponse({
@@ -201,7 +220,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: votes, error: votesError } = await supabase
       .from("aifs_votes")
-      .select("submission_id, person_ref, comment, voted_at")
+      .select("submission_id, person_ref, comment, voted_at, type")
       .in("submission_id", submissionIds)
       .order("voted_at", { ascending: true });
 
@@ -210,23 +229,25 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "Failed to fetch votes" }, 500);
     }
 
-    const votesBySubmission: Record<string, Array<{ person_ref: string; comment: string | null; voted_at: string }>> = {};
+    const entriesBySubmission: Record<string, Array<{ person_ref: string; comment: string | null; voted_at: string; type: string }>> = {};
     for (const v of votes || []) {
       const sid = v.submission_id;
-      if (!votesBySubmission[sid]) {
-        votesBySubmission[sid] = [];
+      if (!entriesBySubmission[sid]) {
+        entriesBySubmission[sid] = [];
       }
-      votesBySubmission[sid].push({
+      entriesBySubmission[sid].push({
         person_ref: v.person_ref,
         comment: v.comment,
         voted_at: v.voted_at,
+        type: v.type || "vote",
       });
     }
 
     const result = submissions.map((s: { id: string; url: string; title: string | null; submitted_by: string; submitted_at: string; short_id: string | null }) => {
-      const svotes = votesBySubmission[s.id] || [];
-      const firstVote = svotes.find((v: { person_ref: string }) => v.person_ref === s.submitted_by);
-      const otherVotes = svotes.filter((v: { person_ref: string }) => v.person_ref !== s.submitted_by);
+      const entries = entriesBySubmission[s.id] || [];
+      const voteCount = entries.filter((e) => e.type === "vote").length;
+      const firstVote = entries.find((v) => v.person_ref === s.submitted_by && v.type === "vote");
+      const otherEntries = entries.filter((v) => !(v.person_ref === s.submitted_by && v.type === "vote"));
 
       return {
         id: s.id,
@@ -235,12 +256,13 @@ Deno.serve(async (req: Request) => {
         title: s.title,
         submitted_by: s.submitted_by,
         submitted_at: s.submitted_at,
-        vote_count: svotes.length,
+        vote_count: voteCount,
         voters: [
-          { person_ref: s.submitted_by, comment: firstVote?.comment || null },
-          ...otherVotes.map((v: { person_ref: string; comment: string | null }) => ({
+          { person_ref: s.submitted_by, comment: firstVote?.comment || null, type: "vote" },
+          ...otherEntries.map((v) => ({
             person_ref: v.person_ref,
             comment: v.comment,
+            type: v.type,
           })),
         ],
       };
