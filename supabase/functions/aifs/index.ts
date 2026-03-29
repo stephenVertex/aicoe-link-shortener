@@ -43,6 +43,7 @@ Deno.serve(async (req: Request) => {
   let apiKey = req.headers.get("x-api-key") || "";
   let action = "submit";
   let url = "";
+  let item = "";
   let comment = "";
 
   if (req.method === "POST") {
@@ -51,6 +52,7 @@ Deno.serve(async (req: Request) => {
       apiKey = apiKey || body.api_key || "";
       action = body.action || "submit";
       url = body.url || "";
+      item = body.item || "";
       comment = body.comment || "";
     } catch {
       return jsonResponse({ error: "Invalid JSON body" }, 400);
@@ -74,29 +76,29 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === "submit") {
-    if (!url) {
-      return jsonResponse({ error: "url is required" }, 400);
+    if (!url && !item) {
+      return jsonResponse({ error: "url or item is required" }, 400);
     }
 
-    try {
-      new URL(url);
-    } catch {
-      return jsonResponse({ error: `Invalid URL: ${url}` }, 400);
-    }
-
-    const normUrl = url.replace(/\/+$/, "");
-
-    const { data: existingSubmission } = await supabase
-      .from("aifs_submissions")
-      .select("id, url")
-      .eq("url", normUrl)
-      .maybeSingle();
-
+    let targetUrl = "";
     let submissionId: string;
     let status: string;
+    let shortId: string | null = null;
 
-    if (existingSubmission) {
-      submissionId = existingSubmission.id;
+    if (item) {
+      const { data: byShortId } = await supabase
+        .from("aifs_submissions")
+        .select("id, url, short_id")
+        .eq("short_id", item)
+        .maybeSingle();
+
+      if (!byShortId) {
+        return jsonResponse({ error: `No submission found with item ID: ${item}` }, 404);
+      }
+
+      submissionId = byShortId.id;
+      targetUrl = byShortId.url;
+      shortId = byShortId.short_id;
 
       const { data: existingVote } = await supabase
         .from("aifs_votes")
@@ -109,6 +111,8 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({
           status: "already_voted",
           submission_id: submissionId,
+          short_id: shortId,
+          url: targetUrl,
           message: "You have already voted for this URL",
         });
       }
@@ -128,41 +132,95 @@ Deno.serve(async (req: Request) => {
 
       status = "voted";
     } else {
-      const { data: newSubmission, error: insertError } = await supabase
+      try {
+        new URL(url);
+      } catch {
+        return jsonResponse({ error: `Invalid URL: ${url}` }, 400);
+      }
+
+      targetUrl = url.replace(/\/+$/, "");
+
+      const { data: existingSubmission } = await supabase
         .from("aifs_submissions")
-        .insert({
-          url: normUrl,
-          submitted_by: person.slug,
-        })
-        .select("id")
-        .single();
+        .select("id, url, short_id")
+        .eq("url", targetUrl)
+        .maybeSingle();
 
-      if (insertError || !newSubmission) {
-        console.error("Error creating submission:", insertError);
-        return jsonResponse({ error: "Failed to create submission" }, 500);
+      if (existingSubmission) {
+        submissionId = existingSubmission.id;
+        shortId = existingSubmission.short_id;
+
+        const { data: existingVote } = await supabase
+          .from("aifs_votes")
+          .select("id")
+          .eq("submission_id", submissionId)
+          .eq("person_ref", person.slug)
+          .maybeSingle();
+
+        if (existingVote) {
+          return jsonResponse({
+            status: "already_voted",
+            submission_id: submissionId,
+            short_id: shortId,
+            url: targetUrl,
+            message: "You have already voted for this URL",
+          });
+        }
+
+        const { error: voteError } = await supabase
+          .from("aifs_votes")
+          .insert({
+            submission_id: submissionId,
+            person_ref: person.slug,
+            comment: comment || null,
+          });
+
+        if (voteError) {
+          console.error("Error adding vote:", voteError);
+          return jsonResponse({ error: "Failed to add vote" }, 500);
+        }
+
+        status = "voted";
+      } else {
+        const { data: newSubmission, error: insertError } = await supabase
+          .from("aifs_submissions")
+          .insert({
+            url: targetUrl,
+            submitted_by: person.slug,
+          })
+          .select("id, short_id")
+          .single();
+
+        if (insertError || !newSubmission) {
+          console.error("Error creating submission:", insertError);
+          return jsonResponse({ error: "Failed to create submission" }, 500);
+        }
+
+        submissionId = newSubmission.id;
+        shortId = newSubmission.short_id;
+
+        const { error: voteError } = await supabase
+          .from("aifs_votes")
+          .insert({
+            submission_id: submissionId,
+            person_ref: person.slug,
+            comment: comment || null,
+          });
+
+        if (voteError) {
+          console.error("Error adding vote:", voteError);
+          return jsonResponse({ error: "Failed to add vote" }, 500);
+        }
+
+        status = "submitted";
       }
-
-      submissionId = newSubmission.id;
-
-      const { error: voteError } = await supabase
-        .from("aifs_votes")
-        .insert({
-          submission_id: submissionId,
-          person_ref: person.slug,
-          comment: comment || null,
-        });
-
-      if (voteError) {
-        console.error("Error adding vote:", voteError);
-        return jsonResponse({ error: "Failed to add vote" }, 500);
-      }
-
-      status = "submitted";
     }
 
     return jsonResponse({
       status,
       submission_id: submissionId,
+      short_id: shortId,
+      url: targetUrl,
       message: status === "submitted"
         ? "URL submitted successfully"
         : "Vote added successfully",
@@ -172,7 +230,7 @@ Deno.serve(async (req: Request) => {
   if (action === "list") {
     const { data: submissions, error: subError } = await supabase
       .from("aifs_submissions")
-      .select("id, url, title, submitted_by, submitted_at")
+      .select("id, url, short_id, title, submitted_by, submitted_at")
       .order("submitted_at", { ascending: false });
 
     if (subError) {
@@ -213,13 +271,14 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const result = submissions.map((s: { id: string; url: string; title: string | null; submitted_by: string; submitted_at: string }) => {
+    const result = submissions.map((s: { id: string; url: string; short_id: string | null; title: string | null; submitted_by: string; submitted_at: string }) => {
       const svotes = votesBySubmission[s.id] || [];
       const firstVote = svotes.find((v: { person_ref: string }) => v.person_ref === s.submitted_by);
       const otherVotes = svotes.filter((v: { person_ref: string }) => v.person_ref !== s.submitted_by);
 
       return {
         id: s.id,
+        short_id: s.short_id,
         url: s.url,
         title: s.title,
         submitted_by: s.submitted_by,
