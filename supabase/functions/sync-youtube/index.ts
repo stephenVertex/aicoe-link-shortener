@@ -10,6 +10,10 @@ const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY") ?? "";
 // The AI-First Show channel — override via env var if needed
 const YOUTUBE_CHANNEL_ID = Deno.env.get("YOUTUBE_CHANNEL_ID") ?? "UCxD6pUEKE3bAiZGYuRUhgew";
 
+// AYSP transcript API configuration
+const AYSP_TRANSCRIPT_API_URL = Deno.env.get("AYSP_TRANSCRIPT_API_URL") ?? "";
+const AYSP_TRANSCRIPT_API_KEY = Deno.env.get("AYSP_TRANSCRIPT_API_KEY") ?? "";
+
 interface YouTubeVideo {
   videoId: string;
   title: string;
@@ -159,11 +163,72 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
 
     if (!segments.length) return null;
 
-    return segments.map((s) => s.text).join(" ");
+    return segmentsToSrt(segments);
   } catch (err) {
     console.error(`Error fetching transcript for ${videoId}:`, err);
     return null;
   }
+}
+
+/** Fetch transcript from AYSP lookup-transcript API */
+async function fetchTranscriptFromAysp(videoId: string): Promise<string | null> {
+  if (!AYSP_TRANSCRIPT_API_URL || !AYSP_TRANSCRIPT_API_KEY) {
+    return null;
+  }
+
+  try {
+    const resp = await fetch(AYSP_TRANSCRIPT_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${AYSP_TRANSCRIPT_API_KEY}`,
+      },
+      body: JSON.stringify({ youtube_video_id: videoId }),
+    });
+
+    if (!resp.ok) {
+      console.error(`AYSP API error for ${videoId}: ${resp.status}`);
+      return null;
+    }
+
+    const data = await resp.json();
+    if (data.found && data.transcript) {
+      return data.transcript;
+    }
+    return null;
+  } catch (err) {
+    console.error(`Error fetching transcript from AYSP for ${videoId}:`, err);
+    return null;
+  }
+}
+
+/** Convert transcript segments to SRT format */
+function segmentsToSrt(segments: TranscriptSegment[]): string {
+  return segments
+    .map((seg, i) => {
+      const startMs = Math.round(seg.start * 1000);
+      const endMs = Math.round((seg.start + seg.duration) * 1000);
+      const formatTime = (ms: number) => {
+        const h = Math.floor(ms / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        const s = Math.floor((ms % 60000) / 1000);
+        const msRem = ms % 1000;
+        return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")},${msRem.toString().padStart(3, "0")}`;
+      };
+      return `${i + 1}\n${formatTime(startMs)} --> ${formatTime(endMs)}\n${seg.text}`;
+    })
+    .join("\n\n");
+}
+
+/** Fetch transcript, trying AYSP first then falling back to YouTube scraping */
+async function fetchTranscriptWithFallback(videoId: string): Promise<{ transcript: string | null; source: string }> {
+  const ayspTranscript = await fetchTranscriptFromAysp(videoId);
+  if (ayspTranscript) {
+    return { transcript: ayspTranscript, source: "aysp" };
+  }
+  
+  const ytTranscript = await fetchTranscript(videoId);
+  return { transcript: ytTranscript, source: "youtube" };
 }
 
 /** Generate a URL-friendly slug from a video title */
@@ -265,8 +330,8 @@ Deno.serve(async (req) => {
       const existing = existingByUrl.get(videoUrl);
 
       if (!existing) {
-        // Fetch transcript for new video
-        const transcript = await fetchTranscript(video.videoId);
+        // Fetch transcript for new video (try AYSP first, then YouTube)
+        const { transcript } = await fetchTranscriptWithFallback(video.videoId);
         if (transcript) transcriptsFetched.push(video.videoId);
 
         const insertData: Record<string, unknown> = {
@@ -362,7 +427,7 @@ Deno.serve(async (req) => {
           .single();
 
         if (force || !fullLink?.transcript) {
-          const transcript = await fetchTranscript(video.videoId);
+          const { transcript } = await fetchTranscriptWithFallback(video.videoId);
           if (transcript) {
             changes.transcript = transcript;
             transcriptsFetched.push(video.videoId);
