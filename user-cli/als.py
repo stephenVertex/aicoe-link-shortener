@@ -1551,5 +1551,149 @@ def tracking_variants_delete(label: str, source: str):
     click.echo(f"\n{data.get('message', 'Deleted.')}\n")
 
 
+@cli.group("aifs", invoke_without_command=True)
+@click.pass_context
+@click.argument("url", required=False)
+@click.option(
+    "--comment",
+    default="",
+    help="Optional comment with your vote (when submitting a URL).",
+)
+def aifs(ctx: click.Context, url: str | None, comment: str):
+    """AI First Show episode candidate submission and voting.
+
+    Submit URLs as candidates for the next AI First Show episode,
+    vote on existing submissions, and view current rankings.
+
+    \b
+    Examples:
+      als aifs https://example.com/article          # submit/vote
+      als aifs https://example.com --comment '...'  # with comment
+      als aifs list                                 # show candidates
+    """
+    if ctx.invoked_subcommand is None:
+        if url:
+            ctx.invoke(submit, url=url, comment=comment)
+        else:
+            click.echo(ctx.get_help())
+            ctx.exit(1)
+
+
+@aifs.command()
+@click.argument("url")
+@click.option(
+    "--comment",
+    default="",
+    help="Optional comment with your vote.",
+)
+def submit(url: str, comment: str):
+    """Submit a URL as a candidate for the next AI First Show episode.
+
+    If the URL has already been submitted by someone else, adds your vote.
+    If you have already voted for this URL, confirms you already voted.
+
+    \b
+    Examples:
+      als aifs submit https://example.com/article
+      als aifs submit https://example.com --comment "Great read!"
+    """
+    body: dict = {"action": "submit", "url": url}
+    if comment:
+        body["comment"] = comment
+
+    resp = _api_request("aifs", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    status = data.get("status", "")
+    message = data.get("message", "")
+
+    if status == "submitted":
+        click.echo(f"\n{click.style('Submitted!', fg='green', bold=True)}")
+        click.echo(f"  URL: {url}")
+        click.echo(f"  This is the first vote for this URL.")
+    elif status == "voted":
+        click.echo(f"\n{click.style('Voted!', fg='green', bold=True)}")
+        click.echo(f"  URL: {url}")
+        click.echo(f"  Your vote has been added to an existing submission.")
+    elif status == "already_voted":
+        click.echo(f"\n{click.style('Already voted', fg='yellow')}")
+        click.echo(f"  URL: {url}")
+        click.echo(f"  You have already voted for this URL.")
+
+    click.echo()
+
+
+@aifs.command("list")
+def aifs_list():
+    """Show current AI First Show candidates sorted by vote count.
+
+    Displays all submitted URLs with their vote counts, the submitter,
+    and any comments from voters.
+
+    \b
+    Example:
+      als aifs list
+    """
+    resp = _api_request("aifs", json_body={"action": "list"})
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    submissions = data.get("submissions", [])
+
+    if not submissions:
+        click.echo("\nNo submissions yet.")
+        click.echo("Submit one with: als aifs <url>")
+        click.echo()
+        return
+
+    total = data.get("total", len(submissions))
+    click.echo(
+        f"\n{click.style('AI First Show', bold=True)} — next episode candidates "
+        f"({total} submission{'s' if total != 1 else ''})\n"
+    )
+
+    for sub in submissions:
+        vote_count = sub.get("vote_count", 0)
+        url = sub.get("url", "")
+        voters = sub.get("voters", [])
+
+        vote_str = f"{vote_count} vote{'s' if vote_count != 1 else ''}"
+        click.echo(f"  {click.style(vote_str, fg='cyan', bold=True)}  {url}")
+
+        if voters:
+            first_voter = voters[0] if voters else None
+            if first_voter:
+                comment_str = (
+                    f' → {first_voter["person_ref"]}: "{first_voter["comment"]}"'
+                    if first_voter.get("comment")
+                    else f" → {first_voter['person_ref']}"
+                )
+                click.echo(f"           {comment_str}")
+
+            other_voters = voters[1:] if len(voters) > 1 else []
+            if other_voters:
+                refs = [v.get("person_ref", "?") for v in other_voters]
+                click.echo(f"           → {', '.join(refs)}")
+
+        click.echo()
+
+
 if __name__ == "__main__":
     cli()
