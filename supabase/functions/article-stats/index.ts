@@ -89,15 +89,18 @@ Deno.serve(async (req) => {
   try {
     let slug = "";
     let days = 30;
+    let everybody = false;
 
     if (req.method === "POST") {
       const body = await req.json();
       slug = body.slug || body.article_url || body.url || "";
       days = body.days ?? 30;
+      everybody = body.everybody === true;
     } else {
       const url = new URL(req.url);
       slug = url.searchParams.get("slug") || url.searchParams.get("url") || "";
       days = parseInt(url.searchParams.get("days") || "30", 10) || 30;
+      everybody = url.searchParams.get("everybody") === "true";
     }
 
     if (!slug) {
@@ -217,7 +220,32 @@ Deno.serve(async (req) => {
       .map(([source, clicks]) => ({ source, clicks }))
       .sort((a, b) => b.clicks - a.clicks);
 
-    return jsonResponse({
+    let byPerson: { ref: string; name: string; clicks: number }[] = [];
+    if (everybody) {
+      const { data: allPeople, error: peopleError } = await supabase
+        .from("people")
+        .select("slug, name");
+
+      if (peopleError) throw peopleError;
+
+      const refClicks: Record<string, number> = {};
+      for (const row of variantClicks || []) {
+        if (row.variant_id && variantDetails[row.variant_id]?.ref) {
+          const ref = variantDetails[row.variant_id].ref;
+          refClicks[ref] = (refClicks[ref] || 0) + 1;
+        }
+      }
+
+      byPerson = (allPeople || [])
+        .map((p) => ({
+          ref: p.slug,
+          name: p.name || p.slug,
+          clicks: refClicks[p.slug] || 0,
+        }))
+        .sort((a, b) => b.clicks - a.clicks);
+    }
+
+    const response: Record<string, unknown> = {
       article: {
         slug: link.slug,
         title: link.title,
@@ -239,7 +267,13 @@ Deno.serve(async (req) => {
       by_variant: byVariant,
       by_source: bySource,
       days,
-    });
+    };
+
+    if (everybody) {
+      response.by_person = byPerson;
+    }
+
+    return jsonResponse(response);
   } catch (error) {
     console.error("Error fetching article stats:", error);
     const errorMessage =

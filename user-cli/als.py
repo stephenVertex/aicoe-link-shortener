@@ -629,7 +629,13 @@ def authors():
     show_default=True,
     help="Number of days to look back for click history.",
 )
-def stats(article: str, days: int):
+@click.option(
+    "--everybody",
+    is_flag=True,
+    default=False,
+    help="Show per-person click breakdown (all team members).",
+)
+def stats(article: str, days: int, everybody: bool):
     """Show statistics for a specific article, or overall database stats.
 
     \b
@@ -644,6 +650,7 @@ def stats(article: str, days: int):
       als stats                        # database overview
       als stats cursor-mar26           # article stats by slug
       als stats cursor-mar26 --days 7  # last 7 days only
+      als stats cursor-mar26 --everybody  # show per-person breakdown
       als stats https://aicoe.link/abc  # article stats by short URL
     """
     if not article:
@@ -668,11 +675,14 @@ def stats(article: str, days: int):
 
     # Article-level stats
     # Detect if article is a URL and pass it as such to the edge function
-    payload = {"days": days}
+    payload: dict = {"days": days}
     if article.startswith("http://") or article.startswith("https://"):
         payload["url"] = article
     else:
         payload["slug"] = article
+
+    if everybody:
+        payload["everybody"] = True
 
     resp = requests.post(
         f"{API_BASE}/article-stats",
@@ -694,6 +704,7 @@ def stats(article: str, days: int):
     daily = data.get("daily_clicks", [])
     by_variant = data.get("by_variant", [])
     by_source = data.get("by_source", [])
+    by_person = data.get("by_person", [])
 
     # Header
     click.echo(
@@ -753,6 +764,22 @@ def stats(article: str, days: int):
             )
             bar = "#" * bar_len
             click.echo(f"    {source:20s}  {bar:>{bar_width}s}  {count}")
+
+    # Per-person breakdown (when --everybody flag is used)
+    if by_person:
+        click.echo(f"\n  Clicks by person:")
+        max_person_clicks = max(p["clicks"] for p in by_person) if by_person else 0
+        bar_width = 20
+        for p in by_person:
+            name = p.get("name", p.get("ref", "?"))
+            count = p["clicks"]
+            bar_len = (
+                int((count / max_person_clicks) * bar_width)
+                if max_person_clicks > 0
+                else 0
+            )
+            bar = "#" * bar_len
+            click.echo(f"    {name:20s}  {bar:<{bar_width}s}  {count}")
 
     click.echo()
 
