@@ -763,7 +763,7 @@ def stats(article: str, days: int, everybody: bool):
                 int((count / max_src_clicks) * bar_width) if max_src_clicks > 0 else 0
             )
             bar = "#" * bar_len
-            click.echo(f"    {source:20s}  {bar:>{bar_width}s}  {count}")
+            click.echo(f"    {source:20s}  {bar:<{bar_width}s}  {count}")
 
     # Per-person breakdown (when --everybody flag is used)
     if by_person:
