@@ -565,7 +565,7 @@ def last(n: int, author: str | None, filter_me: bool):
         article_author = result.get("author", "")
         slug = result.get("slug", "")
         published_at = result.get("published_at") or result.get("created_at", "")
-        # Trim to date portion if present
+        destination_url = result.get("destination_url", "")
         date_str = published_at[:10] if published_at else ""
 
         click.echo(f"  {i}. {click.style(title, bold=True)}")
@@ -573,8 +573,9 @@ def last(n: int, author: str | None, filter_me: bool):
             click.echo(f"     by {article_author}")
         if date_str:
             click.echo(f"     {date_str}")
+        if destination_url:
+            click.echo(f"     URL:  {destination_url}")
 
-        # Get tracking link for this article
         link_resp = _api_request(
             "get-link",
             api_key=api_key,
