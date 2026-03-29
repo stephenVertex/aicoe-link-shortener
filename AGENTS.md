@@ -121,6 +121,38 @@ bd automatically syncs with git:
 
 For more details, see README.md and docs/QUICKSTART.md.
 
+## Gas Town Polecat Workflow
+
+**If you are a polecat** (i.e., `gt hook` shows work assigned to you), follow
+this workflow — NOT the generic bd workflow above.
+
+### How to know if you're a polecat
+Run `gt hook`. If it shows a bead ID and formula steps, you are a polecat.
+
+### Your workflow
+1. **`gt prime`** — Load your full context (run this first, every time)
+2. **`gt hook`** — See your assigned work and formula checklist
+3. **Do the work** — Implement, commit, push to your branch
+4. **`gt done`** — Submit your work to the merge queue and exit
+
+### CRITICAL: Use `gt done`, NOT `bd close`
+- `gt done` = pushes code, submits MR to refinery, nukes your session. **This is correct.**
+- `bd close` = closes the bead WITHOUT submitting code. **This is WRONG for polecats.**
+- If you run `bd close` instead of `gt done`, your code is lost and the bead is falsely marked complete.
+
+### If you need DB changes (Supabase migrations)
+This project has Supabase MCP configured. Use MCP tools for ALL database operations:
+- **`execute_sql`** — Run SQL (ALTER TABLE, INSERT, SELECT, etc.)
+- **`apply_migration`** — Apply a named migration
+- **`list_tables`** — Check schema
+
+Do NOT try to use direct API calls with hardcoded keys. Do NOT use `supabase db push`.
+If MCP tools are not available, STOP and mail the witness.
+
+### If you're stuck
+- Mail the witness: `gt mail send <rig>/witness -s "STUCK: <description>"`
+- Do NOT close the bead. Do NOT run `gt done` without code changes.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
