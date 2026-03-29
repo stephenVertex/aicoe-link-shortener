@@ -154,14 +154,29 @@ Deno.serve(async (req: Request) => {
       .select("id")
       .eq("submission_id", existingSubmission.id)
       .eq("person_ref", person.slug)
+      .eq("type", "vote")
       .maybeSingle();
 
     if (existingVote) {
+      if (comment) {
+        await supabase.from("aifs_votes").insert({
+          submission_id: existingSubmission.id,
+          person_ref: person.slug,
+          comment: comment,
+          type: "comment",
+        });
+        return jsonResponse({
+          status: "commented",
+          submission_id: existingSubmission.id,
+          short_id: existingSubmission.short_id,
+          message: "Comment added to your existing vote",
+        });
+      }
       return jsonResponse({
         status: "already_voted",
         submission_id: existingSubmission.id,
         short_id: existingSubmission.short_id,
-        message: "You have already voted for this URL",
+        message: "You have already voted for this URL. Use --comment to add a comment.",
       });
     }
 
@@ -201,7 +216,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: votes, error: votesError } = await supabase
       .from("aifs_votes")
-      .select("submission_id, person_ref, comment, voted_at")
+      .select("submission_id, person_ref, comment, voted_at, type")
       .in("submission_id", submissionIds)
       .order("voted_at", { ascending: true });
 
@@ -210,7 +225,7 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "Failed to fetch votes" }, 500);
     }
 
-    const votesBySubmission: Record<string, Array<{ person_ref: string; comment: string | null; voted_at: string }>> = {};
+    const votesBySubmission: Record<string, Array<{ person_ref: string; comment: string | null; voted_at: string; type: string }>> = {};
     for (const v of votes || []) {
       const sid = v.submission_id;
       if (!votesBySubmission[sid]) {
@@ -220,12 +235,14 @@ Deno.serve(async (req: Request) => {
         person_ref: v.person_ref,
         comment: v.comment,
         voted_at: v.voted_at,
+        type: v.type || "vote",
       });
     }
 
     const result = submissions.map((s: { id: string; url: string; title: string | null; submitted_by: string; submitted_at: string; short_id: string | null }) => {
       const svotes = votesBySubmission[s.id] || [];
-      const firstVote = svotes.find((v: { person_ref: string }) => v.person_ref === s.submitted_by);
+      const voteCount = svotes.filter((v: { type: string }) => v.type === "vote").length;
+      const firstVote = svotes.find((v: { person_ref: string; type: string }) => v.person_ref === s.submitted_by && v.type === "vote");
       const otherVotes = svotes.filter((v: { person_ref: string }) => v.person_ref !== s.submitted_by);
 
       return {
@@ -235,12 +252,13 @@ Deno.serve(async (req: Request) => {
         title: s.title,
         submitted_by: s.submitted_by,
         submitted_at: s.submitted_at,
-        vote_count: svotes.length,
+        vote_count: voteCount,
         voters: [
           { person_ref: s.submitted_by, comment: firstVote?.comment || null },
-          ...otherVotes.map((v: { person_ref: string; comment: string | null }) => ({
+          ...otherVotes.map((v: { person_ref: string; comment: string | null; type: string }) => ({
             person_ref: v.person_ref,
             comment: v.comment,
+            type: v.type,
           })),
         ],
       };
