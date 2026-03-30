@@ -1740,9 +1740,13 @@ def _aifs_list():
                 click.echo(f"           {comment_str}")
 
             other_voters = voters[1:] if len(voters) > 1 else []
-            if other_voters:
-                refs = [v.get("person_ref", "?") for v in other_voters]
-                click.echo(f"           → {', '.join(refs)}")
+            for v in other_voters:
+                if v.get("comment"):
+                    click.echo(
+                        f'           → {v.get("person_ref", "?")}: "{v["comment"]}"'
+                    )
+                else:
+                    click.echo(f"           → {v.get('person_ref', '?')}")
 
         click.echo()
 
