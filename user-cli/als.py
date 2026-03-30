@@ -606,7 +606,7 @@ def last(n: int, author: str | None, filter_me: bool):
         article_author = result.get("author", "")
         slug = result.get("slug", "")
         published_at = result.get("published_at") or result.get("created_at", "")
-        destination_url = result.get("destination_url", "")
+        destination_url = result.get("url", "")
         date_str = published_at[:10] if published_at else ""
 
         click.echo(f"  {i}. {click.style(title, bold=True)}")
