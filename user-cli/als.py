@@ -422,16 +422,27 @@ def set_author_name(name: str):
 @click.option(
     "--source", default=None, help="Filter to a specific source (e.g. linkedin)"
 )
-def shorten(url: str, source: str | None):
+@click.option(
+    "--slug", default=None, help="Custom slug for the short link (e.g. 'my-link')"
+)
+def shorten(url: str, source: str | None, slug: str | None):
     """Get your personalised tracking link(s) for any URL.
 
     Accepts any URL — article, blog post, website, etc. — and returns
     your personalised aicoe.fit short tracking links. Calling with the
     same URL always returns the same set of links (idempotent).
+
+    Use --slug to specify a custom short slug instead of a random one:
+
+        als shorten https://example.com --slug my-link
+
+    The slug must be unique. If it's already taken, an error is returned.
     """
     body: dict = {"url": url}
     if source:
         body["source"] = source
+    if slug:
+        body["slug"] = slug
 
     resp = _api_request("shorten-url", json_body=body)
 

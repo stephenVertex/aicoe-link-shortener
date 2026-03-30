@@ -240,6 +240,37 @@ function slugify(title: string): string {
     .slice(0, 80);
 }
 
+/** Stopwords to filter out when generating short slugs */
+const STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",
+  "with", "by", "from", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "could", "should",
+  "may", "might", "must", "shall", "can", "this", "that", "these", "those",
+  "it", "its", "as", "if", "then", "than", "so", "such", "no", "not", "only",
+  "own", "same", "very", "just", "also", "now", "here", "there", "when",
+  "where", "why", "how", "all", "each", "every", "both", "few", "more", "most",
+  "other", "some", "any", "about", "into", "through", "during", "before",
+  "after", "above", "below", "between", "under", "again", "further", "once",
+  "ai", "show", "episode", "part", "first", "second", "third", "new", "week",
+]);
+
+/** Generate a short slug from a video title by extracting key words */
+function generateShortSlug(title: string): string {
+  const words = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+
+  const keyWords = words.slice(0, 4);
+
+  if (keyWords.length === 0) {
+    return slugify(title).slice(0, 12) || "video";
+  }
+
+  return keyWords.join("-");
+}
+
 async function authenticateRequest(req: Request): Promise<boolean> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return false;
@@ -326,7 +357,7 @@ Deno.serve(async (req) => {
       if (limit > 0 && created.length >= limit) break;
 
       const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
-      const slug = slugify(video.title);
+      const slug = generateShortSlug(video.title);
       const existing = existingByUrl.get(videoUrl);
 
       if (!existing) {

@@ -40,9 +40,10 @@ function randomSlug(length = 6): string {
 
 /**
  * Find or create a link record for the given URL.
+ * If customSlug is provided, use it instead of generating a random one.
  * Returns the link record.
  */
-async function findOrCreateLink(url: string): Promise<{
+async function findOrCreateLink(url: string, customSlug?: string): Promise<{
   id: string;
   slug: string;
   destination_url: string;
@@ -70,21 +71,43 @@ async function findOrCreateLink(url: string): Promise<{
 
   if (bySlash) return bySlash;
 
-  // Create a new link record with a unique random slug
+  // Determine the slug to use
   let slug = "";
-  let attempts = 0;
-  while (attempts < 10) {
-    const candidate = randomSlug(6);
+
+  if (customSlug) {
+    // Validate custom slug format
+    const validSlug = customSlug.toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "");
+    if (validSlug !== customSlug.toLowerCase()) {
+      return null; // Invalid slug format
+    }
+
+    // Check if custom slug is already taken
     const { data: conflict } = await supabase
       .from("links")
       .select("id")
-      .eq("slug", candidate)
+      .eq("slug", validSlug)
       .maybeSingle();
-    if (!conflict) {
-      slug = candidate;
-      break;
+
+    if (conflict) {
+      return null; // Slug already taken
     }
-    attempts++;
+    slug = validSlug;
+  } else {
+    // Generate a random slug
+    let attempts = 0;
+    while (attempts < 10) {
+      const candidate = randomSlug(6);
+      const { data: conflict } = await supabase
+        .from("links")
+        .select("id")
+        .eq("slug", candidate)
+        .maybeSingle();
+      if (!conflict) {
+        slug = candidate;
+        break;
+      }
+      attempts++;
+    }
   }
 
   if (!slug) {
@@ -117,6 +140,7 @@ Deno.serve(async (req) => {
   let apiKey = req.headers.get("x-api-key") || "";
   let targetUrl = "";
   let source = "";
+  let customSlug = "";
 
   if (req.method === "POST") {
     try {
@@ -124,6 +148,7 @@ Deno.serve(async (req) => {
       apiKey = apiKey || body.api_key || "";
       targetUrl = body.url || body.target_url || "";
       source = body.source || "";
+      customSlug = body.slug || "";
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid JSON body" }),
@@ -138,6 +163,7 @@ Deno.serve(async (req) => {
     apiKey = apiKey || url.searchParams.get("api_key") || "";
     targetUrl = url.searchParams.get("url") || url.searchParams.get("target_url") || "";
     source = url.searchParams.get("source") || "";
+    customSlug = url.searchParams.get("slug") || "";
   }
 
   // Validate API key
@@ -187,8 +213,17 @@ Deno.serve(async (req) => {
   }
 
   // Find or create the link record
-  const link = await findOrCreateLink(targetUrl);
+  const link = await findOrCreateLink(targetUrl, customSlug || undefined);
   if (!link) {
+    if (customSlug) {
+      return new Response(
+        JSON.stringify({ error: `Slug '${customSlug}' is already taken or invalid. Choose a different slug.` }),
+        {
+          status: 409,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
     return new Response(
       JSON.stringify({ error: "Failed to create short link. Please try again." }),
       {
