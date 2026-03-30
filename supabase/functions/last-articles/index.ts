@@ -62,6 +62,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         results: (articles || []).map((a) => ({
+          id: a.id,
           slug: a.slug,
           title: a.title,
           author: a.author,

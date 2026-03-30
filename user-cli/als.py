@@ -23,6 +23,61 @@ API_BASE = "https://dumhbtxskncofwwzrmfx.supabase.co/functions/v1"
 
 
 # ---------------------------------------------------------------------------
+# Short ID helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_short_ids(ids: list[str]) -> dict[str, str]:
+    """Compute the shortest unique prefix for each ID.
+
+    IDs are in the format 'lnk-<hash>'. We compute the shortest prefix
+    after 'lnk-' that uniquely identifies each ID in the given list.
+
+    Returns a mapping from full ID to short ID (e.g., 'lnk-edktk8ri3c' -> 'lnk-edk').
+    """
+    if not ids:
+        return {}
+
+    result: dict[str, str] = {}
+
+    for length in range(3, 20):
+        prefix_to_full: dict[str, str | None] = {}
+        collisions: set[str] = set()
+
+        for full_id in ids:
+            if not full_id.startswith("lnk-"):
+                result[full_id] = full_id
+                continue
+            if full_id in result:
+                continue
+
+            hash_part = full_id[4:]
+            if len(hash_part) < length:
+                prefix = full_id
+            else:
+                prefix = "lnk-" + hash_part[:length]
+
+            if prefix in prefix_to_full:
+                existing = prefix_to_full[prefix]
+                if existing:
+                    collisions.add(existing)
+                collisions.add(full_id)
+                prefix_to_full[prefix] = None
+            else:
+                prefix_to_full[prefix] = full_id
+
+        for prefix, full_id in prefix_to_full.items():
+            if full_id and full_id not in collisions and full_id not in result:
+                result[full_id] = prefix
+
+    for full_id in ids:
+        if full_id not in result:
+            result[full_id] = full_id
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Credential helpers
 # ---------------------------------------------------------------------------
 
@@ -417,15 +472,22 @@ def shorten(url: str, source: str | None):
 def get(slug_or_url: str):
     """Get full details and tracking links for a single article.
 
-    Fetches the article by slug or URL and displays its details with your
-    personalised tracking links for each channel.
+    Fetches the article by slug, URL, or short ID and displays its details
+    with your personalised tracking links for each channel.
 
     \b
     Examples:
       als get your-agent-my-agent
       als get https://trilogyai.substack.com/p/your-agent-my-agent
+      als get lnk-edk
     """
     api_key = _get_api_key()
+
+    if slug_or_url.startswith("lnk-"):
+        resolved = _resolve_short_id(api_key, slug_or_url)
+        if resolved is None:
+            return
+        slug_or_url = resolved
 
     payload: dict = {"article_url": slug_or_url}
     resp = _api_request("get-link", api_key=api_key, json_body=payload)
@@ -469,6 +531,49 @@ def get(slug_or_url: str):
         click.echo(f"\n  No tracking links found.")
 
     click.echo()
+
+
+def _resolve_short_id(api_key: str, short_id: str) -> str | None:
+    """Resolve a short ID prefix to a slug.
+
+    Fetches recent articles and finds IDs matching the prefix.
+    Returns the slug if unique match, None if ambiguous or not found.
+    """
+    last_resp = requests.post(
+        f"{API_BASE}/last-articles",
+        json={"count": 100},
+        timeout=30,
+    )
+    if last_resp.status_code != 200:
+        click.echo(f"Error fetching articles: {last_resp.status_code}", err=True)
+        return None
+
+    results = last_resp.json().get("results", [])
+    matches = []
+    for r in results:
+        full_id = r.get("id", "")
+        if full_id.startswith(short_id):
+            matches.append(r)
+
+    if len(matches) == 0:
+        click.echo(f"No article found with ID starting with '{short_id}'", err=True)
+        return None
+
+    if len(matches) == 1:
+        return matches[0].get("slug", "")
+
+    ids = [m.get("id", "") for m in matches]
+    short_id_map = _compute_short_ids(ids)
+    click.echo(f"Ambiguous ID '{short_id}' matches {len(matches)} articles:", err=True)
+    click.echo(err=True)
+    for m in matches:
+        full_id = m.get("id", "")
+        display_id = short_id_map.get(full_id, full_id[:10])
+        title = m.get("title") or m.get("slug", "")
+        click.echo(f"  {display_id}  {title[:50]}", err=True)
+    click.echo(err=True)
+    click.echo("Use more characters to disambiguate.", err=True)
+    return None
 
 
 @cli.command()
@@ -519,10 +624,14 @@ def search(query: str, count: int, source: str):
         click.echo("No matching articles found.")
         return
 
+    ids = [r.get("id", "") for r in results if r.get("id")]
+    short_id_map = _compute_short_ids(ids)
+
     click.echo(f"\nSearch results for: {click.style(query, bold=True)}\n")
 
-    # Step 2: For each result, get personalised tracking link
     for i, result in enumerate(results, 1):
+        full_id = result.get("id", "")
+        short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
         title = result.get("title", result.get("slug", ""))
         author = result.get("author", "")
         slug = result.get("slug", "")
@@ -542,7 +651,8 @@ def search(query: str, count: int, source: str):
             else:
                 duration_str = f"  ⏱ {mins}m {secs:02d}s"
 
-        click.echo(f"  {i}. {type_label} {click.style(title, bold=True)}")
+        id_display = click.style(short_id, fg="magenta") if short_id else ""
+        click.echo(f"  {i}. {id_display}  {type_label} {click.style(title, bold=True)}")
         click.echo(f"     type: {content_type}")
         if author:
             click.echo(f"     by {author}")
@@ -704,47 +814,51 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
 
 
 def _print_summary_table(results: list, filter_me: bool, author: str | None):
-    """Print a compact summary table of articles."""
+    """Print a compact summary table of articles with short IDs."""
     term_width = shutil.get_terminal_size(fallback=(100, 24)).columns
 
+    ids = [r.get("id", "") for r in results if r.get("id")]
+    short_id_map = _compute_short_ids(ids)
+
     col_widths = {
-        "title": max(10, min(40, term_width // 4)),
-        "author": max(8, min(20, term_width // 8)),
+        "id": 10,
+        "title": max(10, min(36, term_width // 5)),
+        "author": max(8, min(18, term_width // 10)),
         "date": 10,
-        "url": max(10, min(50, term_width // 4)),
-        "slug": max(8, min(30, term_width // 6)),
+        "url": max(10, min(45, term_width // 5)),
     }
 
     header = (
+        f"{'ID':<{col_widths['id']}}  "
         f"{'Title':<{col_widths['title']}}  "
         f"{'Author':<{col_widths['author']}}  "
         f"{'Date':<{col_widths['date']}}  "
-        f"{'URL':<{col_widths['url']}}  "
-        f"{'Slug':<{col_widths['slug']}}"
+        f"{'URL':<{col_widths['url']}}"
     )
     click.echo()
     click.echo(click.style(header, bold=True))
     click.echo("─" * min(len(header), term_width))
 
+    def truncate(s: str, max_len: int) -> str:
+        if len(s) > max_len:
+            return s[: max_len - 1] + "…"
+        return s
+
     for result in results:
+        full_id = result.get("id", "")
+        short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
         title = result.get("title") or result.get("slug", "")
         article_author = result.get("author", "")
         published_at = result.get("published_at") or result.get("created_at", "")
         destination_url = result.get("url", "")
-        slug = result.get("slug", "")
         date_str = published_at[:10] if published_at else ""
 
-        def truncate(s: str, max_len: int) -> str:
-            if len(s) > max_len:
-                return s[: max_len - 1] + "…"
-            return s
-
         row = (
+            f"{short_id:<{col_widths['id']}}  "
             f"{truncate(title, col_widths['title']):<{col_widths['title']}}  "
             f"{truncate(article_author, col_widths['author']):<{col_widths['author']}}  "
             f"{date_str:<{col_widths['date']}}  "
-            f"{truncate(destination_url, col_widths['url']):<{col_widths['url']}}  "
-            f"{truncate(slug, col_widths['slug']):<{col_widths['slug']}}"
+            f"{truncate(destination_url, col_widths['url']):<{col_widths['url']}}"
         )
         click.echo(row)
 
