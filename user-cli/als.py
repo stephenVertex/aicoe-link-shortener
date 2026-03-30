@@ -552,7 +552,7 @@ def _resolve_short_id(api_key: str, short_id: str) -> str | None:
     """
     last_resp = requests.post(
         f"{API_BASE}/last-articles",
-        json={"count": 100},
+        json={"count": 500},
         timeout=30,
     )
     if last_resp.status_code != 200:
