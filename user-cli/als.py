@@ -547,44 +547,53 @@ def get(slug_or_url: str):
 def _resolve_short_id(api_key: str, short_id: str) -> str | None:
     """Resolve a short ID prefix to a slug.
 
-    Fetches recent articles and finds IDs matching the prefix.
+    Uses server-side lookup via get-link?id_prefix=... endpoint.
     Returns the slug if unique match, None if ambiguous or not found.
     """
-    last_resp = requests.post(
-        f"{API_BASE}/last-articles",
-        json={"count": 500},
-        timeout=30,
-    )
-    if last_resp.status_code != 200:
-        click.echo(f"Error fetching articles: {last_resp.status_code}", err=True)
+    resp = _api_request("get-link", api_key=api_key, params={"id_prefix": short_id})
+
+    if resp.status_code == 404:
+        data = (
+            resp.json()
+            if resp.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
+        click.echo(
+            f"{data.get('error', f'No article found with ID starting with {short_id}')}",
+            err=True,
+        )
         return None
 
-    results = last_resp.json().get("results", [])
-    matches = []
-    for r in results:
-        full_id = r.get("id", "")
-        if full_id.startswith(short_id):
-            matches.append(r)
-
-    if len(matches) == 0:
-        click.echo(f"No article found with ID starting with '{short_id}'", err=True)
+    if resp.status_code == 400:
+        data = (
+            resp.json()
+            if resp.headers.get("content-type", "").startswith("application/json")
+            else {}
+        )
+        matches = data.get("matches", [])
+        total = data.get("total", len(matches))
+        click.echo(f"Ambiguous ID '{short_id}' matches {total} articles:", err=True)
+        click.echo(err=True)
+        ids = [m.get("id", "") for m in matches]
+        short_id_map = _compute_short_ids(ids)
+        for m in matches:
+            full_id = m.get("id", "")
+            display_id = short_id_map.get(full_id, full_id[:10])
+            title = m.get("title") or m.get("slug", "")
+            click.echo(f"  {display_id}  {title[:50]}", err=True)
+        if total > len(matches):
+            click.echo(f"  ... ({total - len(matches)} more)", err=True)
+        click.echo(err=True)
+        click.echo("Use more characters to disambiguate.", err=True)
         return None
 
-    if len(matches) == 1:
-        return matches[0].get("slug", "")
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        return None
 
-    ids = [m.get("id", "") for m in matches]
-    short_id_map = _compute_short_ids(ids)
-    click.echo(f"Ambiguous ID '{short_id}' matches {len(matches)} articles:", err=True)
-    click.echo(err=True)
-    for m in matches:
-        full_id = m.get("id", "")
-        display_id = short_id_map.get(full_id, full_id[:10])
-        title = m.get("title") or m.get("slug", "")
-        click.echo(f"  {display_id}  {title[:50]}", err=True)
-    click.echo(err=True)
-    click.echo("Use more characters to disambiguate.", err=True)
-    return None
+    data = resp.json()
+    article = data.get("article", {})
+    return article.get("slug", "")
 
 
 @cli.command()

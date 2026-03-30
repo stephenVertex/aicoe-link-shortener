@@ -27,6 +27,30 @@ async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
 }
 
 /**
+ * Find a link by ID prefix.
+ * Returns null if not found, or an object with matches array if multiple found.
+ */
+async function findLinkByIdPrefix(
+  idPrefix: string,
+): Promise<{ id: string; slug: string; destination_url: string; title: string | null; author: string | null; published_at: string | null } | { matches: Array<{ id: string; slug: string; title: string | null }> } | null> {
+  const { data, error } = await supabase
+    .from("links")
+    .select("id, slug, destination_url, title, author, published_at")
+    .like("id", `${idPrefix}%`)
+    .limit(11);
+
+  if (error || !data || data.length === 0) {
+    return null;
+  }
+
+  if (data.length === 1) {
+    return data[0];
+  }
+
+  return { matches: data.map((l) => ({ id: l.id, slug: l.slug, title: l.title })) };
+}
+
+/**
  * Find a link by article URL or slug.
  */
 async function findLink(
@@ -93,6 +117,7 @@ Deno.serve(async (req) => {
   // Extract API key from header or body
   let apiKey = req.headers.get("x-api-key") || "";
   let articleUrl = "";
+  let idPrefix = "";
   let source = ""; // optional: specific source to get variant for
 
   if (req.method === "POST") {
@@ -100,6 +125,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
       apiKey = apiKey || body.api_key || "";
       articleUrl = body.article_url || body.url || body.slug || "";
+      idPrefix = body.id_prefix || "";
       source = body.source || "";
     } catch {
       return new Response(
@@ -114,6 +140,7 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     apiKey = apiKey || url.searchParams.get("api_key") || "";
     articleUrl = url.searchParams.get("url") || url.searchParams.get("slug") || "";
+    idPrefix = url.searchParams.get("id_prefix") || "";
     source = url.searchParams.get("source") || "";
   }
 
@@ -134,6 +161,130 @@ Deno.serve(async (req) => {
       JSON.stringify({ error: "Invalid API key" }),
       {
         status: 401,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
+
+  // Handle ID prefix lookup (server-side short ID resolution)
+  if (idPrefix) {
+    const result = await findLinkByIdPrefix(idPrefix);
+
+    if (!result) {
+      return new Response(
+        JSON.stringify({ error: `No article found with ID starting with '${idPrefix}'` }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+
+    if ("matches" in result) {
+      return new Response(
+        JSON.stringify({
+          error: `Ambiguous ID '${idPrefix}' matches ${result.matches.length} articles`,
+          matches: result.matches.slice(0, 10),
+          total: result.matches.length,
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+
+    const link = result;
+    // Get person's source profiles
+    const { data: sources } = await supabase
+      .from("person_sources")
+      .select("id, label, utm_source, utm_medium, utm_content, utm_term")
+      .eq("person_id", person.id)
+      .order("label");
+
+    const personSources = sources || [];
+
+    const filteredSources = source
+      ? personSources.filter((s: { utm_source: string }) => s.utm_source === source.toLowerCase())
+      : personSources;
+
+    if (filteredSources.length === 0) {
+      const defaultSource = source || "linkedin";
+      const { data: variant } = await supabase.rpc("ensure_tracking_variant", {
+        p_link_id: link.id,
+        p_ref: person.slug,
+        p_source: defaultSource,
+        p_medium: "social",
+      });
+
+      const suffix = variant?.suffix;
+      const shortUrl = `https://${DOMAIN}/${link.slug}-${suffix}`;
+
+      return new Response(
+        JSON.stringify({
+          article: {
+            title: link.title,
+            author: link.author,
+            slug: link.slug,
+            url: link.destination_url,
+            published_at: link.published_at,
+          },
+          links: [
+            {
+              source: defaultSource,
+              short_url: shortUrl,
+              suffix,
+            },
+          ],
+          person: { name: person.name, slug: person.slug },
+        }),
+        {
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+
+    const links = [];
+    for (const src of filteredSources) {
+      const { data: variant, error: variantError } = await supabase.rpc(
+        "ensure_tracking_variant",
+        {
+          p_link_id: link.id,
+          p_ref: person.slug,
+          p_source: src.utm_source,
+          p_medium: src.utm_medium || "social",
+          p_content: src.utm_content || null,
+          p_term: src.utm_term || null,
+        },
+      );
+
+      if (variantError) {
+        console.error(`Error generating variant for ${src.label}:`, variantError);
+        continue;
+      }
+
+      const suffix = variant?.suffix;
+      links.push({
+        source: src.utm_source,
+        label: src.label,
+        short_url: `https://${DOMAIN}/${link.slug}-${suffix}`,
+        suffix,
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        article: {
+          title: link.title,
+          author: link.author,
+          slug: link.slug,
+          url: link.destination_url,
+          published_at: link.published_at,
+        },
+        links,
+        person: { name: person.name, slug: person.slug },
+      }),
+      {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       },
     );
