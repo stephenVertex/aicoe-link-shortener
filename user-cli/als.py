@@ -283,11 +283,12 @@ def upgrade(force: bool):
     click.echo(f"\nUpgraded als: {old_version} → {new_version}")
 
     if release_info and release_info.get("body"):
-        click.echo(f"\nWhat's new in {latest_tag}:")
+        click.echo("\nWhat's new:")
         changelog = release_info["body"].strip()
         for line in changelog.split("\n"):
             if line.strip():
                 click.echo(f"  {line}")
+        click.echo("\nRun 'als --help' to see all commands.")
 
 
 @cli.command()
