@@ -1117,6 +1117,9 @@ def custom_links(count: int, show_all: bool):
         click.echo("No custom links found. Use 'als shorten <url>' to create one.")
         return
 
+    ids = [r.get("id", "") for r in results if r.get("id")]
+    short_id_map = _compute_short_ids(ids)
+
     label = "all" if show_all else str(len(results))
     click.echo(
         f"\nCustom links for {click.style(person.get('name', ''), bold=True)}"
@@ -1124,13 +1127,16 @@ def custom_links(count: int, show_all: bool):
     )
 
     for result in results:
+        full_id = result.get("id", "")
+        short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
         url = result.get("url", "")
         slug = result.get("slug", "")
         created_at = result.get("created_at", "")
         date_str = created_at[:10] if created_at else ""
         links = result.get("links", [])
 
-        click.echo(f"  {click.style(url, bold=True)}")
+        id_display = click.style(short_id, fg="magenta") if short_id else ""
+        click.echo(f"  {id_display}  {click.style(url, bold=True)}")
         click.echo(f"    Slug:    {slug}")
         if date_str:
             click.echo(f"    Created: {date_str}")
