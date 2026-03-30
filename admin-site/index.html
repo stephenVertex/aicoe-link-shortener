@@ -412,6 +412,7 @@
     let compactView = true;
     let expandedCards = new Set();
     let currentPage = 'links'; // 'links', 'analytics', or 'api-key'
+    let contentTypeFilter = 'all'; // 'all', 'youtube', 'shorts', 'substack'
 
     function getPageFromHash() {
       const hash = window.location.hash;
@@ -450,6 +451,11 @@
     function toggleCompactView() {
       compactView = !compactView;
       expandedCards.clear();
+      rerenderDashboard();
+    }
+
+    function setContentTypeFilter(value) {
+      contentTypeFilter = value;
       rerenderDashboard();
     }
 
@@ -1211,6 +1217,22 @@
         }
       }
 
+      if (contentTypeFilter !== 'all') {
+        displayLinks = displayLinks.filter(link => {
+          const destUrl = (link.destination_url || '').toLowerCase();
+          if (contentTypeFilter === 'youtube') {
+            return destUrl.includes('youtube.com/watch') || destUrl.includes('youtu.be/');
+          }
+          if (contentTypeFilter === 'shorts') {
+            return destUrl.includes('youtube.com/shorts');
+          }
+          if (contentTypeFilter === 'substack') {
+            return destUrl.includes('substack.com');
+          }
+          return true;
+        });
+      }
+
       const myVariants = (variants || []).filter(v => v.ref === mySlug);
       const myClicks = myVariants.reduce((sum, v) => sum + (clicksByVariant[v.id] || 0), 0);
       const myArticleCount = new Set(myVariants.map(v => v.link_id)).size;
@@ -1296,6 +1318,11 @@
         </div>
 
         <div class="toggle-bar">
+          <button class="btn btn-sm ${contentTypeFilter === 'all' ? 'btn-primary' : 'btn-secondary'}" onclick="setContentTypeFilter('all')">All</button>
+          <button class="btn btn-sm ${contentTypeFilter === 'youtube' ? 'btn-primary' : 'btn-secondary'}" onclick="setContentTypeFilter('youtube')">YouTube</button>
+          <button class="btn btn-sm ${contentTypeFilter === 'shorts' ? 'btn-primary' : 'btn-secondary'}" onclick="setContentTypeFilter('shorts')">Shorts</button>
+          <button class="btn btn-sm ${contentTypeFilter === 'substack' ? 'btn-primary' : 'btn-secondary'}" onclick="setContentTypeFilter('substack')">Substack</button>
+          <span style="color:var(--border);margin:0 4px;">|</span>
           <button class="btn btn-sm ${showAll ? 'btn-secondary' : 'btn-primary'}" onclick="toggleView(false)">My Links</button>
           <button class="btn btn-sm ${showAll ? 'btn-primary' : 'btn-secondary'}" onclick="toggleView(true)">All Links</button>
           <div class="filter-input-wrap">
