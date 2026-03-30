@@ -1224,7 +1224,9 @@
             return destUrl.includes('youtube.com/watch') || destUrl.includes('youtu.be/');
           }
           if (contentTypeFilter === 'shorts') {
-            return destUrl.includes('youtube.com/shorts');
+            const title = (link.title || '').toLowerCase();
+            const slug = (link.slug || '').toLowerCase();
+            return title.includes('#shorts') || slug.includes('shorts');
           }
           if (contentTypeFilter === 'substack') {
             return destUrl.includes('substack.com');
