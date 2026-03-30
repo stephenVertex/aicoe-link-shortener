@@ -181,7 +181,7 @@ async function fetchTranscriptFromAysp(videoId: string): Promise<string | null> 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${AYSP_TRANSCRIPT_API_KEY}`,
+        "x-api-key": AYSP_TRANSCRIPT_API_KEY,
       },
       body: JSON.stringify({ youtube_video_id: videoId }),
     });
