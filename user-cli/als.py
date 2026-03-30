@@ -589,7 +589,13 @@ def search(query: str, count: int, source: str):
         "Run 'als authors' to find your name."
     ),
 )
-def last(n: int, author: str | None, filter_me: bool):
+@click.option(
+    "--summary",
+    is_flag=True,
+    default=False,
+    help="Show compact table instead of full details with tracking links.",
+)
+def last(n: int, author: str | None, filter_me: bool, summary: bool):
     """Show the last N articles with your personalised tracking links.
 
     N defaults to 10. Shows the most recently published articles in the
@@ -649,49 +655,99 @@ def last(n: int, author: str | None, filter_me: bool):
             click.echo("No articles found.")
         return
 
-    if filter_me:
-        click.echo(
-            f"\nLast {len(results)} article(s) by you ({click.style(author, bold=True)}):\n"
-        )
-    elif author:
-        click.echo(
-            f"\nLast {len(results)} article(s) by {click.style(author, bold=True)}:\n"
-        )
+    if summary:
+        _print_summary_table(results, filter_me, author)
     else:
-        click.echo(f"\nLast {len(results)} article(s):\n")
-
-    # Step 2: For each article, get personalised tracking link
-    for i, result in enumerate(results, 1):
-        title = result.get("title") or result.get("slug", "")
-        article_author = result.get("author", "")
-        slug = result.get("slug", "")
-        published_at = result.get("published_at") or result.get("created_at", "")
-        destination_url = result.get("url", "")
-        date_str = published_at[:10] if published_at else ""
-
-        click.echo(f"  {i}. {click.style(title, bold=True)}")
-        if article_author:
-            click.echo(f"     by {article_author}")
-        if date_str:
-            click.echo(f"     {date_str}")
-        if destination_url:
-            click.echo(f"     URL:  {destination_url}")
-
-        link_resp = _api_request(
-            "get-link",
-            api_key=api_key,
-            json_body={"article_url": slug},
-        )
-        if link_resp.status_code == 200:
-            link_data = link_resp.json()
-            links = link_data.get("links", [])
-            for link in links:
-                label = link.get("label") or link.get("source", "")
-                click.echo(f"     {label:12s}  {link['short_url']}")
+        if filter_me:
+            click.echo(
+                f"\nLast {len(results)} article(s) by you ({click.style(author, bold=True)}):\n"
+            )
+        elif author:
+            click.echo(
+                f"\nLast {len(results)} article(s) by {click.style(author, bold=True)}:\n"
+            )
         else:
-            click.echo(f"     (could not generate tracking link)")
+            click.echo(f"\nLast {len(results)} article(s):\n")
+
+        for i, result in enumerate(results, 1):
+            title = result.get("title") or result.get("slug", "")
+            article_author = result.get("author", "")
+            slug = result.get("slug", "")
+            published_at = result.get("published_at") or result.get("created_at", "")
+            destination_url = result.get("url", "")
+            date_str = published_at[:10] if published_at else ""
+
+            click.echo(f"  {i}. {click.style(title, bold=True)}")
+            if article_author:
+                click.echo(f"     by {article_author}")
+            if date_str:
+                click.echo(f"     {date_str}")
+            if destination_url:
+                click.echo(f"     URL:  {destination_url}")
+
+            link_resp = _api_request(
+                "get-link",
+                api_key=api_key,
+                json_body={"article_url": slug},
+            )
+            if link_resp.status_code == 200:
+                link_data = link_resp.json()
+                links = link_data.get("links", [])
+                for link in links:
+                    label = link.get("label") or link.get("source", "")
+                    click.echo(f"     {label:12s}  {link['short_url']}")
+            else:
+                click.echo(f"     (could not generate tracking link)")
 
         click.echo()
+
+
+def _print_summary_table(results: list, filter_me: bool, author: str | None):
+    """Print a compact summary table of articles."""
+    term_width = shutil.get_terminal_size(fallback=(100, 24)).columns
+
+    col_widths = {
+        "title": max(10, min(40, term_width // 4)),
+        "author": max(8, min(20, term_width // 8)),
+        "date": 10,
+        "url": max(10, min(50, term_width // 4)),
+        "slug": max(8, min(30, term_width // 6)),
+    }
+
+    header = (
+        f"{'Title':<{col_widths['title']}}  "
+        f"{'Author':<{col_widths['author']}}  "
+        f"{'Date':<{col_widths['date']}}  "
+        f"{'URL':<{col_widths['url']}}  "
+        f"{'Slug':<{col_widths['slug']}}"
+    )
+    click.echo()
+    click.echo(click.style(header, bold=True))
+    click.echo("─" * min(len(header), term_width))
+
+    for result in results:
+        title = result.get("title") or result.get("slug", "")
+        article_author = result.get("author", "")
+        published_at = result.get("published_at") or result.get("created_at", "")
+        destination_url = result.get("url", "")
+        slug = result.get("slug", "")
+        date_str = published_at[:10] if published_at else ""
+
+        def truncate(s: str, max_len: int) -> str:
+            if len(s) > max_len:
+                return s[: max_len - 1] + "…"
+            return s
+
+        row = (
+            f"{truncate(title, col_widths['title']):<{col_widths['title']}}  "
+            f"{truncate(article_author, col_widths['author']):<{col_widths['author']}}  "
+            f"{date_str:<{col_widths['date']}}  "
+            f"{truncate(destination_url, col_widths['url']):<{col_widths['url']}}  "
+            f"{truncate(slug, col_widths['slug']):<{col_widths['slug']}}"
+        )
+        click.echo(row)
+
+    click.echo()
 
 
 @cli.command()
