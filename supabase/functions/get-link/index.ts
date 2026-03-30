@@ -31,11 +31,11 @@ async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
  */
 async function findLink(
   articleUrl: string,
-): Promise<{ id: string; slug: string; destination_url: string; title: string | null; author: string | null } | null> {
+): Promise<{ id: string; slug: string; destination_url: string; title: string | null; author: string | null; published_at: string | null } | null> {
   // Try exact slug match first
   const { data: bySlug } = await supabase
     .from("links")
-    .select("id, slug, destination_url, title, author")
+    .select("id, slug, destination_url, title, author, published_at")
     .eq("slug", articleUrl)
     .maybeSingle();
 
@@ -44,7 +44,7 @@ async function findLink(
   // Try matching by destination URL
   const { data: byUrl } = await supabase
     .from("links")
-    .select("id, slug, destination_url, title, author")
+    .select("id, slug, destination_url, title, author, published_at")
     .eq("destination_url", articleUrl)
     .maybeSingle();
 
@@ -56,7 +56,7 @@ async function findLink(
     : articleUrl + "/";
   const { data: byUrlVariant } = await supabase
     .from("links")
-    .select("id, slug, destination_url, title, author")
+    .select("id, slug, destination_url, title, author, published_at")
     .eq("destination_url", urlVariant)
     .maybeSingle();
 
@@ -68,7 +68,7 @@ async function findLink(
     const extractedSlug = substackMatch[1];
     const { data: byExtractedSlug } = await supabase
       .from("links")
-      .select("id, slug, destination_url, title, author")
+      .select("id, slug, destination_url, title, author, published_at")
       .eq("slug", extractedSlug)
       .maybeSingle();
 
@@ -195,6 +195,7 @@ Deno.serve(async (req) => {
           author: link.author,
           slug: link.slug,
           url: link.destination_url,
+          published_at: link.published_at,
         },
         links: [
           {
@@ -247,6 +248,7 @@ Deno.serve(async (req) => {
         author: link.author,
         slug: link.slug,
         url: link.destination_url,
+        published_at: link.published_at,
       },
       links,
       person: { name: person.name, slug: person.slug },

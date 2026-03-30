@@ -144,12 +144,13 @@ def cli():
     \b
     Usage:
       First time:  als login --api-key <key>
-                   als authors              # find your name
-                   als set-author-name "Your Name"
-      Search:      als search "GLM-5"
-      My articles: als last --me 5
-      Shorten URL: als shorten <url>
-      Upgrade:     als upgrade
+                    als authors              # find your name
+                    als set-author-name "Your Name"
+       Search:      als search "GLM-5"
+       Get article: als get <slug>
+       My articles: als last --me 5
+       Shorten URL: als shorten <url>
+       Upgrade:     als upgrade
     """
     pass
 
@@ -406,6 +407,65 @@ def shorten(url: str, source: str | None):
             click.echo(f"    {label:12s}  {link['short_url']}")
     else:
         click.echo("  No tracking links generated.")
+
+    click.echo()
+
+
+@cli.command()
+@click.argument("slug_or_url")
+def get(slug_or_url: str):
+    """Get full details and tracking links for a single article.
+
+    Fetches the article by slug or URL and displays its details with your
+    personalised tracking links for each channel.
+
+    \b
+    Examples:
+      als get your-agent-my-agent
+      als get https://trilogyai.substack.com/p/your-agent-my-agent
+    """
+    api_key = _get_api_key()
+
+    payload: dict = {"article_url": slug_or_url}
+    resp = _api_request("get-link", api_key=api_key, json_body=payload)
+
+    if resp.status_code == 404:
+        click.echo(f"Article not found: {slug_or_url}", err=True)
+        sys.exit(1)
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    article = data.get("article", {})
+    links = data.get("links", [])
+
+    title = article.get("title") or ""
+    author = article.get("author", "")
+    slug = article.get("slug", "")
+    destination = article.get("url", "")
+    published_at = article.get("published_at") or ""
+    date_str = published_at[:10] if published_at else ""
+
+    click.echo(f"\n{click.style(title or slug, bold=True)}")
+    if author:
+        click.echo(f"  by {author}")
+    if date_str:
+        click.echo(f"  Published: {date_str}")
+    if destination:
+        click.echo(f"  URL: {destination}")
+    click.echo(f"  Short: https://aicoe.fit/{slug}")
+
+    if links:
+        click.echo(f"\n  Your tracking links:")
+        for link in links:
+            label = link.get("label") or link.get("source", "")
+            click.echo(f"    {label:12s}  {link['short_url']}")
+    else:
+        click.echo(f"\n  No tracking links found.")
 
     click.echo()
 
