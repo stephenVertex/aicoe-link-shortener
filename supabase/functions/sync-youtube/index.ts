@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { slugifyShort } from "../_shared/slugify.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -231,15 +232,6 @@ async function fetchTranscriptWithFallback(videoId: string): Promise<{ transcrip
   return { transcript: ytTranscript, source: "youtube" };
 }
 
-/** Generate a URL-friendly slug from a video title */
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
-
 async function authenticateRequest(req: Request): Promise<boolean> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return false;
@@ -326,7 +318,7 @@ Deno.serve(async (req) => {
       if (limit > 0 && created.length >= limit) break;
 
       const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
-      const slug = slugify(video.title);
+      const slug = slugifyShort(video.title);
       const existing = existingByUrl.get(videoUrl);
 
       if (!existing) {

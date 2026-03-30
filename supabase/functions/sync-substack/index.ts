@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { slugifyShort } from "../_shared/slugify.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -126,32 +127,49 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString();
 
     for (const entry of sitemapEntries) {
-      const slug = entry.url.split("/p/").pop()?.replace(/\/$/, "") || "";
+      const substackSlug = entry.url.split("/p/").pop()?.replace(/\/$/, "") || "";
 
       // Skip restacks: only the Substack posts API returns original posts.
       // Any sitemap slug not found in postMeta is a restack (someone else's
       // post reshared to the trilogyai feed) and should not be imported.
-      if (!postMeta.has(slug)) {
-        skipped.push(slug);
+      if (!postMeta.has(substackSlug)) {
+        skipped.push(substackSlug);
         continue;
       }
 
-      const meta = postMeta.get(slug);
-      const newTitle = meta?.title || slug;
+      const meta = postMeta.get(substackSlug);
+      const newTitle = meta?.title || substackSlug;
       const newAuthor = meta?.publishedBylines?.[0]?.name || null;
       const newPublishedAt = entry.lastmod || null;
       const newDestUrl = meta?.canonical_url || entry.url;
 
-      const existing = existingBySlug.get(slug);
-      // Check if a link already exists for this URL under a different slug
-      // (e.g. created via "als shorten" with a random slug).
+      // Use URL for deduplication (more reliable than slug matching)
       const urlNorm = newDestUrl.replace(/\/+$/, "");
-      const existingByUrlMatch = !existing ? existingByUrl.get(urlNorm) : null;
+      const existingByUrlMatch = existingByUrl.get(urlNorm);
+      
+      // Also check by Substack slug for backwards compatibility
+      const existingBySubstackSlug = existingBySlug.get(substackSlug);
+      const existing = existingBySubstackSlug || existingByUrlMatch;
 
-      if (!existing && !existingByUrlMatch) {
-        // INSERT new article — no match by slug or URL
+      if (!existing) {
+        // INSERT new article — generate a short slug from the title
+        let shortSlug = slugifyShort(newTitle);
+        
+        // Handle slug collision by appending a hash
+        const { data: collision } = await supabase
+          .from("links")
+          .select("id")
+          .eq("slug", shortSlug)
+          .maybeSingle();
+        
+        if (collision) {
+          // Append a short hash to make it unique
+          const hashSuffix = substackSlug.slice(0, 4);
+          shortSlug = `${shortSlug}-${hashSuffix}`;
+        }
+
         const insertData: Record<string, unknown> = {
-          slug,
+          slug: shortSlug,
           destination_url: newDestUrl,
           title: newTitle,
           author: newAuthor,
@@ -165,11 +183,11 @@ Deno.serve(async (req) => {
           .select()
           .single();
         if (linkError) {
-          console.error(`Error creating link ${slug}:`, linkError);
+          console.error(`Error creating link ${shortSlug}:`, linkError);
           continue;
         }
 
-        created.push(slug);
+        created.push(shortSlug);
 
         // Create tracking variants for all person sources
         for (const source of personSources || []) {
@@ -184,10 +202,10 @@ Deno.serve(async (req) => {
             p_term: source.utm_term,
           });
           if (error) {
-            console.error(`Error creating variant for ${slug}/${ref}:`, error);
+            console.error(`Error creating variant for ${shortSlug}/${ref}:`, error);
           }
         }
-      } else if (existingByUrlMatch && !existing) {
+      } else if (existingByUrlMatch && !existingBySubstackSlug) {
         // A link exists for this URL but under a different slug (custom link).
         // Update its metadata with Substack info so it becomes a "proper" synced article.
         const changes: Record<string, unknown> = { last_synced_at: now };
@@ -202,13 +220,13 @@ Deno.serve(async (req) => {
           .update(changes)
           .eq("id", existingByUrlMatch.id);
         if (updateError) {
-          console.error(`Error updating custom link for ${slug}:`, updateError);
+          console.error(`Error updating custom link for ${substackSlug}:`, updateError);
           continue;
         }
 
         const hasMetadataChanges = Object.keys(changes).length > 1;
         if (hasMetadataChanges) {
-          updated.push(slug);
+          updated.push(existingByUrlMatch.slug);
         }
 
         // Ensure tracking variants exist for the custom link too
@@ -224,7 +242,7 @@ Deno.serve(async (req) => {
             p_term: source.utm_term,
           });
           if (error) {
-            console.error(`Error creating variant for ${slug}/${ref}:`, error);
+            console.error(`Error creating variant for ${existingByUrlMatch.slug}/${ref}:`, error);
           }
         }
       } else if (existing && (force || !existing.last_synced_at)) {
@@ -248,12 +266,12 @@ Deno.serve(async (req) => {
           .update(changes)
           .eq("id", existing.id);
         if (updateError) {
-          console.error(`Error updating link ${slug}:`, updateError);
+          console.error(`Error updating link ${existing.slug}:`, updateError);
           continue;
         }
 
         if (hasMetadataChanges) {
-          updated.push(slug);
+          updated.push(existing.slug);
         }
       }
     }
