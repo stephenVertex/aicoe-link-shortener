@@ -53,6 +53,10 @@ Deno.serve(async (req: Request) => {
   let action = "submit";
   let url = "";
   let comment = "";
+  let ids: string[] = [];
+  let note = "";
+  let beforeDate = "";
+  let filter = "active";
 
   if (req.method === "POST") {
     try {
@@ -61,6 +65,10 @@ Deno.serve(async (req: Request) => {
       action = body.action || "submit";
       url = body.url || "";
       comment = body.comment || "";
+      ids = body.ids || [];
+      note = body.note || "";
+      beforeDate = body.before_date || "";
+      filter = body.filter || "active";
     } catch {
       return jsonResponse({ error: "Invalid JSON body" }, 400);
     }
@@ -68,6 +76,7 @@ Deno.serve(async (req: Request) => {
     const reqUrl = new URL(req.url);
     apiKey = apiKey || reqUrl.searchParams.get("api_key") || "";
     action = reqUrl.searchParams.get("action") || "list";
+    filter = reqUrl.searchParams.get("filter") || "active";
   }
 
   if (!apiKey) {
@@ -199,10 +208,17 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === "list") {
-    const { data: submissions, error: subError } = await supabase
+    let query = supabase
       .from("aifs_submissions")
-      .select("id, url, title, submitted_by, submitted_at, short_id")
-      .order("submitted_at", { ascending: false });
+      .select("id, url, title, submitted_by, submitted_at, short_id, archived_at, archive_note");
+
+    if (filter === "active") {
+      query = query.is("archived_at", null);
+    } else if (filter === "archived") {
+      query = query.not("archived_at", "is", null);
+    }
+
+    const { data: submissions, error: subError } = await query.order("submitted_at", { ascending: false });
 
     if (subError) {
       console.error("Error fetching submissions:", subError);
@@ -243,7 +259,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const result = submissions.map((s: { id: string; url: string; title: string | null; submitted_by: string; submitted_at: string; short_id: string | null }) => {
+    const result = submissions.map((s: { id: string; url: string; title: string | null; submitted_by: string; submitted_at: string; short_id: string | null; archived_at: string | null; archive_note: string | null }) => {
       const entries = entriesBySubmission[s.id] || [];
       const voteCount = entries.filter((e) => e.type === "vote").length;
       const firstVote = entries.find((v) => v.person_ref === s.submitted_by && v.type === "vote");
@@ -256,6 +272,8 @@ Deno.serve(async (req: Request) => {
         title: s.title,
         submitted_by: s.submitted_by,
         submitted_at: s.submitted_at,
+        archived_at: s.archived_at,
+        archive_note: s.archive_note,
         vote_count: voteCount,
         voters: [
           { person_ref: s.submitted_by, comment: firstVote?.comment || null, type: "vote" },
@@ -276,8 +294,95 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  if (action === "archive") {
+    if (!note) {
+      return jsonResponse({ error: "note is required for archive action" }, 400);
+    }
+
+    let updateQuery = supabase
+      .from("aifs_submissions")
+      .update({ archived_at: new Date().toISOString(), archive_note: note });
+
+    if (beforeDate) {
+      updateQuery = updateQuery.lt("submitted_at", beforeDate).is("archived_at", null);
+    } else if (ids.length > 0) {
+      const uuids: string[] = [];
+      const shortIds: string[] = [];
+      for (const id of ids) {
+        if (id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+          uuids.push(id);
+        } else {
+          shortIds.push(id);
+        }
+      }
+      if (uuids.length > 0 && shortIds.length > 0) {
+        updateQuery = updateQuery.or(`id.in.(${uuids.join(",")}),short_id.in.(${shortIds.join(",")})`);
+      } else if (uuids.length > 0) {
+        updateQuery = updateQuery.in("id", uuids);
+      } else if (shortIds.length > 0) {
+        updateQuery = updateQuery.in("short_id", shortIds);
+      }
+    } else {
+      return jsonResponse({ error: "ids or before_date is required for archive action" }, 400);
+    }
+
+    const { data, error: updateError } = await updateQuery.select("id, short_id");
+
+    if (updateError) {
+      console.error("Error archiving submissions:", updateError);
+      return jsonResponse({ error: "Failed to archive submissions" }, 500);
+    }
+
+    return jsonResponse({
+      status: "archived",
+      count: data?.length || 0,
+      submissions: data,
+    });
+  }
+
+  if (action === "unarchive") {
+    if (ids.length === 0) {
+      return jsonResponse({ error: "ids is required for unarchive action" }, 400);
+    }
+
+    const uuids: string[] = [];
+    const shortIds: string[] = [];
+    for (const id of ids) {
+      if (id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+        uuids.push(id);
+      } else {
+        shortIds.push(id);
+      }
+    }
+
+    let updateQuery = supabase
+      .from("aifs_submissions")
+      .update({ archived_at: null, archive_note: null });
+
+    if (uuids.length > 0 && shortIds.length > 0) {
+      updateQuery = updateQuery.or(`id.in.(${uuids.join(",")}),short_id.in.(${shortIds.join(",")})`);
+    } else if (uuids.length > 0) {
+      updateQuery = updateQuery.in("id", uuids);
+    } else {
+      updateQuery = updateQuery.in("short_id", shortIds);
+    }
+
+    const { data, error: updateError } = await updateQuery.select("id, short_id");
+
+    if (updateError) {
+      console.error("Error unarchiving submissions:", updateError);
+      return jsonResponse({ error: "Failed to unarchive submissions" }, 500);
+    }
+
+    return jsonResponse({
+      status: "unarchived",
+      count: data?.length || 0,
+      submissions: data,
+    });
+  }
+
   return jsonResponse(
-    { error: `Unknown action '${action}'. Valid actions: submit, list` },
+    { error: `Unknown action '${action}'. Valid actions: submit, list, archive, unarchive` },
     400,
   );
 });
