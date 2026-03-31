@@ -237,6 +237,7 @@
     .loading { text-align: center; padding: 60px; color: var(--text-faint); }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 500; }
     .badge-you { background: var(--badge-bg); color: var(--badge-text); }
+    .short-id-badge { display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 4px; font-size: 0.7em; font-family: monospace; background: var(--btn-secondary-bg); color: var(--text-muted); vertical-align: middle; }
     .nav-links { display: flex; align-items: center; gap: 4px; margin-left: 16px; }
     .nav-link { padding: 4px 12px; font-size: 0.85em; font-weight: 500; color: var(--text-muted); text-decoration: none; border-radius: 6px; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
     .nav-link:hover { background: var(--copy-btn-hover); color: var(--text); }
@@ -538,6 +539,41 @@
         if (index === needle.length) return true;
       }
       return false;
+    }
+
+    function computeShortIds(ids) {
+      if (!ids || ids.length === 0) return {};
+      const result = {};
+      for (let length = 3; length < 20; length++) {
+        const prefixToFull = {};
+        const collisions = new Set();
+        for (const fullId of ids) {
+          if (!fullId.startsWith('lnk-')) {
+            result[fullId] = fullId;
+            continue;
+          }
+          if (fullId in result) continue;
+          const hashPart = fullId.substring(4);
+          const prefix = hashPart.length < length ? fullId : 'lnk-' + hashPart.substring(0, length);
+          if (prefix in prefixToFull) {
+            const existing = prefixToFull[prefix];
+            if (existing) collisions.add(existing);
+            collisions.add(fullId);
+            prefixToFull[prefix] = null;
+          } else {
+            prefixToFull[prefix] = fullId;
+          }
+        }
+        for (const [prefix, fullId] of Object.entries(prefixToFull)) {
+          if (fullId && !collisions.has(fullId) && !(fullId in result)) {
+            result[fullId] = prefix;
+          }
+        }
+      }
+      for (const fullId of ids) {
+        if (!(fullId in result)) result[fullId] = fullId;
+      }
+      return result;
     }
 
     function setSearchQuery(value) {
@@ -1359,6 +1395,9 @@
       // Store data globally so copyTableForPerson can access it
       window._dashData = { links: links || [], variants: variants || [], variantsByLink, clicksByVariant, clicksByLink };
 
+      // Compute short IDs for all display links
+      const shortIds = computeShortIds(displayLinks.map(l => l.id));
+
       for (const link of displayLinks) {
         const lvs = variantsByLink[link.id] || [];
         const variantClicks = lvs.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0);
@@ -1373,9 +1412,11 @@
           ? `<span class="badge" style="background:var(--copied-bg);color:var(--copied-text);margin-left:8px;font-size:0.75em">${Math.round(semanticResults[link.id] * 100)}% match</span>`
           : '';
 
+        const shortId = shortIds[link.id] || link.id;
+
         h += `
           <div class="link-card">
-            <div class="title">${displayTitle}${similarityScore}</div>
+            <div class="title">${displayTitle}<span class="short-id-badge">${shortId}</span>${similarityScore}</div>
             <div class="meta">${authorStr}${authorStr && pubDate ? ' &middot; ' : ''}${pubDate}</div>
             <div class="dest"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a></div>
             <div style="margin-bottom:8px">
