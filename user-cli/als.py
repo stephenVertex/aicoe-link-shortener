@@ -1896,7 +1896,22 @@ def tracking_variants_delete(label: str, source: str):
     default="",
     help="Vote on an existing submission by its short ID (e.g., aifs-c6u).",
 )
-def aifs(url_or_action: str | None, comment: str, item: str):
+@click.option(
+    "--archived",
+    is_flag=True,
+    default=False,
+    help="Show archived submissions only.",
+)
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    default=False,
+    help="Show all submissions (active and archived).",
+)
+def aifs(
+    url_or_action: str | None, comment: str, item: str, archived: bool, show_all: bool
+):
     """AI First Show episode candidate submission and voting.
 
     Submit URLs as candidates for the next AI First Show episode,
@@ -1907,7 +1922,9 @@ def aifs(url_or_action: str | None, comment: str, item: str):
       als aifs https://example.com/article            # submit/vote
       als aifs https://example.com --comment '...'    # with comment
       als aifs --item aifs-c6u --comment '...'        # vote by short ID
-      als aifs list                                   # show candidates
+      als aifs list                                   # show active candidates
+      als aifs list --archived                        # show archived only
+      als aifs list --all                             # show all
     """
     if item:
         _aifs_submit(item, comment)
@@ -1918,7 +1935,8 @@ def aifs(url_or_action: str | None, comment: str, item: str):
         raise SystemExit(1)
 
     if url_or_action == "list":
-        _aifs_list()
+        filter_val = "all" if show_all else ("archived" if archived else "active")
+        _aifs_list(filter_val)
         return
 
     # Treat as a URL submission
@@ -1978,7 +1996,7 @@ def _aifs_submit(url: str, comment: str):
     click.echo()
 
 
-def _aifs_list():
+def _aifs_list(filter_val: str = "active"):
     """Show current AI First Show candidates sorted by vote count.
 
     Displays all submitted URLs with their vote counts, the submitter,
@@ -1986,9 +2004,11 @@ def _aifs_list():
 
     \b
     Example:
-      als aifs list
+      als aifs list              # active only (default)
+      als aifs list --archived   # archived only
+      als aifs list --all        # everything
     """
-    resp = _api_request("aifs", json_body={"action": "list"})
+    resp = _api_request("aifs", json_body={"action": "list", "filter": filter_val})
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
@@ -2007,8 +2027,10 @@ def _aifs_list():
         return
 
     total = data.get("total", len(submissions))
+    filter_label = {"active": "active", "archived": "archived", "all": "all"}
+    label = filter_label.get(filter_val, "active")
     click.echo(
-        f"\n{click.style('AI First Show', bold=True)} — next episode candidates "
+        f"\n{click.style('AI First Show', bold=True)} — {label} submissions "
         f"({total} submission{'s' if total != 1 else ''})\n"
     )
 
@@ -2017,10 +2039,25 @@ def _aifs_list():
         url = sub.get("url", "")
         short_id = sub.get("short_id", "")
         voters = sub.get("voters", [])
+        archived_at = sub.get("archived_at")
+        archive_note = sub.get("archive_note")
 
         vote_str = f"{vote_count} vote{'s' if vote_count != 1 else ''}"
         id_str = click.style(short_id, fg="magenta") if short_id else ""
-        click.echo(f"  {id_str}  {click.style(vote_str, fg='cyan', bold=True)}  {url}")
+
+        if archived_at:
+            archive_badge = click.style(
+                f"[archived: {archive_note}]" if archive_note else "[archived]",
+                fg="black",
+                bold=True,
+            )
+            click.echo(
+                f"  {id_str}  {click.style(vote_str, fg='cyan', bold=True)}  {url}  {archive_badge}"
+            )
+        else:
+            click.echo(
+                f"  {id_str}  {click.style(vote_str, fg='cyan', bold=True)}  {url}"
+            )
 
         if voters:
             first_voter = voters[0] if voters else None
