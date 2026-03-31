@@ -7,6 +7,7 @@ for articles, and search the article catalogue.
 
 import configparser
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1928,6 +1929,7 @@ def _aifs_submit(url: str, comment: str):
     """Submit a URL as a candidate for the next AI First Show episode."""
     body: dict = {"action": "submit", "url": url}
     if comment:
+        comment = re.sub(r"\\([?=&#])", r"\1", comment)
         body["comment"] = comment
 
     resp = _api_request("aifs", json_body=body)
