@@ -201,11 +201,19 @@ def cli():
       First time:  als login --api-key <key>
                     als authors              # find your name
                     als set-author-name "Your Name"
-       Search:      als search "GLM-5"
-       Get article: als get <slug>
-       My articles: als last --me 5
-       Shorten URL: als shorten <url>
-       Upgrade:     als upgrade
+         Search:      als search "GLM-5"
+         Get article: als get <slug>
+         My articles: als last --me 5
+         Shorten URL: als shorten <url>
+         Upgrade:     als upgrade
+
+    \b
+    Workflow:
+      als last 10 --summary          # scan recent articles
+      als get lnk-3f7                # get full details + tracking links
+      als search 'AI agents'         # find by topic
+      als stats lnk-3f7              # check click performance
+      als aifs https://... --comment # submit for AI First Show
     """
     pass
 
