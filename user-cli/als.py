@@ -470,18 +470,44 @@ def shorten(url: str, source: str | None, slug: str | None):
     person = data.get("person", {})
     slug = data.get("slug", "")
     destination = data.get("url", url)
+    existed = data.get("existed", False)
+    article = data.get("article", {})
 
-    click.echo(f"\n{click.style(destination, bold=True)}")
-    click.echo(f"  Slug: {slug}")
-    click.echo()
+    if existed:
+        title = article.get("title") or slug
+        author = article.get("author", "")
+        published_at = article.get("published_at", "")
+        date_str = published_at[:10] if published_at else ""
 
-    if links:
-        click.echo(f"  Your tracking links ({person.get('name', '')}):")
-        for link in links:
-            label = link.get("label") or link.get("source", "")
-            click.echo(f"    {label:12s}  {link['short_url']}")
+        click.echo(f"\n{click.style('This URL already exists:', bold=True)}\n")
+        click.echo(f"  {click.style(title, bold=True)}")
+        if author:
+            click.echo(f"  by {author}")
+        if date_str:
+            click.echo(f"  {date_str}")
+        click.echo(f"  Slug:  {slug}")
+        click.echo(f"  Short: https://aicoe.fit/{slug}")
+        click.echo()
+
+        if links:
+            click.echo(f"  Your tracking links ({person.get('name', '')}):")
+            for link in links:
+                label = link.get("label") or link.get("source", "")
+                click.echo(f"    {label:12s}  {link['short_url']}")
+        else:
+            click.echo("  No tracking links generated.")
     else:
-        click.echo("  No tracking links generated.")
+        click.echo(f"\n{click.style(destination, bold=True)}")
+        click.echo(f"  Slug: {slug}")
+        click.echo()
+
+        if links:
+            click.echo(f"  Your tracking links ({person.get('name', '')}):")
+            for link in links:
+                label = link.get("label") or link.get("source", "")
+                click.echo(f"    {label:12s}  {link['short_url']}")
+        else:
+            click.echo("  No tracking links generated.")
 
     click.echo()
 

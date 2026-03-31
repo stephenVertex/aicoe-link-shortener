@@ -48,6 +48,9 @@ async function findOrCreateLink(url: string, customSlug?: string): Promise<{
   slug: string;
   destination_url: string;
   title: string | null;
+  author: string | null;
+  published_at: string | null;
+  existed: boolean;
 } | null> {
   // Normalise URL: strip trailing slash for matching
   const urlNorm = url.replace(/\/+$/, "");
@@ -56,20 +59,20 @@ async function findOrCreateLink(url: string, customSlug?: string): Promise<{
   // Try exact match first
   const { data: byExact } = await supabase
     .from("links")
-    .select("id, slug, destination_url, title")
+    .select("id, slug, destination_url, title, author, published_at")
     .eq("destination_url", urlNorm)
     .maybeSingle();
 
-  if (byExact) return byExact;
+  if (byExact) return { ...byExact, existed: true };
 
   // Try trailing-slash variant
   const { data: bySlash } = await supabase
     .from("links")
-    .select("id, slug, destination_url, title")
+    .select("id, slug, destination_url, title, author, published_at")
     .eq("destination_url", urlWithSlash)
     .maybeSingle();
 
-  if (bySlash) return bySlash;
+  if (bySlash) return { ...bySlash, existed: true };
 
   // Determine the slug to use
   let slug = "";
@@ -117,11 +120,11 @@ async function findOrCreateLink(url: string, customSlug?: string): Promise<{
   const { data: created, error } = await supabase
     .from("links")
     .insert({ slug, destination_url: url })
-    .select("id, slug, destination_url, title")
+    .select("id, slug, destination_url, title, author, published_at")
     .single();
 
   if (error || !created) return null;
-  return created;
+  return { ...created, existed: false };
 }
 
 Deno.serve(async (req) => {
@@ -264,6 +267,14 @@ Deno.serve(async (req) => {
       JSON.stringify({
         url: link.destination_url,
         slug: link.slug,
+        existed: link.existed,
+        article: link.existed
+          ? {
+              title: link.title,
+              author: link.author,
+              published_at: link.published_at,
+            }
+          : null,
         links: [
           {
             source: defaultSource,
@@ -312,6 +323,14 @@ Deno.serve(async (req) => {
     JSON.stringify({
       url: link.destination_url,
       slug: link.slug,
+      existed: link.existed,
+      article: link.existed
+        ? {
+            title: link.title,
+            author: link.author,
+            published_at: link.published_at,
+          }
+        : null,
       links,
       person: { name: person.name, slug: person.slug },
     }),
