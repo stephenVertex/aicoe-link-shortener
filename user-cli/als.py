@@ -1149,7 +1149,17 @@ def _resolve_short_id(api_key: str, short_id: str) -> str | None:
     default="both",
     help="Filter by content source: aifs (AI-First Show videos), blog (AI COE blog posts), or both (default).",
 )
-def search(query: str, count: int, source: str):
+@click.option(
+    "--me",
+    "filter_me",
+    is_flag=True,
+    default=False,
+    help=(
+        "Filter results to articles written by you. "
+        "Uses cached author name (see als set-author-name) or auto-resolves via API."
+    ),
+)
+def search(query: str, count: int, source: str, filter_me: bool):
     """Search articles and get your personalised tracking links.
 
     Uses semantic search to find matching articles, then returns
@@ -1159,10 +1169,28 @@ def search(query: str, count: int, source: str):
     - aifs: AI-First Show YouTube videos only
     - blog: AI COE blog posts only
     - both: All content (default)
+
+    Use --me to filter to your own articles:
+
+        als search "Claude 4" --me
     """
     api_key = _get_api_key()
 
+    # Resolve --me to author name
+    author_filter: str | None = None
+    if filter_me:
+        author_filter = _resolve_my_author_name(api_key)
+        if not author_filter:
+            click.echo(
+                "Could not determine your author name. "
+                "Make sure you are logged in and have articles in the database.",
+                err=True,
+            )
+            sys.exit(1)
+
     search_body: dict = {"query": query, "match_count": count}
+    if author_filter:
+        search_body["author"] = author_filter
     if source != "both":
         content_type = "video" if source == "aifs" else "article"
         search_body["content_type"] = content_type
@@ -1185,7 +1213,10 @@ def search(query: str, count: int, source: str):
     results = search_data.get("results", [])
 
     if not results:
-        click.echo("No matching articles found.")
+        if filter_me:
+            click.echo(f"No matching articles found for you ({author_filter}).")
+        else:
+            click.echo("No matching articles found.")
         return
 
     ids = [r.get("id", "") for r in results if r.get("id")]

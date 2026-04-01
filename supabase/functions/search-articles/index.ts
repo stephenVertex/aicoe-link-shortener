@@ -64,6 +64,7 @@ Deno.serve(async (req) => {
     let matchThreshold = 0.3;
     let matchCount = 20;
     let contentType: string | undefined;
+    let authorFilter: string | undefined;
 
     if (req.method === "POST") {
       const body = await req.json();
@@ -73,6 +74,7 @@ Deno.serve(async (req) => {
       }
       if (body.match_count !== undefined) matchCount = body.match_count;
       if (body.content_type !== undefined) contentType = body.content_type;
+      if (body.author !== undefined) authorFilter = body.author;
     } else {
       const url = new URL(req.url);
       query = url.searchParams.get("q") || "";
@@ -82,6 +84,8 @@ Deno.serve(async (req) => {
       if (ct) matchCount = parseInt(ct, 10);
       const src = url.searchParams.get("content_type");
       if (src) contentType = src;
+      const auth = url.searchParams.get("author");
+      if (auth) authorFilter = auth;
     }
 
     if (!query.trim()) {
@@ -112,11 +116,22 @@ Deno.serve(async (req) => {
 
     if (searchError) throw searchError;
 
+    // Client-side author filtering (case-insensitive substring match)
+    let filtered = results || [];
+    if (authorFilter) {
+      const needle = authorFilter.toLowerCase();
+      filtered = filtered.filter(
+        (r: Record<string, unknown>) =>
+          typeof r.author === "string" &&
+          r.author.toLowerCase().includes(needle),
+      );
+    }
+
     return new Response(
       JSON.stringify({
         query,
-        results: results || [],
-        count: (results || []).length,
+        results: filtered,
+        count: filtered.length,
       }),
       {
         headers: { "Content-Type": "application/json", ...corsHeaders },
