@@ -1886,6 +1886,7 @@ def tracking_variants_delete(label: str, source: str):
 
 @cli.command("aifs")
 @click.argument("url_or_action", required=False)
+@click.argument("ids", nargs=-1, required=False)
 @click.option(
     "--comment",
     default="",
@@ -1909,8 +1910,33 @@ def tracking_variants_delete(label: str, source: str):
     default=False,
     help="Show all submissions (active and archived).",
 )
+@click.option(
+    "--note",
+    default="",
+    help="Archive note (required for archive action).",
+)
+@click.option(
+    "--before",
+    "before_date",
+    default="",
+    help="Archive all submissions before this date (YYYY-MM-DD).",
+)
+@click.option(
+    "--archive-all",
+    is_flag=True,
+    default=False,
+    help="Archive all active submissions.",
+)
 def aifs(
-    url_or_action: str | None, comment: str, item: str, archived: bool, show_all: bool
+    url_or_action: str | None,
+    ids: tuple[str, ...],
+    comment: str,
+    item: str,
+    archived: bool,
+    show_all: bool,
+    note: str,
+    before_date: str,
+    archive_all: bool,
 ):
     """AI First Show episode candidate submission and voting.
 
@@ -1925,6 +1951,10 @@ def aifs(
       als aifs list                                   # show active candidates
       als aifs list --archived                        # show archived only
       als aifs list --all                             # show all
+      als aifs archive aifs-c6u aifs-j0p --note '...' # archive specific
+      als aifs archive --before 2026-03-31 --note '...' # archive by date
+      als aifs archive --archive-all --note '...'     # archive all active
+      als aifs unarchive aifs-c6u                     # unarchive
     """
     if item:
         _aifs_submit(item, comment)
@@ -1937,6 +1967,14 @@ def aifs(
     if url_or_action == "list":
         filter_val = "all" if show_all else ("archived" if archived else "active")
         _aifs_list(filter_val)
+        return
+
+    if url_or_action == "archive":
+        _aifs_archive(list(ids), note, before_date, archive_all)
+        return
+
+    if url_or_action == "unarchive":
+        _aifs_unarchive(list(ids))
         return
 
     # Treat as a URL submission
@@ -2079,6 +2117,102 @@ def _aifs_list(filter_val: str = "active"):
                     click.echo(f"           → {v.get('person_ref', '?')}")
 
         click.echo()
+
+
+def _aifs_archive(
+    ids: list[str], note: str, before_date: str, archive_all: bool
+) -> None:
+    """Archive AI First Show submissions."""
+    if not note:
+        click.echo("Error: --note is required for archive action.", err=True)
+        sys.exit(1)
+
+    if archive_all:
+        resp = _api_request("aifs", json_body={"action": "list", "filter": "active"})
+        if resp.status_code != 200:
+            click.echo(f"Error fetching submissions: {resp.text}", err=True)
+            sys.exit(1)
+        data = resp.json()
+        submissions = data.get("submissions", [])
+        ids = [s.get("short_id", "") for s in submissions if s.get("short_id")]
+        if not ids:
+            click.echo("No active submissions to archive.")
+            return
+
+    if not ids and not before_date:
+        click.echo(
+            "Error: provide IDs, --before, or --archive-all for archive action.",
+            err=True,
+        )
+        sys.exit(1)
+
+    body: dict = {"action": "archive", "note": note}
+    if ids:
+        body["ids"] = ids
+    if before_date:
+        body["before_date"] = before_date
+
+    resp = _api_request("aifs", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    count = data.get("count", 0)
+    archived_subs = data.get("submissions", [])
+
+    click.echo(
+        f"\n{click.style('Archived', fg='green', bold=True)} {count} submission(s):"
+    )
+    for sub in archived_subs:
+        short_id = sub.get("short_id", "")
+        if short_id:
+            click.echo(f"  {click.style(short_id, fg='magenta')}")
+    click.echo(f"  Note: {note}")
+    click.echo()
+
+
+def _aifs_unarchive(ids: list[str]) -> None:
+    """Unarchive AI First Show submissions."""
+    if not ids:
+        click.echo("Error: provide IDs for unarchive action.", err=True)
+        sys.exit(1)
+
+    body: dict = {"action": "unarchive", "ids": ids}
+
+    resp = _api_request("aifs", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    count = data.get("count", 0)
+    unarchived_subs = data.get("submissions", [])
+
+    click.echo(
+        f"\n{click.style('Unarchived', fg='green', bold=True)} {count} submission(s):"
+    )
+    for sub in unarchived_subs:
+        short_id = sub.get("short_id", "")
+        if short_id:
+            click.echo(f"  {click.style(short_id, fg='magenta')}")
+    click.echo()
 
 
 if __name__ == "__main__":
