@@ -139,6 +139,74 @@ A pg_cron job runs every 6 hours, calling the `sync-substack` edge function. It 
 
 New team members are auto-provisioned when they sign in with Google.
 
+## Semantic Search
+
+Search across 97+ AI-First Show videos by meaning, not just keywords. Powered by OpenAI `text-embedding-3-small` embeddings and pgvector with HNSW indexing.
+
+### CLI search (`als search`)
+
+Find videos and articles by concept:
+
+```
+$ als search "cost of running AI agents" --source aifs --count 3
+
+  1. lnk-yhv  📺 The Prius of Gastown: How I Slashed AI Agent Costs by 83%
+     by AI-First Show · 2026-03-04 · ⏱ 1m 56s · Score: 0.51
+
+  2. lnk-g19  📺 Rent a $1M AI "Lamborghini" for $25/hr? | The AI-First Show
+     by AI-First Show · 2026-02-02 · ⏱ 1m 27s · Score: 0.49
+
+  3. lnk-t9p  📺 The AI Agent Revolution: From Code to Command Center
+     by AI-First Show · 2026-01-26 · ⏱ 1m 25s · Score: 0.44
+```
+
+```
+$ als search "MCP servers" --source aifs --count 3
+
+  1. lnk-t80  📺 So many MCP tools!
+     by AI-First Show · 2025-12-10 · ⏱ 0m 30s · Score: 0.55
+
+  2. lnk-iwu  📺 MCP Observability with Austin Born, CEO @ Shinzo Labs
+     by AI-First Show · 2025-12-10 · ⏱ 52m 06s · Score: 0.39
+
+  3. lnk-kge  📺 Fantasy Role Play - AI Prompt Injection Techniques
+     by AI-First Show · 2025-12-09 · ⏱ 0m 41s · Score: 0.31
+```
+
+### Timestamped transcript search (API)
+
+The `search-videos` edge function searches within video transcripts and returns the exact timestamp where a topic is discussed:
+
+```
+POST /functions/v1/search-videos
+{"query": "agent orchestration swarms", "match_count": 3}
+
+  Commanding AI Agent Swarms Like Age of Empires
+     [0:00] AI agent swarms. That's the new hotness. But can you control them
+     the way you control units in Age of Empires or Starcraft?
+     → https://www.youtube.com/watch?v=...&t=0s
+
+  The AI Agent Revolution: From Code to Command Center
+     [0:00] One is this obsession with visualizing multiple agents. There's even
+     people writing Warcraft inspired like real-time strategy...
+     → https://www.youtube.com/watch?v=...&t=0s
+
+  AI Agent Swarms vs Single Agents
+     [0:00] Are you taking advantage of AI agent swarms or are you using single
+     AI agents? Check out this interview...
+     → https://www.youtube.com/watch?v=...&t=0s
+```
+
+### Test suite
+
+Run the curated test suite to verify search quality:
+
+```bash
+bash scripts/test-semantic-search.sh
+```
+
+Tests 8 queries across topics like Cerebras inference, prompt injection, MCP servers, agent orchestration, and model releases. Each query checks that relevant content appears in the results.
+
 ## Setup
 
 ### Prerequisites
