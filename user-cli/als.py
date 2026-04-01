@@ -1259,7 +1259,7 @@ def _resolve_short_id(api_key: str, short_id: str) -> str | None:
     Uses server-side lookup via get-link?id_prefix=... endpoint.
     Returns the slug if unique match, None if ambiguous or not found.
     """
-    resp = _api_request("get-link", api_key=api_key, params={"id_prefix": short_id})
+    resp = _api_request("get-link", api_key=api_key, json_body={"id_prefix": short_id})
 
     if resp.status_code == 404:
         data = (
