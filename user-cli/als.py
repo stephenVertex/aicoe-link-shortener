@@ -12,7 +12,6 @@ import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
@@ -189,103 +188,6 @@ def _api_request(
     return resp
 
 
-# ---------------------------------------------------------------------------
-# Supabase direct client (for context/pinned operations)
-# ---------------------------------------------------------------------------
-
-_supabase_client = None
-
-
-def _get_supabase():
-    """Lazy-initialise a Supabase client using service-role credentials.
-
-    Reads SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from the environment
-    or from ~/.als.credentials [supabase] section.
-    """
-    global _supabase_client
-    if _supabase_client is not None:
-        return _supabase_client
-
-    url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-
-    if not url or not key:
-        creds = _read_credentials()
-        url = url or creds.get("supabase_url", "")
-        key = key or creds.get("supabase_service_role_key", "")
-
-    if not url or not key:
-        click.echo(
-            "Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set "
-            "(env vars or ~/.als.credentials [default] section).",
-            err=True,
-        )
-        sys.exit(1)
-
-    from supabase import create_client
-
-    _supabase_client = create_client(url, key)
-    return _supabase_client
-
-
-# ---------------------------------------------------------------------------
-# AI UTM inference
-# ---------------------------------------------------------------------------
-
-
-def _infer_utm_from_note(note: str) -> dict[str, str]:
-    """Use claude-haiku to infer utm_source and utm_medium from a note.
-
-    Returns {"utm_source": "...", "utm_medium": "..."}.
-    Falls back to source=direct, medium=referral on any failure.
-    """
-    fallback = {"utm_source": "direct", "utm_medium": "referral"}
-    if not note.strip():
-        return fallback
-
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic()
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=100,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Given this description of where a link will be shared, "
-                        "return a JSON object with utm_source and utm_medium.\n\n"
-                        "Common mappings:\n"
-                        '- twitter/x → {"utm_source": "twitter", "utm_medium": "social"}\n'
-                        '- linkedin → {"utm_source": "linkedin", "utm_medium": "social"}\n'
-                        '- youtube → {"utm_source": "youtube", "utm_medium": "video"}\n'
-                        '- email/newsletter → {"utm_source": "email", "utm_medium": "newsletter"}\n'
-                        '- discord/slack → {"utm_source": "discord"/"slack", "utm_medium": "social"}\n'
-                        '- blog/website → {"utm_source": "<site>", "utm_medium": "referral"}\n'
-                        "\nReturn ONLY valid JSON, no explanation.\n\n"
-                        f"Description: {note}"
-                    ),
-                }
-            ],
-        )
-        text = resp.content[0].text.strip()
-        result = json.loads(text)
-        return {
-            "utm_source": str(result.get("utm_source", "direct")).lower(),
-            "utm_medium": str(result.get("utm_medium", "referral")).lower(),
-        }
-    except Exception:
-        return fallback
-
-
-def _slugify(text: str) -> str:
-    """Convert text to a URL-friendly slug."""
-    slug = text.lower().strip()
-    slug = re.sub(r"[^\w\s-]", "", slug)
-    slug = re.sub(r"[\s_]+", "-", slug)
-    slug = re.sub(r"-+", "-", slug)
-    return slug.strip("-")
 
 
 # ---------------------------------------------------------------------------
@@ -648,110 +550,47 @@ def shorten(
 def _shorten_with_note(
     link_id_or_url: str, note: str, expires: str | None, no_expires: bool
 ):
-    """Create a tracking variant using AI-inferred UTM from --note."""
-    sb = _get_supabase()
-
-    # Resolve link
-    if link_id_or_url.startswith("lnk-"):
-        result = sb.table("links").select("id, slug").eq("id", link_id_or_url).execute()
-        if not result.data:
-            # Try prefix match
-            result = (
-                sb.table("links")
-                .select("id, slug")
-                .like("id", f"{link_id_or_url}%")
-                .execute()
-            )
-        if not result.data:
-            click.echo(f"Link not found: {link_id_or_url}", err=True)
-            sys.exit(1)
-        if len(result.data) > 1:
-            click.echo(f"Ambiguous ID '{link_id_or_url}', matches:", err=True)
-            for r in result.data[:5]:
-                click.echo(f"  {r['id']}", err=True)
-            sys.exit(1)
-        link = result.data[0]
-    else:
-        # Try by URL or slug
-        result = (
-            sb.table("links")
-            .select("id, slug")
-            .eq("destination_url", link_id_or_url)
-            .execute()
-        )
-        if not result.data:
-            result = (
-                sb.table("links")
-                .select("id, slug")
-                .eq("slug", link_id_or_url)
-                .execute()
-            )
-        if not result.data:
-            click.echo(f"Link not found: {link_id_or_url}", err=True)
-            sys.exit(1)
-        link = result.data[0]
-
-    # Infer UTM from note
-    click.echo("Inferring UTM parameters from note...")
-    utm = _infer_utm_from_note(note)
-    click.echo(f"  source={utm['utm_source']}  medium={utm['utm_medium']}")
-
-    # Resolve person from API key
-    api_key = _get_api_key()
-    person_result = sb.table("people").select("id, slug, name").eq("api_key", api_key).execute()
-    if not person_result.data:
-        click.echo("Could not resolve your identity from API key.", err=True)
+    """Create a tracking variant using server-side AI-inferred UTM from --note."""
+    if expires and not re.match(r"^\d+d$", expires):
+        click.echo("Error: --expires must be in the format Nd (e.g. 30d, 90d).", err=True)
         sys.exit(1)
-    person = person_result.data[0]
 
-    # Compute expires_at
+    click.echo("Creating variant with server-side UTM inference...")
+
+    body: dict = {
+        "action": "shorten_with_note",
+        "link": link_id_or_url,
+        "note": note,
+    }
+    if expires:
+        body["expires"] = expires
     if no_expires:
-        expires_at = None
-    elif expires:
-        match = re.match(r"^(\d+)d$", expires)
-        if not match:
-            click.echo("Error: --expires must be in the format Nd (e.g. 30d, 90d).", err=True)
-            sys.exit(1)
-        days = int(match.group(1))
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
-    else:
-        # Default 60 days
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=60)).isoformat()
+        body["no_expires"] = True
 
-    # Create tracking variant via ensure_tracking_variant RPC then update note/expires
-    rpc_result = sb.rpc(
-        "ensure_tracking_variant",
-        {
-            "p_link_id": link["id"],
-            "p_ref": person["slug"],
-            "p_source": utm["utm_source"],
-            "p_medium": utm["utm_medium"],
-        },
-    ).execute()
+    resp = _api_request("manage-links", json_body=body)
+    data = resp.json()
+    if resp.status_code != 200:
+        if "matches" in data:
+            click.echo(f"Ambiguous ID '{link_id_or_url}', matches:", err=True)
+            for r in data["matches"][:5]:
+                click.echo(f"  {r['id']}", err=True)
+        else:
+            click.echo(f"{data.get('error', resp.text)}", err=True)
+        sys.exit(1)
 
-    variant_data = rpc_result.data
-    if isinstance(variant_data, str):
-        variant_data = json.loads(variant_data)
-    variant_id = variant_data.get("id", "")
-    suffix = variant_data.get("suffix", "")
-
-    # Update note and expires_at on the variant
-    update_fields: dict = {"note": note}
-    if expires_at is not None:
-        update_fields["expires_at"] = expires_at
-    sb.table("tracking_variants").update(update_fields).eq("id", variant_id).execute()
-
-    short_url = f"https://aicoe.fit/{link['slug']}-{suffix}"
+    link = data.get("link", {})
+    utm = data.get("utm", {})
+    variant = data.get("variant", {})
 
     click.echo(f"\n{click.style('Variant created:', fg='green', bold=True)}")
-    click.echo(f"  Link:    {link['slug']} ({link['id']})")
+    click.echo(f"  Link:    {link.get('slug', '')} ({link.get('id', '')})")
     click.echo(f"  Note:    {note}")
-    click.echo(f"  UTM:     source={utm['utm_source']}, medium={utm['utm_medium']}")
-    if expires_at:
-        click.echo(f"  Expires: {expires_at[:10]}")
+    click.echo(f"  UTM:     source={utm.get('utm_source', '?')}, medium={utm.get('utm_medium', '?')}")
+    if variant.get("expires_at"):
+        click.echo(f"  Expires: {variant['expires_at'][:10]}")
     else:
         click.echo(f"  Expires: never")
-    click.echo(f"  Short:   {short_url}")
+    click.echo(f"  Short:   {variant.get('short_url', '')}")
     click.echo()
 
 
@@ -785,14 +624,16 @@ def links_list(pinned: bool):
     Examples:
       als links list --pinned
     """
-    sb = _get_supabase()
-    query = sb.table("links").select("id, slug, destination_url, title, is_pinned, created_at")
+    params = {}
     if pinned:
-        query = query.eq("is_pinned", True)
-    query = query.order("created_at", desc=True).limit(50)
-    result = query.execute()
+        params["pinned"] = "true"
+    resp = _api_request("manage-links", method="GET", params=params)
+    if resp.status_code != 200:
+        click.echo(f"Error: {resp.json().get('error', resp.text)}", err=True)
+        sys.exit(1)
 
-    if not result.data:
+    links = resp.json().get("links", [])
+    if not links:
         if pinned:
             click.echo("No pinned links. Use 'als links pin <slug>' to pin one.")
         else:
@@ -800,9 +641,9 @@ def links_list(pinned: bool):
         return
 
     label = "Pinned links" if pinned else "Links"
-    click.echo(f"\n{label} ({len(result.data)}):\n")
+    click.echo(f"\n{label} ({len(links)}):\n")
 
-    for link in result.data:
+    for link in links:
         pin_marker = " [pinned]" if link.get("is_pinned") else ""
         title = link.get("title") or link.get("slug", "")
         click.echo(
@@ -826,26 +667,22 @@ def links_pin(slug_or_id: str):
       als links pin substack
       als links pin lnk-abc123
     """
-    sb = _get_supabase()
-
-    if slug_or_id.startswith("lnk-"):
-        result = sb.table("links").select("id, slug").like("id", f"{slug_or_id}%").execute()
-    else:
-        result = sb.table("links").select("id, slug").eq("slug", slug_or_id).execute()
-
-    if not result.data:
-        click.echo(f"Link not found: {slug_or_id}", err=True)
-        sys.exit(1)
-    if len(result.data) > 1:
-        click.echo(f"Ambiguous match for '{slug_or_id}':", err=True)
-        for r in result.data[:5]:
-            click.echo(f"  {r['id']}  {r['slug']}", err=True)
+    resp = _api_request(
+        "manage-links",
+        json_body={"action": "pin", "slug_or_id": slug_or_id},
+    )
+    data = resp.json()
+    if resp.status_code != 200:
+        if "matches" in data:
+            click.echo(f"Ambiguous match for '{slug_or_id}':", err=True)
+            for r in data["matches"]:
+                click.echo(f"  {r['id']}  {r['slug']}", err=True)
+        else:
+            click.echo(f"{data.get('error', resp.text)}", err=True)
         sys.exit(1)
 
-    link = result.data[0]
-    sb.table("links").update({"is_pinned": True}).eq("id", link["id"]).execute()
-
-    click.echo(f"\nPinned: {click.style(link['slug'], bold=True)} ({link['id']})")
+    link = data.get("link", {})
+    click.echo(f"\nPinned: {click.style(link.get('slug', slug_or_id), bold=True)} ({link.get('id', '')})")
     click.echo()
 
 
@@ -886,29 +723,24 @@ def context_create(label: str, expires: str | None):
       als context create "AI First Show Apr 1 2026"
       als context create "Newsletter Issue 42" --expires 30d
     """
-    sb = _get_supabase()
-    slug = _slugify(label)
-
-    expires_at = None
+    body: dict = {"action": "create", "label": label}
     if expires:
-        match = re.match(r"^(\d+)d$", expires)
-        if not match:
+        if not re.match(r"^\d+d$", expires):
             click.echo("Error: --expires must be in the format Nd (e.g. 30d, 90d).", err=True)
             sys.exit(1)
-        days = int(match.group(1))
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        body["expires"] = expires
 
-    row: dict = {"label": label, "slug": slug}
-    if expires_at:
-        row["expires_at"] = expires_at
+    resp = _api_request("manage-contexts", json_body=body)
+    if resp.status_code != 200:
+        click.echo(f"Error: {resp.json().get('error', resp.text)}", err=True)
+        sys.exit(1)
 
-    result = sb.table("link_contexts").insert(row).execute()
-    ctx = result.data[0]
+    ctx = resp.json().get("context", {})
 
     click.echo(f"\n{click.style('Context created:', fg='green', bold=True)}")
-    click.echo(f"  ID:      {ctx['id']}")
-    click.echo(f"  Label:   {ctx['label']}")
-    click.echo(f"  Slug:    {ctx['slug']}")
+    click.echo(f"  ID:      {ctx.get('id', '')}")
+    click.echo(f"  Label:   {ctx.get('label', '')}")
+    click.echo(f"  Slug:    {ctx.get('slug', '')}")
     if ctx.get("expires_at"):
         click.echo(f"  Expires: {ctx['expires_at'][:10]}")
     else:
@@ -925,92 +757,42 @@ def context_generate(ctx_id: str, pinned: bool, note: str):
 
     Creates tracking variants for all pinned links (with --pinned) scoped
     to the given context. The context slug becomes utm_content, and UTM
-    source/medium are inferred from --note.
+    source/medium are inferred from --note via server-side AI.
 
     \b
     Examples:
       als context generate ctx-abc --pinned --note "youtube video description"
     """
-    sb = _get_supabase()
-
-    # Resolve context
-    ctx_result = (
-        sb.table("link_contexts")
-        .select("id, label, slug")
-        .like("id", f"{ctx_id}%")
-        .execute()
-    )
-    if not ctx_result.data:
-        click.echo(f"Context not found: {ctx_id}", err=True)
-        sys.exit(1)
-    if len(ctx_result.data) > 1:
-        click.echo(f"Ambiguous context ID '{ctx_id}':", err=True)
-        for c in ctx_result.data[:5]:
-            click.echo(f"  {c['id']}  {c['label']}", err=True)
-        sys.exit(1)
-    ctx = ctx_result.data[0]
-
-    # Get links to generate for
-    if pinned:
-        links_result = (
-            sb.table("links")
-            .select("id, slug")
-            .eq("is_pinned", True)
-            .execute()
-        )
-    else:
+    if not pinned:
         click.echo("Error: --pinned is required (specify which links to generate for).", err=True)
         sys.exit(1)
 
-    if not links_result.data:
-        click.echo("No pinned links found. Pin some with 'als links pin <slug>'.")
-        return
+    click.echo("Generating tracking variants (server-side UTM inference)...")
 
-    # Resolve person
-    api_key = _get_api_key()
-    person_result = sb.table("people").select("id, slug, name").eq("api_key", api_key).execute()
-    if not person_result.data:
-        click.echo("Could not resolve your identity from API key.", err=True)
+    resp = _api_request(
+        "manage-contexts",
+        json_body={
+            "action": "generate",
+            "ctx_id": ctx_id,
+            "pinned": True,
+            "note": note,
+        },
+    )
+    data = resp.json()
+    if resp.status_code != 200:
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
         sys.exit(1)
-    person = person_result.data[0]
 
-    # Infer UTM
-    click.echo("Inferring UTM parameters from note...")
-    utm = _infer_utm_from_note(note)
-    click.echo(f"  source={utm['utm_source']}  medium={utm['utm_medium']}")
+    utm = data.get("utm", {})
+    click.echo(f"  source={utm.get('utm_source', '?')}  medium={utm.get('utm_medium', '?')}")
     click.echo()
 
-    # Generate variants for each link
-    generated = []
-    for link in links_result.data:
-        rpc_result = sb.rpc(
-            "ensure_tracking_variant",
-            {
-                "p_link_id": link["id"],
-                "p_ref": person["slug"],
-                "p_source": utm["utm_source"],
-                "p_medium": utm["utm_medium"],
-                "p_content": ctx["slug"],
-            },
-        ).execute()
-
-        variant_data = rpc_result.data
-        if isinstance(variant_data, str):
-            variant_data = json.loads(variant_data)
-        variant_id = variant_data.get("id", "")
-        suffix = variant_data.get("suffix", "")
-
-        # Update variant with context_id and note
-        sb.table("tracking_variants").update(
-            {"context_id": ctx["id"], "note": note}
-        ).eq("id", variant_id).execute()
-
-        short_url = f"https://aicoe.fit/{link['slug']}-{suffix}"
-        generated.append({"slug": link["slug"], "short_url": short_url})
+    ctx = data.get("context", {})
+    generated = data.get("generated", [])
 
     click.echo(
         f"{click.style('Generated', fg='green', bold=True)} {len(generated)} variant(s) "
-        f"for context {click.style(ctx['label'], bold=True)}:\n"
+        f"for context {click.style(ctx.get('label', ctx_id), bold=True)}:\n"
     )
     for g in generated:
         click.echo(f"  {g['slug']:30s}  {g['short_url']}")
@@ -1026,70 +808,34 @@ def context_show(ctx_id: str):
     Examples:
       als context show ctx-abc
     """
-    sb = _get_supabase()
-
-    # Resolve context
-    ctx_result = (
-        sb.table("link_contexts")
-        .select("*")
-        .like("id", f"{ctx_id}%")
-        .execute()
-    )
-    if not ctx_result.data:
-        click.echo(f"Context not found: {ctx_id}", err=True)
+    resp = _api_request("manage-contexts", method="GET", params={"id": ctx_id})
+    data = resp.json()
+    if resp.status_code != 200:
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
         sys.exit(1)
-    if len(ctx_result.data) > 1:
-        click.echo(f"Ambiguous context ID '{ctx_id}':", err=True)
-        for c in ctx_result.data[:5]:
-            click.echo(f"  {c['id']}  {c['label']}", err=True)
-        sys.exit(1)
-    ctx = ctx_result.data[0]
 
-    click.echo(f"\n{click.style(ctx['label'], bold=True)}")
-    click.echo(f"  ID:       {ctx['id']}")
-    click.echo(f"  Slug:     {ctx['slug']}")
-    click.echo(f"  Created:  {ctx['created_at'][:10]}")
+    ctx = data.get("context", {})
+    variants = data.get("variants", [])
+
+    click.echo(f"\n{click.style(ctx.get('label', ''), bold=True)}")
+    click.echo(f"  ID:       {ctx.get('id', '')}")
+    click.echo(f"  Slug:     {ctx.get('slug', '')}")
+    click.echo(f"  Created:  {ctx.get('created_at', '')[:10]}")
     if ctx.get("expires_at"):
         click.echo(f"  Expires:  {ctx['expires_at'][:10]}")
     if ctx.get("archived_at"):
         click.echo(f"  Archived: {ctx['archived_at'][:10]}")
-
-    # Get variants for this context
-    variants_result = (
-        sb.table("tracking_variants")
-        .select("id, suffix, link_id, utm_source, utm_medium, note, ref")
-        .eq("context_id", ctx["id"])
-        .execute()
-    )
-    variants = variants_result.data or []
 
     if not variants:
         click.echo("\n  No variants generated for this context yet.")
         click.echo()
         return
 
-    # Resolve link slugs
-    link_ids = list({v["link_id"] for v in variants})
-    links_result = sb.table("links").select("id, slug").in_("id", link_ids).execute()
-    link_map = {l["id"]: l["slug"] for l in (links_result.data or [])}
-
-    # Get click counts per variant via direct query
-    click_map: dict[str, int] = {}
-    if variant_ids:
-        for vid in variant_ids:
-            count_result = (
-                sb.table("click_log")
-                .select("id", count="exact")
-                .eq("variant_id", vid)
-                .execute()
-            )
-            click_map[vid] = count_result.count or 0
-
     click.echo(f"\n  Variants ({len(variants)}):\n")
     for v in variants:
-        link_slug = link_map.get(v["link_id"], v["link_id"][:12])
-        short_url = f"https://aicoe.fit/{link_slug}-{v['suffix']}"
-        clicks = click_map.get(v["id"], 0)
+        link_slug = v.get("link_slug", v.get("link_id", "")[:12])
+        short_url = v.get("short_url", "")
+        clicks = v.get("clicks", 0)
         click.echo(f"    {link_slug:25s}  {short_url}  ({clicks} clicks)")
 
     click.echo()
@@ -1113,16 +859,16 @@ def context_list(expired: bool):
       als context list
       als context list --expired
     """
-    sb = _get_supabase()
-
-    query = sb.table("link_contexts").select("*").order("created_at", desc=True)
+    params: dict[str, str] = {"list": "true"}
     if expired:
-        query = query.not_.is_("archived_at", "null")
-    else:
-        query = query.is_("archived_at", "null")
+        params["archived"] = "true"
 
-    result = query.execute()
-    contexts = result.data or []
+    resp = _api_request("manage-contexts", method="GET", params=params)
+    if resp.status_code != 200:
+        click.echo(f"Error: {resp.json().get('error', resp.text)}", err=True)
+        sys.exit(1)
+
+    contexts = resp.json().get("contexts", [])
 
     if not contexts:
         label = "expired/archived" if expired else "active"
@@ -1161,29 +907,17 @@ def context_archive(ctx_id: str):
     Examples:
       als context archive ctx-abc
     """
-    sb = _get_supabase()
-
-    ctx_result = (
-        sb.table("link_contexts")
-        .select("id, label")
-        .like("id", f"{ctx_id}%")
-        .execute()
+    resp = _api_request(
+        "manage-contexts",
+        json_body={"action": "archive", "ctx_id": ctx_id},
     )
-    if not ctx_result.data:
-        click.echo(f"Context not found: {ctx_id}", err=True)
+    data = resp.json()
+    if resp.status_code != 200:
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
         sys.exit(1)
-    if len(ctx_result.data) > 1:
-        click.echo(f"Ambiguous context ID '{ctx_id}':", err=True)
-        for c in ctx_result.data[:5]:
-            click.echo(f"  {c['id']}  {c['label']}", err=True)
-        sys.exit(1)
-    ctx = ctx_result.data[0]
 
-    sb.table("link_contexts").update(
-        {"archived_at": datetime.now(timezone.utc).isoformat()}
-    ).eq("id", ctx["id"]).execute()
-
-    click.echo(f"\nArchived: {click.style(ctx['label'], bold=True)} ({ctx['id']})")
+    ctx = data.get("context", {})
+    click.echo(f"\nArchived: {click.style(ctx.get('label', ctx_id), bold=True)} ({ctx.get('id', '')})")
     click.echo()
 
 
