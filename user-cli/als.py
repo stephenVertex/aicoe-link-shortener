@@ -222,6 +222,107 @@ def cli():
     pass
 
 
+@cli.command("help")
+def help_cmd():
+    """Show use-case-driven guidance for common workflows."""
+    _h = click.style  # shorthand
+
+    sections = [
+        (
+            "1. Share a specific article on social media",
+            "You wrote or found an article and want to share it on Twitter/LinkedIn "
+            "with a link that tracks this specific share.",
+            [
+                'als search "your article topic"       # find it by topic',
+                "als get lnk-xxx                       # see full details + all your tracking links",
+                "# or, create a one-off variant with AI-inferred UTM:",
+                'als shorten lnk-xxx --note "replying to @mike on twitter"',
+                "# → aicoe.fit/article-slug-a1b2c3   (auto-expires 60d)",
+            ],
+        ),
+        (
+            "2. YouTube video description",
+            "You posted a video and want tracked links to your Substack, Discord, "
+            "etc. in the description. All links are clean (no visible UTM params).",
+            [
+                'als context create "My Video Title (1 Apr 2026)" --expires 90d',
+                'als context generate ctx-xxx --pinned --note "youtube video description"',
+                "# → aicoe.fit/substack-e7f8a1",
+                "# → aicoe.fit/discord-b2c3d4",
+                "# Paste these into your YouTube description.",
+            ],
+        ),
+        (
+            "3. Check how an article is performing",
+            "See total clicks, per-channel breakdown, or per-person breakdown.",
+            [
+                'als stats "article-slug"              # your clicks',
+                'als stats "article-slug" --everybody  # whole team breakdown',
+                "als stats lnk-xxx --days 7            # last 7 days only",
+            ],
+        ),
+        (
+            "4. See the latest articles",
+            "Quick scan of what has been published recently and get your tracking links.",
+            [
+                "als last 5                            # last 5 articles, all tracking links",
+                "als last 10 --me                      # filter to articles you authored",
+                "als last 10 --summary                 # compact table view",
+            ],
+        ),
+        (
+            "5. Submit a link for the AI First Show",
+            "You found something interesting and want to nominate it for the next episode.",
+            [
+                'als aifs "https://arxiv.org/abs/..." --comment "Strong reasoning paper"',
+                "als aifs list                         # see all current nominations",
+            ],
+        ),
+        (
+            "6. Create a permanent personal short link",
+            "You want a clean short URL for your LinkedIn profile, GitHub, etc.",
+            [
+                'als shorten "https://linkedin.com/in/yourname" --slug linkedinSJB',
+                "# → aicoe.fit/linkedinSJB",
+            ],
+        ),
+        (
+            "7. Find content by topic (semantic search)",
+            "You remember a video or article covered a topic but can't recall the title.",
+            [
+                'als search "late interaction retrieval"',
+                'als search "multi-agent deep research"',
+            ],
+        ),
+        (
+            "8. Manage your tracking channels",
+            "See or customise what channels (Discord, LinkedIn, X, etc.) get variants "
+            "when you run als get.",
+            [
+                "als tracking-variants list",
+                'als tracking-variants add --label "Newsletter" --source newsletter --medium email',
+            ],
+        ),
+    ]
+
+    click.echo()
+    click.echo(_h("als — Use-Case Guide", bold=True, fg="cyan"))
+    click.echo()
+
+    for title, desc, commands in sections:
+        click.echo(_h(title, bold=True))
+        click.echo(f"  {desc}")
+        click.echo()
+        for cmd in commands:
+            click.echo(f"    {cmd}")
+        click.echo()
+
+    click.echo(
+        f"Run {_h('als <command> --help', bold=True)} for full options on any command."
+    )
+    click.echo()
+
+
 @cli.command()
 @click.option("--api-key", required=True, help="Your personal API key (als_...)")
 def login(api_key: str):
