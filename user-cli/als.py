@@ -1160,10 +1160,10 @@ def _resolve_short_id(api_key: str, short_id: str) -> str | None:
     ),
 )
 def search(query: str, count: int, source: str, filter_me: bool):
-    """Search articles and get your personalised tracking links.
+    """Search articles by semantic similarity.
 
-    Uses semantic search to find matching articles, then returns
-    your personalised tracking link for each result.
+    Returns a compact table of matching articles ranked by relevance.
+    Use `als get <lnk-xxx>` to see full details and tracking links for a result.
 
     Use --source to filter by content type:
     - aifs: AI-First Show YouTube videos only
@@ -1174,11 +1174,10 @@ def search(query: str, count: int, source: str, filter_me: bool):
 
         als search "Claude 4" --me
     """
-    api_key = _get_api_key()
-
     # Resolve --me to author name
     author_filter: str | None = None
     if filter_me:
+        api_key = _get_api_key()
         author_filter = _resolve_my_author_name(api_key)
         if not author_filter:
             click.echo(
@@ -1224,56 +1223,30 @@ def search(query: str, count: int, source: str, filter_me: bool):
 
     click.echo(f"\nSearch results for: {click.style(query, bold=True)}\n")
 
-    for i, result in enumerate(results, 1):
+    # Table header
+    click.echo(f"  {'ID':<12s} {'Title':<42s} {'Author':<17s} {'Score':>5s}  {'Date':<10s}")
+    click.echo(f"  {'─' * 12} {'─' * 42} {'─' * 17} {'─' * 5}  {'─' * 10}")
+
+    for result in results:
         full_id = result.get("id", "")
         short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
         title = result.get("title", result.get("slug", ""))
         author = result.get("author", "")
-        slug = result.get("slug", "")
         similarity = result.get("similarity", 0)
         published_at = result.get("published_at") or result.get("created_at", "")
         date_str = published_at[:10] if published_at else ""
-        content_type = result.get("content_type", "article")
 
-        type_label = "📺" if content_type == "video" else "📝"
-        duration_seconds = result.get("duration_seconds")
-        duration_str = ""
-        if duration_seconds:
-            mins, secs = divmod(duration_seconds, 60)
-            hours, mins = divmod(mins, 60)
-            if hours:
-                duration_str = f"  ⏱ {hours}h {mins}m"
-            else:
-                duration_str = f"  ⏱ {mins}m {secs:02d}s"
+        # Truncate title and author to fit table columns
+        if len(title) > 40:
+            title = title[:39] + "…"
+        if len(author) > 15:
+            author = author[:14] + "…"
 
-        id_display = click.style(short_id, fg="magenta") if short_id else ""
-        click.echo(f"  {i}. {id_display}  {type_label} {click.style(title, bold=True)}")
-        click.echo(f"     type: {content_type}")
-        if author:
-            click.echo(f"     by {author}")
-        meta_line = "     " + "  ".join(
-            filter(None, [date_str, duration_str.strip() if duration_str else ""])
-        )
-        if meta_line.strip():
-            click.echo(meta_line)
-        click.echo(f"     Score: {similarity:.2f}")
+        id_display = click.style(f"{short_id:<12s}", fg="magenta") if short_id else f"{'':<12s}"
+        click.echo(f"  {id_display} {title:<42s} {author:<17s} {similarity:5.2f}  {date_str:<10s}")
 
-        # Get tracking link for this article
-        link_resp = _api_request(
-            "get-link",
-            api_key=api_key,
-            json_body={"article_url": slug},
-        )
-        if link_resp.status_code == 200:
-            link_data = link_resp.json()
-            links = link_data.get("links", [])
-            for link in links:
-                label = link.get("label") or link.get("source", "")
-                click.echo(f"     {label:12s}  {link['short_url']}")
-        else:
-            click.echo(f"     (could not generate tracking link)")
-
-        click.echo()
+    click.echo()
+    click.echo("  Use `als get <lnk-xxx>` to see full details and tracking links.")
 
 
 @cli.command()
