@@ -173,28 +173,13 @@ $ als search "MCP servers" --source aifs --count 3
      by AI-First Show · 2025-12-09 · ⏱ 0m 41s · Score: 0.31
 ```
 
-### Timestamped transcript search (API)
+### Video search (API)
 
-The `search-videos` edge function searches within video transcripts and returns the exact timestamp where a topic is discussed:
+Use the `search-articles` edge function with `content_type=video` to search videos:
 
 ```
-POST /functions/v1/search-videos
-{"query": "agent orchestration swarms", "match_count": 3}
-
-  Commanding AI Agent Swarms Like Age of Empires
-     [0:00] AI agent swarms. That's the new hotness. But can you control them
-     the way you control units in Age of Empires or Starcraft?
-     → https://www.youtube.com/watch?v=...&t=0s
-
-  The AI Agent Revolution: From Code to Command Center
-     [0:00] One is this obsession with visualizing multiple agents. There's even
-     people writing Warcraft inspired like real-time strategy...
-     → https://www.youtube.com/watch?v=...&t=0s
-
-  AI Agent Swarms vs Single Agents
-     [0:00] Are you taking advantage of AI agent swarms or are you using single
-     AI agents? Check out this interview...
-     → https://www.youtube.com/watch?v=...&t=0s
+POST /functions/v1/search-articles
+{"query": "agent orchestration swarms", "match_count": 3, "content_type": "video"}
 ```
 
 ### Test suite
