@@ -295,36 +295,12 @@ async def whoami() -> dict:
     api_key = _get_api_key()
     headers = {"x-api-key": api_key}
 
-    probe = await client.post(f"{API_BASE}/get-link", json={}, headers=headers)
-    if probe.status_code == 401:
+    resp = await client.post(f"{API_BASE}/validate-key", json={}, headers=headers)
+    if resp.status_code == 401:
         return {"error": "Invalid API key", "authenticated": False}
 
-    search_data = await _post(
-        "search-articles", json_body={"query": "article", "match_count": 1}
-    )
-    results = search_data.get("results", [])
-    if not results:
-        return {
-            "authenticated": True,
-            "person": None,
-            "note": "Key valid but no articles to resolve identity",
-        }
-
-    slug = results[0].get("slug", "")
-    link_resp = await client.post(
-        f"{API_BASE}/get-link",
-        json={"article_url": slug},
-        headers=headers,
-    )
-    if link_resp.status_code == 200:
-        person = link_resp.json().get("person", {})
-        return {"authenticated": True, "person": person}
-
-    return {
-        "authenticated": True,
-        "person": None,
-        "note": "Key valid but could not resolve identity",
-    }
+    person = resp.json()
+    return {"authenticated": True, "person": person}
 
 
 @mcp.tool()

@@ -1,6 +1,6 @@
 [project]
 name = "als-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "FastMCP server exposing aicoe.fit link shortener tools"
 requires-python = ">=3.11"
 dependencies = [

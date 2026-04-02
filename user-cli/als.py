@@ -131,7 +131,7 @@ def _resolve_my_author_name(api_key: str) -> str | None:
     """Resolve the logged-in user's author name.
 
     Checks ~/.als.credentials for a cached author_name first.  If not
-    cached, falls back to probing the get-link endpoint via the API.
+    cached, falls back to the validate-key endpoint.
 
     Returns the person's name (as stored in the people table, e.g. "Simon Thornton")
     or None if it cannot be determined.
@@ -142,30 +142,11 @@ def _resolve_my_author_name(api_key: str) -> str | None:
     if cached:
         return cached
 
-    # Fall back to auto-resolve via API
-    search_resp = requests.post(
-        f"{API_BASE}/search-articles",
-        json={"query": "article", "match_count": 1},
-        timeout=30,
-    )
-    if search_resp.status_code != 200:
+    # Resolve via validate-key endpoint
+    resp = _api_request("validate-key", api_key=api_key, json_body={})
+    if resp.status_code != 200:
         return None
-    results = search_resp.json().get("results", [])
-    if not results:
-        return None
-    slug = results[0].get("slug", "")
-    if not slug:
-        return None
-    # Call get-link with the slug to retrieve person info
-    link_resp = requests.post(
-        f"{API_BASE}/get-link",
-        json={"article_url": slug},
-        headers={"x-api-key": api_key},
-        timeout=30,
-    )
-    if link_resp.status_code != 200:
-        return None
-    return link_resp.json().get("person", {}).get("name") or None
+    return resp.json().get("name") or None
 
 
 def _api_request(
@@ -484,35 +465,16 @@ def whoami():
     """Show the current authenticated user."""
     api_key = _get_api_key()
 
-    # First, validate the key is still good (400 = valid key, no article provided)
-    probe = _api_request("get-link", api_key=api_key, json_body={})
-    if probe.status_code == 401:
+    resp = _api_request("validate-key", api_key=api_key, json_body={})
+    if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
         sys.exit(1)
 
-    # Search for any article to get one we can use to extract person info
-    search_resp = requests.post(
-        f"{API_BASE}/search-articles",
-        json={"query": "article", "match_count": 1},
-        timeout=30,
+    person = resp.json()
+    click.echo(
+        f"Logged in as: {person.get('name', '?')} ({person.get('slug', '?')})"
     )
-    if search_resp.status_code == 200:
-        results = search_resp.json().get("results", [])
-        if results:
-            slug = results[0].get("slug", "")
-            link_resp = _api_request(
-                "get-link", api_key=api_key, json_body={"article_url": slug}
-            )
-            if link_resp.status_code == 200:
-                person = link_resp.json().get("person", {})
-                click.echo(
-                    f"Logged in as: {person.get('name', '?')} ({person.get('slug', '?')})"
-                )
-                click.echo(f"Credentials: {CREDENTIALS_FILE}")
-                return
-
-    # Fallback: key is valid but couldn't resolve identity
-    click.echo(f"API key is valid. Credentials: {CREDENTIALS_FILE}")
+    click.echo(f"Credentials: {CREDENTIALS_FILE}")
 
 
 @cli.command("set-author-name")
