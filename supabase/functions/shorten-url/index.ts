@@ -52,27 +52,30 @@ async function findOrCreateLink(url: string, customSlug?: string): Promise<{
   published_at: string | null;
   existed: boolean;
 } | null> {
-  // Normalise URL: strip trailing slash for matching
-  const urlNorm = url.replace(/\/+$/, "");
-  const urlWithSlash = urlNorm + "/";
+  // If customSlug provided, skip URL lookup and create new link with that slug
+  if (!customSlug) {
+    // Normalise URL: strip trailing slash for matching
+    const urlNorm = url.replace(/\/+$/, "");
+    const urlWithSlash = urlNorm + "/";
 
-  // Try exact match first
-  const { data: byExact } = await supabase
-    .from("links")
-    .select("id, slug, destination_url, title, author, published_at")
-    .eq("destination_url", urlNorm)
-    .maybeSingle();
+    // Try exact match first
+    const { data: byExact } = await supabase
+      .from("links")
+      .select("id, slug, destination_url, title, author, published_at")
+      .eq("destination_url", urlNorm)
+      .maybeSingle();
 
-  if (byExact) return { ...byExact, existed: true };
+    if (byExact) return { ...byExact, existed: true };
 
-  // Try trailing-slash variant
-  const { data: bySlash } = await supabase
-    .from("links")
-    .select("id, slug, destination_url, title, author, published_at")
-    .eq("destination_url", urlWithSlash)
-    .maybeSingle();
+    // Try trailing-slash variant
+    const { data: bySlash } = await supabase
+      .from("links")
+      .select("id, slug, destination_url, title, author, published_at")
+      .eq("destination_url", urlWithSlash)
+      .maybeSingle();
 
-  if (bySlash) return { ...bySlash, existed: true };
+    if (bySlash) return { ...bySlash, existed: true };
+  }
 
   // Determine the slug to use
   let slug = "";
