@@ -8,6 +8,15 @@ const supabase = createClient(
 
 const DOMAIN = "aicoe.fit";
 
+interface LinkInfo {
+  id: string;
+  slug: string;
+  destination_url: string;
+  title: string | null;
+  author: string | null;
+  published_at: string | null;
+}
+
 interface PersonInfo {
   id: string;
   name: string;
@@ -32,7 +41,7 @@ async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
  */
 async function findLinkByIdPrefix(
   idPrefix: string,
-): Promise<{ id: string; slug: string; destination_url: string; title: string | null; author: string | null; published_at: string | null } | { matches: Array<{ id: string; slug: string; title: string | null }> } | null> {
+): Promise<LinkInfo | { matches: Array<{ id: string; slug: string; title: string | null }> } | null> {
   const { data, error } = await supabase
     .from("links")
     .select("id, slug, destination_url, title, author, published_at")
@@ -55,7 +64,7 @@ async function findLinkByIdPrefix(
  */
 async function findLink(
   articleUrl: string,
-): Promise<{ id: string; slug: string; destination_url: string; title: string | null; author: string | null; published_at: string | null } | null> {
+): Promise<LinkInfo | null> {
   // Try exact slug match first
   const { data: bySlug } = await supabase
     .from("links")
@@ -100,6 +109,111 @@ async function findLink(
   }
 
   return null;
+}
+
+/**
+ * Build a JSON response with tracking variant links for a given article and person.
+ * Fetches the person's source profiles, generates tracking variants via ensure_tracking_variant,
+ * and returns a structured response with article info, short URLs, and person info.
+ */
+async function buildTrackingResponse(
+  link: LinkInfo,
+  person: PersonInfo,
+  source: string,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  const { data: sources } = await supabase
+    .from("person_sources")
+    .select("id, label, utm_source, utm_medium, utm_content, utm_term")
+    .eq("person_id", person.id)
+    .order("label");
+
+  const personSources = sources || [];
+
+  const filteredSources = source
+    ? personSources.filter((s: { utm_source: string }) => s.utm_source === source.toLowerCase())
+    : personSources;
+
+  if (filteredSources.length === 0) {
+    const defaultSource = source || "linkedin";
+    const { data: variant } = await supabase.rpc("ensure_tracking_variant", {
+      p_link_id: link.id,
+      p_ref: person.slug,
+      p_source: defaultSource,
+      p_medium: "social",
+    });
+
+    const suffix = variant?.suffix;
+    const shortUrl = `https://${DOMAIN}/${link.slug}-${suffix}`;
+
+    return new Response(
+      JSON.stringify({
+        article: {
+          title: link.title,
+          author: link.author,
+          slug: link.slug,
+          url: link.destination_url,
+          published_at: link.published_at,
+        },
+        links: [
+          {
+            source: defaultSource,
+            short_url: shortUrl,
+            suffix,
+          },
+        ],
+        person: { name: person.name, slug: person.slug },
+      }),
+      {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
+
+  const links = [];
+  for (const src of filteredSources) {
+    const { data: variant, error: variantError } = await supabase.rpc(
+      "ensure_tracking_variant",
+      {
+        p_link_id: link.id,
+        p_ref: person.slug,
+        p_source: src.utm_source,
+        p_medium: src.utm_medium || "social",
+        p_content: src.utm_content || null,
+        p_term: src.utm_term || null,
+      },
+    );
+
+    if (variantError) {
+      console.error(`Error generating variant for ${src.label}:`, variantError);
+      continue;
+    }
+
+    const suffix = variant?.suffix;
+    links.push({
+      source: src.utm_source,
+      label: src.label,
+      short_url: `https://${DOMAIN}/${link.slug}-${suffix}`,
+      suffix,
+    });
+  }
+
+  return new Response(
+    JSON.stringify({
+      article: {
+        title: link.title,
+        author: link.author,
+        slug: link.slug,
+        url: link.destination_url,
+        published_at: link.published_at,
+      },
+      links,
+      person: { name: person.name, slug: person.slug },
+    }),
+    {
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    },
+  );
 }
 
 Deno.serve(async (req) => {
@@ -195,99 +309,7 @@ Deno.serve(async (req) => {
     }
 
     const link = result;
-    // Get person's source profiles
-    const { data: sources } = await supabase
-      .from("person_sources")
-      .select("id, label, utm_source, utm_medium, utm_content, utm_term")
-      .eq("person_id", person.id)
-      .order("label");
-
-    const personSources = sources || [];
-
-    const filteredSources = source
-      ? personSources.filter((s: { utm_source: string }) => s.utm_source === source.toLowerCase())
-      : personSources;
-
-    if (filteredSources.length === 0) {
-      const defaultSource = source || "linkedin";
-      const { data: variant } = await supabase.rpc("ensure_tracking_variant", {
-        p_link_id: link.id,
-        p_ref: person.slug,
-        p_source: defaultSource,
-        p_medium: "social",
-      });
-
-      const suffix = variant?.suffix;
-      const shortUrl = `https://${DOMAIN}/${link.slug}-${suffix}`;
-
-      return new Response(
-        JSON.stringify({
-          article: {
-            title: link.title,
-            author: link.author,
-            slug: link.slug,
-            url: link.destination_url,
-            published_at: link.published_at,
-          },
-          links: [
-            {
-              source: defaultSource,
-              short_url: shortUrl,
-              suffix,
-            },
-          ],
-          person: { name: person.name, slug: person.slug },
-        }),
-        {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        },
-      );
-    }
-
-    const links = [];
-    for (const src of filteredSources) {
-      const { data: variant, error: variantError } = await supabase.rpc(
-        "ensure_tracking_variant",
-        {
-          p_link_id: link.id,
-          p_ref: person.slug,
-          p_source: src.utm_source,
-          p_medium: src.utm_medium || "social",
-          p_content: src.utm_content || null,
-          p_term: src.utm_term || null,
-        },
-      );
-
-      if (variantError) {
-        console.error(`Error generating variant for ${src.label}:`, variantError);
-        continue;
-      }
-
-      const suffix = variant?.suffix;
-      links.push({
-        source: src.utm_source,
-        label: src.label,
-        short_url: `https://${DOMAIN}/${link.slug}-${suffix}`,
-        suffix,
-      });
-    }
-
-    return new Response(
-      JSON.stringify({
-        article: {
-          title: link.title,
-          author: link.author,
-          slug: link.slug,
-          url: link.destination_url,
-          published_at: link.published_at,
-        },
-        links,
-        person: { name: person.name, slug: person.slug },
-      }),
-      {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
+    return buildTrackingResponse(link, person, source, corsHeaders);
   }
 
   // Find the link
@@ -312,100 +334,5 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Get person's source profiles
-  const { data: sources } = await supabase
-    .from("person_sources")
-    .select("id, label, utm_source, utm_medium, utm_content, utm_term")
-    .eq("person_id", person.id)
-    .order("label");
-
-  const personSources = sources || [];
-
-  // Filter to specific source if requested
-  const filteredSources = source
-    ? personSources.filter((s: { utm_source: string }) => s.utm_source === source.toLowerCase())
-    : personSources;
-
-  if (filteredSources.length === 0) {
-    // Fall back to a default source if none configured
-    const defaultSource = source || "linkedin";
-    const { data: variant } = await supabase.rpc("ensure_tracking_variant", {
-      p_link_id: link.id,
-      p_ref: person.slug,
-      p_source: defaultSource,
-      p_medium: "social",
-    });
-
-    const suffix = variant?.suffix;
-    const shortUrl = `https://${DOMAIN}/${link.slug}-${suffix}`;
-
-    return new Response(
-      JSON.stringify({
-        article: {
-          title: link.title,
-          author: link.author,
-          slug: link.slug,
-          url: link.destination_url,
-          published_at: link.published_at,
-        },
-        links: [
-          {
-            source: defaultSource,
-            short_url: shortUrl,
-            suffix,
-          },
-        ],
-        person: { name: person.name, slug: person.slug },
-      }),
-      {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
-  }
-
-  // Generate/get tracking variants for each source profile
-  const links = [];
-  for (const src of filteredSources) {
-    const { data: variant, error: variantError } = await supabase.rpc(
-      "ensure_tracking_variant",
-      {
-        p_link_id: link.id,
-        p_ref: person.slug,
-        p_source: src.utm_source,
-        p_medium: src.utm_medium || "social",
-        p_content: src.utm_content || null,
-        p_term: src.utm_term || null,
-      },
-    );
-
-    if (variantError) {
-      console.error(`Error generating variant for ${src.label}:`, variantError);
-      continue;
-    }
-
-    const suffix = variant?.suffix;
-    links.push({
-      source: src.utm_source,
-      label: src.label,
-      short_url: `https://${DOMAIN}/${link.slug}-${suffix}`,
-      suffix,
-    });
-  }
-
-  return new Response(
-    JSON.stringify({
-      article: {
-        title: link.title,
-        author: link.author,
-        slug: link.slug,
-        url: link.destination_url,
-        published_at: link.published_at,
-      },
-      links,
-      person: { name: person.name, slug: person.slug },
-    }),
-    {
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    },
-  );
+  return buildTrackingResponse(link, person, source, corsHeaders);
 });
