@@ -253,7 +253,27 @@ def help_cmd():
             ],
         ),
         (
-            "3. Check how an article is performing",
+            "3. Pin your permanent destinations (LinkedIn, Substack, Discord, etc.)",
+            "Pinned links are permanent destinations you want to track everywhere — "
+            "your LinkedIn profile, your Substack, Discord invite, etc. Pin them "
+            "once, then they appear in every context you generate.",
+            [
+                "# Pin a link (one-time setup per destination)",
+                'als shorten https://linkedin.com/in/yourname --slug linkedinSJB',
+                'als shorten https://trilogyai.substack.com --slug substack',
+                "# Then ask your admin to mark them as pinned, or they can pin via:",
+                "#   als links pin linkedinSJB",
+                "#   als links pin substack",
+                "",
+                "# List your pinned links",
+                "als links list --pinned",
+                "",
+                "# Once pinned, any context generate --pinned will include them:",
+                'als context generate ctx-xxx --pinned --note "youtube description"',
+            ],
+        ),
+        (
+            "4. Check how an article is performing",
             "See total clicks, per-channel breakdown, or per-person breakdown.",
             [
                 'als stats "article-slug"              # your clicks',
@@ -262,7 +282,7 @@ def help_cmd():
             ],
         ),
         (
-            "4. See the latest articles",
+            "5. See the latest articles",
             "Quick scan of what has been published recently and get your tracking links.",
             [
                 "als last 5                            # last 5 articles, all tracking links",
@@ -271,7 +291,7 @@ def help_cmd():
             ],
         ),
         (
-            "5. Submit a link for the AI First Show",
+            "6. Submit a link for the AI First Show",
             "You found something interesting and want to nominate it for the next episode.",
             [
                 'als aifs "https://arxiv.org/abs/..." --comment "Strong reasoning paper"',
@@ -279,7 +299,7 @@ def help_cmd():
             ],
         ),
         (
-            "6. Create a permanent personal short link",
+            "7. Create a permanent personal short link",
             "You want a clean short URL for your LinkedIn profile, GitHub, etc.",
             [
                 'als shorten "https://linkedin.com/in/yourname" --slug linkedinSJB',
@@ -287,7 +307,7 @@ def help_cmd():
             ],
         ),
         (
-            "7. Find content by topic (semantic search)",
+            "8. Find content by topic (semantic search)",
             "You remember a video or article covered a topic but can't recall the title.",
             [
                 'als search "late interaction retrieval"',
@@ -295,7 +315,7 @@ def help_cmd():
             ],
         ),
         (
-            "8. Manage your tracking channels",
+            "9. Manage your tracking channels",
             "See or customise what channels (Discord, LinkedIn, X, etc.) get variants "
             "when you run als get.",
             [
