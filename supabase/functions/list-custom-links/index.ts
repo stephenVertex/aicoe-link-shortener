@@ -126,29 +126,13 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Get all tracking variants for this person per link
-  // Re-fetch with full variant details
   const linkIds = (links || []).map((l: { id: string }) => l.id);
 
-  // Get all person sources to ensure tracking variants exist for each
+  // Get person sources for label lookup
   const { data: personSources } = await supabase
     .from("person_sources")
     .select("utm_source, utm_medium, utm_content, utm_term, label")
     .eq("person_id", person.id);
-
-  // Ensure tracking variants exist for each link + source combination
-  for (const linkId of linkIds) {
-    for (const src of personSources || []) {
-      await supabase.rpc("ensure_tracking_variant", {
-        p_link_id: linkId,
-        p_ref: person.slug,
-        p_source: src.utm_source,
-        p_medium: src.utm_medium || "social",
-        p_content: src.utm_content || null,
-        p_term: src.utm_term || null,
-      });
-    }
-  }
 
   // Build composite key for label lookup: "source|medium|content|term"
   const sourceLabels: Record<string, string> = {};
