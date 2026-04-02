@@ -169,8 +169,6 @@ def _api_request(
     return resp
 
 
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -240,8 +238,8 @@ def help_cmd():
             "once, then they appear in every context you generate.",
             [
                 "# Pin a link (one-time setup per destination)",
-                'als shorten https://linkedin.com/in/yourname --slug linkedinSJB',
-                'als shorten https://trilogyai.substack.com --slug substack',
+                "als shorten https://linkedin.com/in/yourname --slug linkedinSJB",
+                "als shorten https://trilogyai.substack.com --slug substack",
                 "# Then ask your admin to mark them as pinned, or they can pin via:",
                 "#   als links pin linkedinSJB",
                 "#   als links pin substack",
@@ -471,9 +469,7 @@ def whoami():
         sys.exit(1)
 
     person = resp.json()
-    click.echo(
-        f"Logged in as: {person.get('name', '?')} ({person.get('slug', '?')})"
-    )
+    click.echo(f"Logged in as: {person.get('name', '?')} ({person.get('slug', '?')})")
     click.echo(f"Credentials: {CREDENTIALS_FILE}")
 
 
@@ -635,7 +631,9 @@ def _shorten_with_note(
 ):
     """Create a tracking variant using server-side AI-inferred UTM from --note."""
     if expires and not re.match(r"^\d+d$", expires):
-        click.echo("Error: --expires must be in the format Nd (e.g. 30d, 90d).", err=True)
+        click.echo(
+            "Error: --expires must be in the format Nd (e.g. 30d, 90d).", err=True
+        )
         sys.exit(1)
 
     click.echo("Creating variant with server-side UTM inference...")
@@ -668,7 +666,9 @@ def _shorten_with_note(
     click.echo(f"\n{click.style('Variant created:', fg='green', bold=True)}")
     click.echo(f"  Link:    {link.get('slug', '')} ({link.get('id', '')})")
     click.echo(f"  Note:    {note}")
-    click.echo(f"  UTM:     source={utm.get('utm_source', '?')}, medium={utm.get('utm_medium', '?')}")
+    click.echo(
+        f"  UTM:     source={utm.get('utm_source', '?')}, medium={utm.get('utm_medium', '?')}"
+    )
     if variant.get("expires_at"):
         click.echo(f"  Expires: {variant['expires_at'][:10]}")
     else:
@@ -765,7 +765,9 @@ def links_pin(slug_or_id: str):
         sys.exit(1)
 
     link = data.get("link", {})
-    click.echo(f"\nPinned: {click.style(link.get('slug', slug_or_id), bold=True)} ({link.get('id', '')})")
+    click.echo(
+        f"\nPinned: {click.style(link.get('slug', slug_or_id), bold=True)} ({link.get('id', '')})"
+    )
     click.echo()
 
 
@@ -809,7 +811,9 @@ def context_create(label: str, expires: str | None):
     body: dict = {"action": "create", "label": label}
     if expires:
         if not re.match(r"^\d+d$", expires):
-            click.echo("Error: --expires must be in the format Nd (e.g. 30d, 90d).", err=True)
+            click.echo(
+                "Error: --expires must be in the format Nd (e.g. 30d, 90d).", err=True
+            )
             sys.exit(1)
         body["expires"] = expires
 
@@ -833,7 +837,9 @@ def context_create(label: str, expires: str | None):
 
 @context_group.command("generate")
 @click.argument("ctx_id")
-@click.option("--pinned", is_flag=True, default=False, help="Generate for all pinned links.")
+@click.option(
+    "--pinned", is_flag=True, default=False, help="Generate for all pinned links."
+)
 @click.option("--note", required=True, help="Description for AI UTM inference.")
 def context_generate(ctx_id: str, pinned: bool, note: str):
     """Generate tracking variants for a context.
@@ -847,7 +853,10 @@ def context_generate(ctx_id: str, pinned: bool, note: str):
       als context generate ctx-abc --pinned --note "youtube video description"
     """
     if not pinned:
-        click.echo("Error: --pinned is required (specify which links to generate for).", err=True)
+        click.echo(
+            "Error: --pinned is required (specify which links to generate for).",
+            err=True,
+        )
         sys.exit(1)
 
     click.echo("Generating tracking variants (server-side UTM inference)...")
@@ -867,7 +876,9 @@ def context_generate(ctx_id: str, pinned: bool, note: str):
         sys.exit(1)
 
     utm = data.get("utm", {})
-    click.echo(f"  source={utm.get('utm_source', '?')}  medium={utm.get('utm_medium', '?')}")
+    click.echo(
+        f"  source={utm.get('utm_source', '?')}  medium={utm.get('utm_medium', '?')}"
+    )
     click.echo()
 
     ctx = data.get("context", {})
@@ -1000,7 +1011,9 @@ def context_archive(ctx_id: str):
         sys.exit(1)
 
     ctx = data.get("context", {})
-    click.echo(f"\nArchived: {click.style(ctx.get('label', ctx_id), bold=True)} ({ctx.get('id', '')})")
+    click.echo(
+        f"\nArchived: {click.style(ctx.get('label', ctx_id), bold=True)} ({ctx.get('id', '')})"
+    )
     click.echo()
 
 
@@ -1141,7 +1154,13 @@ def _resolve_short_id(api_key: str, short_id: str) -> str | None:
         "Uses cached author name (see als set-author-name) or auto-resolves via API."
     ),
 )
-def search(query: str, count: int, source: str, filter_me: bool):
+@click.option(
+    "--tracking",
+    is_flag=True,
+    default=False,
+    help="Include tracking links for each result (makes one batch API call).",
+)
+def search(query: str, count: int, source: str, filter_me: bool, tracking: bool):
     """Search articles by semantic similarity.
 
     Returns a compact table of matching articles ranked by relevance.
@@ -1155,11 +1174,15 @@ def search(query: str, count: int, source: str, filter_me: bool):
     Use --me to filter to your own articles:
 
         als search "Claude 4" --me
+
+    Use --tracking to include your tracking links (one batch call, no N+1):
+
+        als search "AI agents" --tracking
     """
-    # Resolve --me to author name
+    api_key = _get_api_key() if tracking or filter_me else ""
+
     author_filter: str | None = None
     if filter_me:
-        api_key = _get_api_key()
         author_filter = _resolve_my_author_name(api_key)
         if not author_filter:
             click.echo(
@@ -1175,7 +1198,6 @@ def search(query: str, count: int, source: str, filter_me: bool):
     if source != "both":
         content_type = "video" if source == "aifs" else "article"
         search_body["content_type"] = content_type
-        # Videos are long multi-topic documents; lower threshold needed for single-topic queries
         if content_type == "video":
             search_body["match_threshold"] = 0.2
 
@@ -1203,10 +1225,23 @@ def search(query: str, count: int, source: str, filter_me: bool):
     ids = [r.get("id", "") for r in results if r.get("id")]
     short_id_map = _compute_short_ids(ids)
 
+    tracking_data: dict[str, dict] = {}
+    if tracking:
+        slugs = [r.get("slug", "") for r in results if r.get("slug")]
+        if slugs:
+            batch_resp = _api_request(
+                "batch-get-links",
+                api_key=api_key,
+                json_body={"slugs": slugs},
+            )
+            if batch_resp.status_code == 200:
+                tracking_data = batch_resp.json().get("results", {})
+
     click.echo(f"\nSearch results for: {click.style(query, bold=True)}\n")
 
-    # Table header
-    click.echo(f"  {'ID':<12s} {'Title':<42s} {'Author':<17s} {'Score':>5s}  {'Date':<10s}")
+    click.echo(
+        f"  {'ID':<12s} {'Title':<42s} {'Author':<17s} {'Score':>5s}  {'Date':<10s}"
+    )
     click.echo(f"  {'─' * 12} {'─' * 42} {'─' * 17} {'─' * 5}  {'─' * 10}")
 
     for result in results:
@@ -1217,18 +1252,30 @@ def search(query: str, count: int, source: str, filter_me: bool):
         similarity = result.get("similarity", 0)
         published_at = result.get("published_at") or result.get("created_at", "")
         date_str = published_at[:10] if published_at else ""
+        slug = result.get("slug", "")
 
-        # Truncate title and author to fit table columns
         if len(title) > 40:
             title = title[:39] + "…"
         if len(author) > 15:
             author = author[:14] + "…"
 
-        id_display = click.style(f"{short_id:<12s}", fg="magenta") if short_id else f"{'':<12s}"
-        click.echo(f"  {id_display} {title:<42s} {author:<17s} {similarity:5.2f}  {date_str:<10s}")
+        id_display = (
+            click.style(f"{short_id:<12s}", fg="magenta") if short_id else f"{'':<12s}"
+        )
+        click.echo(
+            f"  {id_display} {title:<42s} {author:<17s} {similarity:5.2f}  {date_str:<10s}"
+        )
+
+        if tracking and slug in tracking_data:
+            links = tracking_data[slug].get("links", [])
+            for link in links:
+                label = link.get("label") or link.get("source", "")
+                click.echo(f"    {label:12s}  {link['short_url']}")
 
     click.echo()
-    click.echo("  Use `als get <lnk-xxx>` to see full details and tracking links.")
+    if not tracking:
+        click.echo("  Use `als get <lnk-xxx>` to see full details and tracking links.")
+        click.echo("  Or use --tracking to include tracking links in results.")
 
 
 @cli.command()
@@ -1262,6 +1309,8 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
     N defaults to 10. Shows the most recently published articles in the
     database, with your personalised tracking link for each one.
 
+    Uses a batch API call for tracking links (no N+1 queries).
+
     Use --author to filter to a specific author, e.g.:
 
         als last 5 --author "Simon"
@@ -1272,7 +1321,6 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
     """
     api_key = _get_api_key()
 
-    # Resolve --me to the logged-in user's author name
     if filter_me:
         if author:
             click.echo("Error: --me and --author cannot be used together.", err=True)
@@ -1287,7 +1335,6 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
             sys.exit(1)
         author = my_name
 
-    # Step 1: Fetch last N articles (optionally filtered by author)
     body: dict = {"count": n}
     if author:
         body["author"] = author
@@ -1318,49 +1365,56 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
 
     if summary:
         _print_summary_table(results, filter_me, author)
+        return
+
+    if filter_me:
+        click.echo(
+            f"\nLast {len(results)} article(s) by you ({click.style(author, bold=True)}):\n"
+        )
+    elif author:
+        click.echo(
+            f"\nLast {len(results)} article(s) by {click.style(author, bold=True)}:\n"
+        )
     else:
-        if filter_me:
-            click.echo(
-                f"\nLast {len(results)} article(s) by you ({click.style(author, bold=True)}):\n"
-            )
-        elif author:
-            click.echo(
-                f"\nLast {len(results)} article(s) by {click.style(author, bold=True)}:\n"
-            )
+        click.echo(f"\nLast {len(results)} article(s):\n")
+
+    slugs = [r.get("slug", "") for r in results if r.get("slug")]
+    tracking_data: dict[str, dict] = {}
+
+    if slugs:
+        batch_resp = _api_request(
+            "batch-get-links",
+            api_key=api_key,
+            json_body={"slugs": slugs},
+        )
+        if batch_resp.status_code == 200:
+            tracking_data = batch_resp.json().get("results", {})
+
+    for i, result in enumerate(results, 1):
+        title = result.get("title") or result.get("slug", "")
+        article_author = result.get("author", "")
+        slug = result.get("slug", "")
+        published_at = result.get("published_at") or result.get("created_at", "")
+        destination_url = result.get("url", "")
+        date_str = published_at[:10] if published_at else ""
+
+        click.echo(f"  {i}. {click.style(title, bold=True)}")
+        if article_author:
+            click.echo(f"     by {article_author}")
+        if date_str:
+            click.echo(f"     {date_str}")
+        if destination_url:
+            click.echo(f"     URL:  {destination_url}")
+
+        if slug in tracking_data:
+            links = tracking_data[slug].get("links", [])
+            for link in links:
+                label = link.get("label") or link.get("source", "")
+                click.echo(f"     {label:12s}  {link['short_url']}")
         else:
-            click.echo(f"\nLast {len(results)} article(s):\n")
+            click.echo(f"     (could not generate tracking link)")
 
-        for i, result in enumerate(results, 1):
-            title = result.get("title") or result.get("slug", "")
-            article_author = result.get("author", "")
-            slug = result.get("slug", "")
-            published_at = result.get("published_at") or result.get("created_at", "")
-            destination_url = result.get("url", "")
-            date_str = published_at[:10] if published_at else ""
-
-            click.echo(f"  {i}. {click.style(title, bold=True)}")
-            if article_author:
-                click.echo(f"     by {article_author}")
-            if date_str:
-                click.echo(f"     {date_str}")
-            if destination_url:
-                click.echo(f"     URL:  {destination_url}")
-
-            link_resp = _api_request(
-                "get-link",
-                api_key=api_key,
-                json_body={"article_url": slug},
-            )
-            if link_resp.status_code == 200:
-                link_data = link_resp.json()
-                links = link_data.get("links", [])
-                for link in links:
-                    label = link.get("label") or link.get("source", "")
-                    click.echo(f"     {label:12s}  {link['short_url']}")
-            else:
-                click.echo(f"     (could not generate tracking link)")
-
-        click.echo()
+    click.echo()
 
 
 def _print_summary_table(results: list, filter_me: bool, author: str | None):
