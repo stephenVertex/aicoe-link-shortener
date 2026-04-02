@@ -108,6 +108,9 @@ Deno.serve(async (req) => {
     if (contentType) {
       rpcParams.content_type_filter = contentType;
     }
+    if (authorFilter) {
+      rpcParams.author_filter = authorFilter;
+    }
 
     const { data: results, error: searchError } = await supabase.rpc(
       "match_articles",
@@ -116,22 +119,11 @@ Deno.serve(async (req) => {
 
     if (searchError) throw searchError;
 
-    // Client-side author filtering (case-insensitive substring match)
-    let filtered = results || [];
-    if (authorFilter) {
-      const needle = authorFilter.toLowerCase();
-      filtered = filtered.filter(
-        (r: Record<string, unknown>) =>
-          typeof r.author === "string" &&
-          r.author.toLowerCase().includes(needle),
-      );
-    }
-
     return new Response(
       JSON.stringify({
         query,
-        results: filtered,
-        count: filtered.length,
+        results: results || [],
+        count: (results || []).length,
       }),
       {
         headers: { "Content-Type": "application/json", ...corsHeaders },
