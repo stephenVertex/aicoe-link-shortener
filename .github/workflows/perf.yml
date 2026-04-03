@@ -38,8 +38,25 @@ jobs:
           chmod 600 ~/.als.credentials
 
       - name: Run performance benchmark
-        run: python user-cli/tests/perf_bench.py
+        run: >
+          python user-cli/tests/perf_bench.py
+          --json perf-results.json
+          --markdown perf-summary.md
 
       - name: Run performance benchmark (with shorten)
         if: github.event_name == 'workflow_dispatch'
-        run: python user-cli/tests/perf_bench.py --include-shorten
+        run: >
+          python user-cli/tests/perf_bench.py
+          --include-shorten
+          --json perf-results-full.json
+          --markdown perf-summary-full.md
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results-${{ github.run_number }}
+          path: |
+            perf-results*.json
+            perf-summary*.md
+          retention-days: 90
