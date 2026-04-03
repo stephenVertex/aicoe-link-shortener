@@ -10,3 +10,7 @@ zone_name = "aicoe.fit"
 [vars]
 SUPABASE_BASE_URL = "https://dumhbtxskncofwwzrmfx.supabase.co"
 ADMIN_URL = "https://admin.aicoe.fit"
+
+[[kv_namespaces]]
+binding = "SLUG_CACHE"
+id = "TBD"

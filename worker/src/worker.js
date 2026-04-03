@@ -335,12 +335,10 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // Skip favicon and robots
     if (path === "/favicon.ico" || path === "/robots.txt") {
       return new Response("", { status: 404 });
     }
 
-    // README-als.md — LLM-readable install + usage guide
     if (path === "/README-als.md") {
       return new Response(README_ALS_MD, {
         status: 200,
@@ -351,7 +349,6 @@ export default {
       });
     }
 
-    // Install script — serve inline for: curl aicoe.fit/install | bash
     if (path === "/install" || path === "/install.sh") {
       return new Response(INSTALL_SCRIPT, {
         status: 200,
@@ -362,7 +359,6 @@ export default {
       });
     }
 
-    // Root page — redirect to admin dashboard on Amplify
     if (path === "/" || path === "/admin" || path === "/admin/") {
       return new Response(null, {
         status: 302,
@@ -370,8 +366,25 @@ export default {
       });
     }
 
-    // Everything else — redirect logic via the Supabase edge function
     const slug = path.slice(1);
+    const cacheKey = `slug:${slug}`;
+
+    if (env.SLUG_CACHE) {
+      const cached = await env.SLUG_CACHE.get(cacheKey, { type: "json" });
+      if (cached) {
+        if (cached.expires_at && new Date(cached.expires_at) < new Date()) {
+          return new Response("This link has expired", { status: 410 });
+        }
+
+        logClickAsync(env, slug, cached.link_id, cached.variant_id, request);
+
+        return new Response(null, {
+          status: 302,
+          headers: { Location: cached.destination },
+        });
+      }
+    }
+
     const targetUrl = `${env.SUPABASE_BASE_URL}/functions/v1/redirect/${slug}`;
 
     const response = await fetch(targetUrl, {
@@ -385,9 +398,54 @@ export default {
       redirect: "manual",
     });
 
+    if ((response.status === 302 || response.status === 410) && env.SLUG_CACHE) {
+      const location = response.headers.get("Location");
+      const linkId = response.headers.get("X-Link-Id");
+      const variantId = response.headers.get("X-Variant-Id");
+      const expiresAt = response.headers.get("X-Expires-At");
+
+      if (location || expiresAt) {
+        const cacheData = {
+          destination: location || "",
+          link_id: linkId || null,
+          variant_id: variantId || null,
+          expires_at: expiresAt || null,
+        };
+        await env.SLUG_CACHE.put(cacheKey, JSON.stringify(cacheData), {
+          expirationTtl: 300,
+        });
+      }
+    }
+
+    const headers = new Headers(response.headers);
+    headers.delete("X-Link-Id");
+    headers.delete("X-Variant-Id");
+    headers.delete("X-Expires-At");
+
     return new Response(response.body, {
       status: response.status,
-      headers: response.headers,
+      headers,
     });
   },
 };
+
+async function logClickAsync(env, slug, linkId, variantId, request) {
+  const logUrl = `${env.SUPABASE_BASE_URL}/functions/v1/log-click`;
+  const cfIp = request.headers.get("cf-connecting-ip") || "";
+
+  fetch(logUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-forwarded-for": cfIp,
+      "x-real-ip": cfIp,
+      "user-agent": request.headers.get("user-agent") || "",
+      "referer": request.headers.get("referer") || "",
+    },
+    body: JSON.stringify({
+      slug,
+      link_id: linkId,
+      variant_id: variantId,
+    }),
+  }).catch(() => {});
+}
