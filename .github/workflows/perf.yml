@@ -30,8 +30,11 @@ jobs:
 
       - name: Configure als credentials
         run: |
-          mkdir -p ~/.config
-          echo '${{ secrets.ALS_API_KEY }}' > ~/.als.credentials
+          cat > ~/.als.credentials <<CREDS
+          [default]
+          api_key = ${{ secrets.ALS_API_KEY }}
+          CREDS
+          chmod 600 ~/.als.credentials
 
       - name: Run performance benchmark
         run: python user-cli/tests/perf_bench.py
