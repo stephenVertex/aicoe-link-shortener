@@ -1,0 +1,38 @@
+name: Performance Benchmark
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6am UTC
+  workflow_dispatch:       # Manual trigger
+  push:
+    tags:
+      - 'v*'              # Also run on releases
+
+jobs:
+  benchmark:
+    name: als CLI performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install als CLI
+        working-directory: user-cli
+        run: uv pip install --system -e .
+
+      - name: Configure als credentials
+        run: |
+          mkdir -p ~/.config
+          echo '${{ secrets.ALS_API_KEY }}' > ~/.als.credentials
+
+      - name: Run performance benchmark
+        run: python3 user-cli/tests/perf_bench.py
+
+      - name: Run performance benchmark (with shorten)
+        if: github.event_name == 'workflow_dispatch'
+        run: python3 user-cli/tests/perf_bench.py --include-shorten
