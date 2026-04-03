@@ -394,6 +394,7 @@ export default {
         "referer": request.headers.get("referer") || "",
         "x-forwarded-for": request.headers.get("cf-connecting-ip") || "",
         "x-real-ip": request.headers.get("cf-connecting-ip") || "",
+        "cf-ipcountry": request.headers.get("cf-ipcountry") || "",
       },
       redirect: "manual",
     });
@@ -441,6 +442,7 @@ async function logClickAsync(env, slug, linkId, variantId, request) {
       "x-real-ip": cfIp,
       "user-agent": request.headers.get("user-agent") || "",
       "referer": request.headers.get("referer") || "",
+      "cf-ipcountry": request.headers.get("cf-ipcountry") || "",
     },
     body: JSON.stringify({
       slug,

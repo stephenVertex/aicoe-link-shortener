@@ -25,6 +25,7 @@ async function logClick(
   const ipHash = hashIP(ip);
   const userAgent = req.headers.get("user-agent") || "";
   const referer = req.headers.get("referer") || "";
+  const countryCode = req.headers.get("cf-ipcountry") || null;
 
   await supabase.from("click_log").insert({
     link_id: linkId,
@@ -32,6 +33,7 @@ async function logClick(
     ip_hash: ipHash,
     user_agent: userAgent,
     referer: referer,
+    country_code: countryCode,
   });
 }
 

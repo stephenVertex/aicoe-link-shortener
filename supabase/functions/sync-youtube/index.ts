@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { logError } from "../_shared/errorLogger.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -503,7 +504,11 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("YouTube sync error:", error);
-    return new Response(JSON.stringify({ error: String(error) }), {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await logError("sync-youtube", errorMessage, {
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
