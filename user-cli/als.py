@@ -1475,7 +1475,7 @@ def authors():
 
     Shows each distinct author and how many articles they have.
     """
-    resp = requests.get(f"{API_BASE}/list-authors", timeout=30)
+    resp = requests.get(f"{API_BASE}/manage-content?action=list-authors", timeout=30)
     if resp.status_code != 200:
         click.echo(
             f"Error fetching authors ({resp.status_code}): {resp.text}", err=True
@@ -1531,7 +1531,7 @@ def stats(article: str, days: int, everybody: bool):
     """
     if not article:
         # Database-level stats (original behaviour)
-        resp = requests.get(f"{API_BASE}/db-stats", timeout=30)
+        resp = requests.get(f"{API_BASE}/manage-content?action=stats", timeout=30)
         if resp.status_code != 200:
             click.echo(
                 f"Error fetching stats ({resp.status_code}): {resp.text}", err=True
@@ -1948,8 +1948,12 @@ def update_transcript(
     click.echo(f"  Transcript length: {len(transcript_content)} characters")
 
     resp = _api_request(
-        "update-transcript",
-        json_body={"url": url, "transcript": transcript_content},
+        "manage-content",
+        json_body={
+            "action": "update-transcript",
+            "url": url,
+            "transcript": transcript_content,
+        },
     )
 
     if resp.status_code == 401:
@@ -2009,11 +2013,11 @@ def tags_list(article: str):
         als tags list
         als tags list --article my-article-slug
     """
-    body: dict = {"action": "list"}
+    body: dict = {"action": "list-tags"}
     if article:
         body["article"] = article
 
-    resp = _api_request("manage-tags", json_body=body)
+    resp = _api_request("manage-content", json_body=body)
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
@@ -2070,11 +2074,11 @@ def tags_create(name: str, slug: str):
         als tags create "Machine Learning"
         als tags create "GenAI" --slug gen-ai
     """
-    body: dict = {"action": "create", "name": name}
+    body: dict = {"action": "create-tag", "name": name}
     if slug:
         body["slug"] = slug
 
-    resp = _api_request("manage-tags", json_body=body)
+    resp = _api_request("manage-content", json_body=body)
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
@@ -2112,9 +2116,9 @@ def tags_delete(name: str):
 
         als tags delete "Machine Learning"
     """
-    body: dict = {"action": "delete", "name": name}
+    body: dict = {"action": "delete-tag", "name": name}
 
-    resp = _api_request("manage-tags", json_body=body)
+    resp = _api_request("manage-content", json_body=body)
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
@@ -2144,9 +2148,9 @@ def tags_assign(article: str, tag: str):
 
         als tags assign --article my-article-slug --tag machine-learning
     """
-    body: dict = {"action": "tag", "article": article, "tag": tag}
+    body: dict = {"action": "tag-article", "article": article, "tag": tag}
 
-    resp = _api_request("manage-tags", json_body=body)
+    resp = _api_request("manage-content", json_body=body)
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
@@ -2176,9 +2180,9 @@ def tags_remove(article: str, tag: str):
 
         als tags remove --article my-article-slug --tag machine-learning
     """
-    body: dict = {"action": "untag", "article": article, "tag": tag}
+    body: dict = {"action": "untag-article", "article": article, "tag": tag}
 
-    resp = _api_request("manage-tags", json_body=body)
+    resp = _api_request("manage-content", json_body=body)
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)

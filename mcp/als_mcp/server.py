@@ -74,7 +74,10 @@ class _APIKeyMiddleware:
                 if not captured and message.get("type") == "http.response.body":
                     chunk = message.get("body", b"").decode(errors="replace")
                     for line in chunk.splitlines():
-                        if line.startswith("data: /messages/") and "session_id=" in line:
+                        if (
+                            line.startswith("data: /messages/")
+                            and "session_id=" in line
+                        ):
                             sid = line.split("session_id=")[-1].strip()
                             if sid:
                                 _session_keys[sid] = api_key
@@ -273,7 +276,7 @@ async def authors() -> dict:
 
     Returns a dict with ``authors`` – each containing name and article_count.
     """
-    return await _get("list-authors")
+    return await _get("manage-content?action=list-authors")
 
 
 @mcp.tool()
@@ -282,7 +285,7 @@ async def stats() -> dict:
 
     Returns a dict with counts for each category.
     """
-    return await _get("db-stats")
+    return await _get("manage-content?action=stats")
 
 
 @mcp.tool()
