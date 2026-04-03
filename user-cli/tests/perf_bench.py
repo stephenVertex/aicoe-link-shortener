@@ -128,7 +128,7 @@ def main():
     if include_shorten:
         ts = int(time.time())
         results.append(run("shorten", [
-            "shorten", f"https://example.com/perf-test-{ts}", "--title", "perf test"
+            "shorten", f"https://example.com/perf-test-{ts}", "--note", "perf test"
         ]))
 
     print("  " + "-" * 60)
