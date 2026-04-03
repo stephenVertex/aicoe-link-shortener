@@ -211,3 +211,46 @@ GitHub Actions will automatically:
 - Deploy the Cloudflare Worker (`aicoe.fit/*`)
 
 The install script and `als upgrade` always pull from `releases/latest/download/` so no URL updates are needed.
+
+## Supabase Edge Functions
+
+The project uses Supabase Edge Functions for various operations. Functions are consolidated to reduce cold-start surface.
+
+### Consolidated Functions
+
+| Function | Actions | Purpose | Auth |
+|----------|---------|---------|------|
+| `analytics` | article-stats, list-custom-links | Article statistics and custom link queries | Optional (API key for list-custom-links) |
+| `manage-content` | list-tags, create-tag, delete-tag, tag-article, untag-article, update-transcript, list-authors, stats | Content management and database queries | API key required for write operations |
+| `content-sync` | substack, youtube, embed, chunk | Content ingestion and processing | Optional (Bearer token) |
+
+### Standalone Functions (Performance-Critical)
+
+| Function | Purpose | Auth | Notes |
+|----------|---------|------|-------|
+| `redirect` | Slug lookup + click logging + 302 redirect | No | Called from Cloudflare Worker |
+| `log-click` | Async click logging | No | Called from Cloudflare Worker |
+| `get-link` | Single link lookup | No | Hot path |
+| `batch-get-links` | Multiple link lookup | No | Hot path |
+| `search-articles` | Semantic article search | No | Has own cold-start profile |
+
+### Utility Functions
+
+| Function | Purpose | Auth |
+|----------|---------|------|
+| `aifs` | AI-First Show specific operations | Varies |
+| `shorten-url` | Create short links | API key |
+| `manage-links` | Link CRUD operations | API key |
+| `manage-contexts` | Context management | API key |
+| `manage-tracking-variants` | Tracking variant CRUD | API key |
+| `last-articles` | Get recent articles | No |
+| `validate-key` | API key validation | API key |
+
+### Migration Notes
+
+- **2026-04-02**: Consolidated 10 functions into 3 to reduce cold-start surface:
+  - `article-stats` + `list-custom-links` → `analytics`
+  - `manage-tags` + `update-transcript` + `list-authors` + `db-stats` → `manage-content`
+  - `sync-substack` + `sync-youtube` + `embed-articles` + `chunk-videos` → `content-sync`
+- pg_cron jobs updated to call `content-sync` with action parameter
+- CLI and MCP server updated to use consolidated endpoints
