@@ -14,10 +14,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v6
 
       - name: Build wheel
         working-directory: user-cli
@@ -31,7 +31,7 @@ jobs:
           echo "GENERIC_WHEEL=user-cli/dist/als-0-py3-none-any.whl" >> "$GITHUB_ENV"
 
       - name: Create GitHub release and upload wheel
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ env.GENERIC_WHEEL }}
           generate_release_notes: true
