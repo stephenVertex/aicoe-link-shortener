@@ -126,9 +126,8 @@ def main():
     results.append(run("links list --pinned", ["links", "list", "--pinned"]))
 
     if include_shorten:
-        ts = int(time.time())
         results.append(run("shorten", [
-            "shorten", f"https://example.com/perf-test-{ts}", "--note", "perf test"
+            "shorten", "your-agent-my-agent", "--note", "perf bench test"
         ]))
 
     print("  " + "-" * 60)
