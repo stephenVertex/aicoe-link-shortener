@@ -1551,7 +1551,7 @@ def stats(article: str, days: int, everybody: bool):
 
     # Article-level stats
     # Detect if article is a URL and pass it as such to the edge function
-    payload: dict = {"days": days}
+    payload: dict = {"action": "article-stats", "days": days}
     if article.startswith("http://") or article.startswith("https://"):
         payload["url"] = article
     else:
@@ -1561,7 +1561,7 @@ def stats(article: str, days: int, everybody: bool):
         payload["everybody"] = True
 
     resp = requests.post(
-        f"{API_BASE}/article-stats",
+        f"{API_BASE}/analytics",
         json=payload,
         timeout=30,
     )
@@ -1680,11 +1680,11 @@ def custom_links(count: int, show_all: bool):
         als custom-links --count 5 # last 5 custom links
         als custom-links --all     # all custom links
     """
-    body: dict = {"count": count}
+    body: dict = {"action": "list-custom-links", "count": count}
     if show_all:
         body["all"] = True
 
-    resp = _api_request("list-custom-links", json_body=body)
+    resp = _api_request("analytics", json_body=body)
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
