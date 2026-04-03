@@ -33,6 +33,7 @@ jobs:
           cat > ~/.als.credentials <<CREDS
           [default]
           api_key = ${{ secrets.ALS_API_KEY }}
+          author_name = Stephen Barr
           CREDS
           chmod 600 ~/.als.credentials
 
