@@ -23,7 +23,10 @@ jobs:
 
       - name: Install als CLI
         working-directory: user-cli
-        run: uv pip install --system -e .
+        run: |
+          uv venv .venv
+          uv pip install -e . --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Configure als credentials
         run: |
@@ -31,8 +34,8 @@ jobs:
           echo '${{ secrets.ALS_API_KEY }}' > ~/.als.credentials
 
       - name: Run performance benchmark
-        run: python3 user-cli/tests/perf_bench.py
+        run: python user-cli/tests/perf_bench.py
 
       - name: Run performance benchmark (with shorten)
         if: github.event_name == 'workflow_dispatch'
-        run: python3 user-cli/tests/perf_bench.py --include-shorten
+        run: python user-cli/tests/perf_bench.py --include-shorten
