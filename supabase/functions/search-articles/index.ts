@@ -36,6 +36,22 @@ async function generateQueryEmbedding(query: string): Promise<number[]> {
   return result.data[0].embedding;
 }
 
+function dedupeChunksByText(
+  chunks: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  const seen = new Map<string, Record<string, unknown>>();
+  for (const c of chunks) {
+    const key = `${c.start_time ?? ""}|${(c.text as string || "").trim()}`;
+    const existing = seen.get(key);
+    if (!existing || (c.similarity as number) > (existing.similarity as number)) {
+      seen.set(key, c);
+    }
+  }
+  return Array.from(seen.values()).sort(
+    (a, b) => (b.similarity as number) - (a.similarity as number),
+  );
+}
+
 Deno.serve(async (req) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -130,7 +146,9 @@ Deno.serve(async (req) => {
     if (chunksResult.error) throw chunksResult.error;
 
     const articles = (articlesResult.data || []) as Array<Record<string, unknown>>;
-    const chunks = (chunksResult.data || []) as Array<Record<string, unknown>>;
+    const rawChunks = (chunksResult.data || []) as Array<Record<string, unknown>>;
+
+    const chunks = dedupeChunksByText(rawChunks);
 
     let merged: Array<Record<string, unknown>>;
 
@@ -146,26 +164,47 @@ Deno.serve(async (req) => {
         match_type: "article",
       }));
 
-      const chunkResults = chunks.map((c) => ({
-        id: c.link_id,
-        slug: c.video_slug,
-        title: c.video_title,
-        author: null,
-        destination_url: c.video_url,
-        published_at: null,
-        created_at: null,
-        similarity: c.similarity,
-        start_time: c.start_time,
-        end_time: c.end_time,
-        text: c.text,
-        match_type: "transcript",
-      }));
+      const chunkResults = chunks.map((c) => {
+        const baseUrl = (c.video_url as string) || "";
+        const startTime = c.start_time as number | null;
+        const timestampParam = startTime != null ? `&t=${startTime}` : "";
+        const ytMatch = baseUrl.match(/[?&]v=([^&]+)/);
+        const videoUrlWithTs = ytMatch
+          ? `https://www.youtube.com/watch?v=${ytMatch[1]}${timestampParam}`
+          : baseUrl;
+
+        return {
+          id: c.link_id,
+          slug: c.video_slug,
+          title: c.video_title,
+          author: null,
+          destination_url: c.video_url,
+          video_url: videoUrlWithTs,
+          published_at: null,
+          created_at: null,
+          similarity: c.similarity,
+          start_time: c.start_time,
+          end_time: c.end_time,
+          text: c.text,
+          match_type: "transcript",
+        };
+      });
 
       merged = [...nonVideoArticles, ...chunkResults].sort(
         (a, b) => (b.similarity as number) - (a.similarity as number),
       );
     } else {
-      merged = articles.map((a) => ({ ...a, match_type: "article" }));
+      merged = articles.map((a) => {
+        const destUrl = (a.destination_url as string) || "";
+        const ytMatch = destUrl.match(/[?&]v=([^&]+)/);
+        return {
+          ...a,
+          match_type: "article",
+          video_url: ytMatch
+            ? `https://www.youtube.com/watch?v=${ytMatch[1]}`
+            : null,
+        };
+      });
     }
 
     const finalResults = merged.slice(0, matchCount);

@@ -162,9 +162,7 @@ function renderResults(query, results) {
     const simPercent = Math.round(r.similarity * 100);
     const ytId = extractYouTubeId(r.destination_url || '');
     const thumbnail = ytId ? `https://img.youtube.com/vi/${ytId}/mqdefault.jpg` : null;
-    const linkUrl = r.destination_url || `https://aicoe.fit/${r.slug}`;
-    const tsParam = r.start_time != null ? `&t=${r.start_time}` : '';
-    const videoLink = ytId ? `https://www.youtube.com/watch?v=${ytId}${tsParam}` : linkUrl;
+    const videoLink = r.video_url || (ytId ? `https://www.youtube.com/watch?v=${ytId}${r.start_time != null ? `&t=${r.start_time}` : ''}` : r.destination_url || `https://aicoe.fit/${r.slug}`);
     const tsLabel = r.start_time != null ? formatTime(r.start_time) : '';
     const chunkText = r.text ? highlightMatch(r.text, query) : '';
     return `
@@ -193,8 +191,10 @@ function extractYouTubeId(url) {
 }
 
 function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
