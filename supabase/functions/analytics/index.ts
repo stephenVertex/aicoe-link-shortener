@@ -29,6 +29,17 @@ interface PersonInfo {
   email: string;
 }
 
+interface LinkRecord {
+  id: string;
+  slug: string;
+  destination_url: string;
+  title: string | null;
+  author: string | null;
+  created_at: string | null;
+  published_at: string | null;
+  last_synced_at: string | null;
+}
+
 async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
   const { data, error } = await supabase.rpc("validate_api_key", {
     p_api_key: apiKey,
@@ -39,16 +50,7 @@ async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
 
 async function findLink(
   articleUrl: string,
-): Promise<{
-  id: string;
-  slug: string;
-  destination_url: string;
-  title: string | null;
-  author: string | null;
-  created_at: string | null;
-  published_at: string | null;
-  last_synced_at: string | null;
-} | null> {
+): Promise<LinkRecord | null> {
   const cols =
     "id, slug, destination_url, title, author, created_at, published_at, last_synced_at";
 
@@ -87,6 +89,238 @@ async function findLink(
   }
 
   return null;
+}
+
+function normalizeReferrer(referer: string | null): string {
+  const value = (referer || "").trim();
+  if (!value) return "Direct / Unknown";
+  try {
+    const url = new URL(value);
+    return url.hostname.replace(/^www\./, "") || value;
+  } catch {
+    return value;
+  }
+}
+
+async function handleLinkAnalytics(params: {
+  slug: string;
+  interval?: string;
+  startDate?: string;
+  endDate?: string;
+  comparisonLimit?: number;
+}): Promise<Response> {
+  const {
+    slug,
+    interval = "day",
+    startDate,
+    endDate,
+    comparisonLimit = 8,
+  } = params;
+
+  if (!slug) {
+    return jsonResponse({ error: "slug parameter required" }, 400);
+  }
+
+  const link = await findLink(slug);
+  if (!link) {
+    return jsonResponse({ error: `No article found for: ${slug}` }, 404);
+  }
+
+  const rangeStart = startDate ? new Date(startDate) : null;
+  const rangeEnd = endDate ? new Date(endDate) : null;
+  if (rangeStart && Number.isNaN(rangeStart.getTime())) {
+    return jsonResponse({ error: "Invalid start_date" }, 400);
+  }
+  if (rangeEnd && Number.isNaN(rangeEnd.getTime())) {
+    return jsonResponse({ error: "Invalid end_date" }, 400);
+  }
+
+  const intervalValue = ["hour", "day", "week", "month"].includes(interval)
+    ? interval
+    : "day";
+
+  const { data: seriesData, error: seriesError } = await supabase.rpc(
+    "get_click_analytics",
+    {
+      p_interval: intervalValue,
+      p_link_id: link.id,
+      p_start_date: rangeStart?.toISOString() ?? null,
+      p_end_date: rangeEnd?.toISOString() ?? null,
+    },
+  );
+  if (seriesError) throw seriesError;
+
+  let clickQuery = supabase
+    .from("click_log")
+    .select("id, variant_id, clicked_at, referer, country_code")
+    .eq("link_id", link.id)
+    .order("clicked_at", { ascending: false });
+
+  if (rangeStart) {
+    clickQuery = clickQuery.gte("clicked_at", rangeStart.toISOString());
+  }
+  if (rangeEnd) {
+    clickQuery = clickQuery.lt("clicked_at", rangeEnd.toISOString());
+  }
+
+  const { data: clickRows, error: clickError } = await clickQuery;
+  if (clickError) throw clickError;
+
+  const clicks = clickRows || [];
+  const variantIds = [...new Set(clicks.map((row) => row.variant_id).filter(Boolean))];
+
+  let variantRows:
+    | Array<{
+      id: string;
+      suffix: string;
+      ref: string | null;
+      utm_source: string | null;
+      utm_medium: string | null;
+      utm_campaign: string | null;
+      utm_content: string | null;
+      utm_term: string | null;
+    }>
+    | null = null;
+
+  if (variantIds.length > 0) {
+    const { data, error } = await supabase
+      .from("tracking_variants")
+      .select(
+        "id, suffix, ref, utm_source, utm_medium, utm_campaign, utm_content, utm_term",
+      )
+      .in("id", variantIds);
+    if (error) throw error;
+    variantRows = data;
+  }
+
+  const variantsById = new Map((variantRows || []).map((variant) => [variant.id, variant]));
+  const variantClickCounts = new Map<string, number>();
+  const referrerCounts = new Map<string, number>();
+  const countryCounts = new Map<string, number>();
+
+  for (const click of clicks) {
+    const variantId = click.variant_id || "__direct__";
+    variantClickCounts.set(variantId, (variantClickCounts.get(variantId) || 0) + 1);
+
+    const referrer = normalizeReferrer(click.referer);
+    referrerCounts.set(referrer, (referrerCounts.get(referrer) || 0) + 1);
+
+    const country = (click.country_code || "").trim().toUpperCase() || "Unknown";
+    countryCounts.set(country, (countryCounts.get(country) || 0) + 1);
+  }
+
+  const variantBreakdown = Array.from(variantClickCounts.entries())
+    .map(([variantId, count]) => {
+      if (variantId === "__direct__") {
+        return {
+          id: null,
+          suffix: null,
+          short_url: `https://${DOMAIN}/${link.slug}`,
+          ref: null,
+          utm_source: null,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_content: null,
+          utm_term: null,
+          clicks: count,
+          label: "Direct",
+        };
+      }
+
+      const variant = variantsById.get(variantId);
+      return {
+        id: variantId,
+        suffix: variant?.suffix || null,
+        short_url: variant?.suffix
+          ? `https://${DOMAIN}/${link.slug}-${variant.suffix}`
+          : `https://${DOMAIN}/${link.slug}`,
+        ref: variant?.ref || null,
+        utm_source: variant?.utm_source || null,
+        utm_medium: variant?.utm_medium || null,
+        utm_campaign: variant?.utm_campaign || null,
+        utm_content: variant?.utm_content || null,
+        utm_term: variant?.utm_term || null,
+        clicks: count,
+        label: variant?.utm_source || variant?.suffix || variantId,
+      };
+    })
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const referrers = Array.from(referrerCounts.entries())
+    .map(([referrer, count]) => ({ referrer, clicks: count }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const countries = Array.from(countryCounts.entries())
+    .map(([country, count]) => ({ country, clicks: count }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const { data: comparisonLinks, error: comparisonError } = await supabase
+    .from("links")
+    .select("id, slug, title, author, destination_url, created_at")
+    .neq("id", link.id)
+    .order("created_at", { ascending: false })
+    .limit(Math.max(comparisonLimit, 1));
+  if (comparisonError) throw comparisonError;
+
+  const comparisonIds = (comparisonLinks || []).map((item) => item.id);
+  let comparisonClickRows: Array<{ link_id: string }> = [];
+  if (comparisonIds.length > 0) {
+    let comparisonQuery = supabase
+      .from("click_log")
+      .select("link_id")
+      .in("link_id", comparisonIds);
+
+    if (rangeStart) {
+      comparisonQuery = comparisonQuery.gte("clicked_at", rangeStart.toISOString());
+    }
+    if (rangeEnd) {
+      comparisonQuery = comparisonQuery.lt("clicked_at", rangeEnd.toISOString());
+    }
+
+    const { data, error } = await comparisonQuery;
+    if (error) throw error;
+    comparisonClickRows = data || [];
+  }
+
+  const comparisonCounts = new Map<string, number>();
+  for (const row of comparisonClickRows) {
+    comparisonCounts.set(row.link_id, (comparisonCounts.get(row.link_id) || 0) + 1);
+  }
+
+  const comparisons = (comparisonLinks || [])
+    .map((item) => ({
+      id: item.id,
+      slug: item.slug,
+      title: item.title,
+      author: item.author,
+      destination_url: item.destination_url,
+      created_at: item.created_at,
+      short_url: `https://${DOMAIN}/${item.slug}`,
+      clicks: comparisonCounts.get(item.id) || 0,
+    }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  return jsonResponse({
+    link: {
+      ...link,
+      short_url: `https://${DOMAIN}/${link.slug}`,
+    },
+    interval: intervalValue,
+    total_clicks: clicks.length,
+    total_variants: variantRows?.length || 0,
+    clicks_over_time: (seriesData || []).map((row: { period: string; clicks: number }) => ({
+      period: row.period,
+      clicks: row.clicks,
+    })),
+    variant_breakdown: variantBreakdown,
+    referrers,
+    countries,
+    comparisons,
+    range: {
+      start: rangeStart?.toISOString() ?? null,
+      end: rangeEnd?.toISOString() ?? null,
+    },
+  });
 }
 
 async function handleArticleStats(params: {
@@ -398,6 +632,10 @@ Deno.serve(async (req) => {
     let apiKey = req.headers.get("x-api-key") || "";
     let count = 10;
     let all = false;
+    let interval = "day";
+    let startDate = "";
+    let endDate = "";
+    let comparisonLimit = 8;
 
     if (req.method === "POST") {
       const body = await req.json();
@@ -408,6 +646,12 @@ Deno.serve(async (req) => {
       everybody = body.everybody === true;
       if (body.count !== undefined) count = Number(body.count);
       if (body.all !== undefined) all = Boolean(body.all);
+      if (body.interval !== undefined) interval = String(body.interval);
+      if (body.start_date !== undefined) startDate = String(body.start_date || "");
+      if (body.end_date !== undefined) endDate = String(body.end_date || "");
+      if (body.comparison_limit !== undefined) {
+        comparisonLimit = Number(body.comparison_limit) || 8;
+      }
     } else {
       const url = new URL(req.url);
       action = url.searchParams.get("action") || "article-stats";
@@ -419,15 +663,31 @@ Deno.serve(async (req) => {
       if (countParam) count = Number(countParam);
       const allParam = url.searchParams.get("all");
       if (allParam === "true" || allParam === "1") all = true;
+      interval = url.searchParams.get("interval") || "day";
+      startDate = url.searchParams.get("start_date") || "";
+      endDate = url.searchParams.get("end_date") || "";
+      const comparisonLimitParam = url.searchParams.get("comparison_limit");
+      if (comparisonLimitParam) comparisonLimit = Number(comparisonLimitParam) || 8;
     }
 
     if (action === "article-stats") {
       return await handleArticleStats({ slug, days, everybody });
+    } else if (action === "link-analytics") {
+      return await handleLinkAnalytics({
+        slug,
+        interval,
+        startDate,
+        endDate,
+        comparisonLimit,
+      });
     } else if (action === "list-custom-links") {
       return await handleListCustomLinks({ apiKey, count, all });
     } else {
       return jsonResponse(
-        { error: `Unknown action '${action}'. Valid actions: article-stats, list-custom-links` },
+        {
+          error:
+            `Unknown action '${action}'. Valid actions: article-stats, link-analytics, list-custom-links`,
+        },
         400,
       );
     }
