@@ -1248,7 +1248,7 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
         full_id = result.get("id", "")
         short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
         title = result.get("title", result.get("slug", ""))
-        author = result.get("author", "")
+        author = result.get("author") or ""
         similarity = result.get("similarity", 0)
         published_at = result.get("published_at") or result.get("created_at", "")
         date_str = published_at[:10] if published_at else ""
