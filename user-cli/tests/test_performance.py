@@ -8,10 +8,14 @@ Run with: uv run pytest user-cli/tests/test_performance.py -v
 Skip slow tests: uv run pytest user-cli/tests/test_performance.py -v -m "not slow"
 """
 
+from pathlib import Path
 import subprocess
 import time
 
 import pytest
+
+
+USER_CLI_DIR = Path(__file__).resolve().parents[1]
 
 
 def run_als_command(args: list[str], timeout: int = 30) -> tuple[float, str]:
@@ -36,7 +40,7 @@ def run_als_command(args: list[str], timeout: int = 30) -> tuple[float, str]:
         text=True,
         timeout=timeout,
         check=True,
-        cwd="/Users/stephen/gt/aicoe_link_shortener/polecats/furiosa/aicoe_link_shortener/user-cli",
+        cwd=USER_CLI_DIR,
     )
     elapsed = time.perf_counter() - start
     return elapsed, result.stdout
