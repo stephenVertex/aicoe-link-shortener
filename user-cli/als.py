@@ -1488,6 +1488,96 @@ def _print_summary_table(results: list, filter_me: bool, author: str | None):
     click.echo()
 
 
+def _print_bar_rows(
+    rows: list[dict], label_key: str, count_key: str, width: int = 20
+) -> None:
+    """Render simple proportional bars for terminal analytics output."""
+    if not rows:
+        return
+
+    max_count = max((row.get(count_key, 0) for row in rows), default=0)
+    for row in rows:
+        label = str(row.get(label_key, ""))
+        count = int(row.get(count_key, 0) or 0)
+        bar_len = int((count / max_count) * width) if max_count > 0 else 0
+        bar = "#" * bar_len
+        click.echo(f"    {label:24.24s}  {bar:<{width}s}  {count}")
+
+
+@cli.command()
+@click.argument("stub")
+@click.option(
+    "--days",
+    default=30,
+    show_default=True,
+    help="Number of days to include in the analytics window.",
+)
+def analytics(stub: str, days: int):
+    """Show per-link analytics for a shortened link stub.
+
+    Surfaces the same core information as the per-link web analytics page:
+    metadata, daily and weekly click counts, referrer breakdown, and a list
+    of other shortened links for comparison.
+    """
+    resp = _api_request(
+        "analytics",
+        json_body={"action": "link-analytics", "slug": stub, "days": days},
+    )
+
+    if resp.status_code == 404:
+        click.echo(f"Link not found: {stub}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    link = data.get("link", {})
+    daily = data.get("daily_clicks", [])
+    weekly = data.get("weekly_clicks", [])
+    referrers = data.get("referrers", [])
+    comparison_links = data.get("comparison_links", [])
+
+    click.echo(
+        f"\n{click.style(link.get('title') or link.get('slug', stub), bold=True)}"
+    )
+    click.echo(f"  Stub:        {link.get('slug', '')}")
+    click.echo(f"  Short URL:   {link.get('short_url', '')}")
+    click.echo(f"  Destination: {link.get('destination_url', '')}")
+    if link.get("author"):
+        click.echo(f"  Author:      {link.get('author', '')}")
+    if link.get("created_at"):
+        click.echo(f"  Created:     {link['created_at'][:10]}")
+    if link.get("published_at"):
+        click.echo(f"  Published:   {link['published_at'][:10]}")
+    click.echo(f"  Total clicks: {data.get('total_clicks', 0)}")
+
+    if daily:
+        click.echo(f"\n  Daily clicks (last {days} days):")
+        _print_bar_rows(daily, "date", "clicks")
+    else:
+        click.echo(f"\n  No daily clicks in the last {days} days.")
+
+    if weekly:
+        click.echo("\n  Weekly clicks:")
+        _print_bar_rows(weekly, "week_start", "clicks")
+
+    if referrers:
+        click.echo("\n  Referrers:")
+        _print_bar_rows(referrers, "referrer", "clicks")
+    else:
+        click.echo("\n  Referrers: none recorded")
+
+    if comparison_links:
+        click.echo("\n  Other shortened links:")
+        for other in comparison_links:
+            title = other.get("title") or other.get("slug", "")
+            created_at = (other.get("created_at") or "")[:10]
+            click.echo(f"    {other.get('slug', ''):24.24s}  {created_at:10s}  {title}")
+
+    click.echo()
+
+
 @cli.command()
 def authors():
     """List all authors in the database.

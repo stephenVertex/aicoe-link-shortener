@@ -385,6 +385,109 @@ async function handleListCustomLinks(params: {
   });
 }
 
+async function handleLinkAnalytics(params: {
+  slug: string;
+  days?: number;
+}): Promise<Response> {
+  const { slug, days = 30 } = params;
+
+  if (!slug) {
+    return jsonResponse({ error: "stub parameter required" }, 400);
+  }
+
+  const link = await findLink(slug);
+  if (!link) {
+    return jsonResponse({ error: `No link found for: ${slug}` }, 404);
+  }
+
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+
+  const [{ count: totalClicks, error: totalClicksError }, { data: dailyClicks, error: dailyError }, { data: weeklyClicks, error: weeklyError }, { data: clickRows, error: clickRowsError }, { data: comparisonLinks, error: comparisonError }] = await Promise.all([
+    supabase
+      .from("click_log")
+      .select("id", { count: "exact", head: true })
+      .eq("link_id", link.id),
+    supabase.rpc("get_click_analytics", {
+      p_interval: "day",
+      p_link_id: link.id,
+      p_start_date: startDate.toISOString(),
+    }),
+    supabase.rpc("get_click_analytics", {
+      p_interval: "week",
+      p_link_id: link.id,
+      p_start_date: startDate.toISOString(),
+    }),
+    supabase
+      .from("click_log")
+      .select("referer, clicked_at")
+      .eq("link_id", link.id)
+      .gte("clicked_at", startDate.toISOString()),
+    supabase
+      .from("links")
+      .select("id, slug, title, destination_url, created_at")
+      .neq("id", link.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
+
+  if (totalClicksError) throw totalClicksError;
+  if (dailyError) throw dailyError;
+  if (weeklyError) throw weeklyError;
+  if (clickRowsError) throw clickRowsError;
+  if (comparisonError) throw comparisonError;
+
+  const referrerCounts: Record<string, number> = {};
+  for (const row of clickRows || []) {
+    const rawReferer = row.referer?.trim();
+    let key = "direct";
+    if (rawReferer) {
+      try {
+        key = new URL(rawReferer).hostname || rawReferer;
+      } catch {
+        key = rawReferer;
+      }
+    }
+    referrerCounts[key] = (referrerCounts[key] || 0) + 1;
+  }
+
+  const referrers = Object.entries(referrerCounts)
+    .map(([referrer, clicks]) => ({ referrer, clicks }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  return jsonResponse({
+    link: {
+      id: link.id,
+      slug: link.slug,
+      title: link.title,
+      destination_url: link.destination_url,
+      author: link.author,
+      created_at: link.created_at,
+      published_at: link.published_at,
+      last_synced_at: link.last_synced_at,
+      short_url: `https://${DOMAIN}/${link.slug}`,
+    },
+    total_clicks: totalClicks ?? 0,
+    days,
+    daily_clicks: (dailyClicks || []).map((row: { period: string; clicks: number }) => ({
+      date: row.period.slice(0, 10),
+      clicks: row.clicks,
+    })),
+    weekly_clicks: (weeklyClicks || []).map((row: { period: string; clicks: number }) => ({
+      week_start: row.period.slice(0, 10),
+      clicks: row.clicks,
+    })),
+    referrers,
+    comparison_links: (comparisonLinks || []).map((other) => ({
+      slug: other.slug,
+      title: other.title,
+      destination_url: other.destination_url,
+      created_at: other.created_at,
+      short_url: `https://${DOMAIN}/${other.slug}`,
+    })),
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -423,11 +526,13 @@ Deno.serve(async (req) => {
 
     if (action === "article-stats") {
       return await handleArticleStats({ slug, days, everybody });
+    } else if (action === "link-analytics") {
+      return await handleLinkAnalytics({ slug, days });
     } else if (action === "list-custom-links") {
       return await handleListCustomLinks({ apiKey, count, all });
     } else {
       return jsonResponse(
-        { error: `Unknown action '${action}'. Valid actions: article-stats, list-custom-links` },
+        { error: `Unknown action '${action}'. Valid actions: article-stats, link-analytics, list-custom-links` },
         400,
       );
     }
