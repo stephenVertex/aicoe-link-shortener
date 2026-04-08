@@ -112,18 +112,65 @@ Deno.serve(async (req) => {
       rpcParams.author_filter = authorFilter;
     }
 
-    const { data: results, error: searchError } = await supabase.rpc(
-      "match_articles",
-      rpcParams,
-    );
+    const shouldSearchChunks = !contentType || contentType === "video";
 
-    if (searchError) throw searchError;
+    const [articlesResult, chunksResult] = await Promise.all([
+      supabase.rpc("match_articles", rpcParams),
+      shouldSearchChunks
+        ? supabase.rpc("search_video_chunks", {
+            query_embedding: JSON.stringify(queryEmbedding),
+            match_threshold: matchThreshold,
+            match_count: matchCount,
+            dedupe_videos: true,
+          })
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+
+    if (articlesResult.error) throw articlesResult.error;
+    if (chunksResult.error) throw chunksResult.error;
+
+    const articles = (articlesResult.data || []) as Array<Record<string, unknown>>;
+    const chunks = (chunksResult.data || []) as Array<Record<string, unknown>>;
+
+    let merged: Array<Record<string, unknown>>;
+
+    if (shouldSearchChunks && chunks.length > 0) {
+      const chunkVideoIds = new Set(
+        chunks.map((c) => c.link_id as string),
+      );
+
+      const nonVideoArticles = articles.filter(
+        (a) => !chunkVideoIds.has(a.id as string),
+      );
+
+      const chunkResults = chunks.map((c) => ({
+        id: c.link_id,
+        slug: c.video_slug,
+        title: c.video_title,
+        author: null,
+        destination_url: c.video_url,
+        published_at: null,
+        created_at: null,
+        similarity: c.similarity,
+        start_time: c.start_time,
+        end_time: c.end_time,
+        text: c.text,
+      }));
+
+      merged = [...nonVideoArticles, ...chunkResults].sort(
+        (a, b) => (b.similarity as number) - (a.similarity as number),
+      );
+    } else {
+      merged = articles;
+    }
+
+    const finalResults = merged.slice(0, matchCount);
 
     return new Response(
       JSON.stringify({
         query,
-        results: results || [],
-        count: (results || []).length,
+        results: finalResults,
+        count: finalResults.length,
       }),
       {
         headers: { "Content-Type": "application/json", ...corsHeaders },
