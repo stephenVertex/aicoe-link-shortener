@@ -385,14 +385,36 @@ async function handleListCustomLinks(params: {
   });
 }
 
+function normalizeReferrer(referer: string | null): string {
+  const value = (referer || "").trim();
+  if (!value) return "Direct / Unknown";
+  try {
+    const url = new URL(value);
+    return url.hostname.replace(/^www\./, "") || value;
+  } catch {
+    return value;
+  }
+}
+
 async function handleLinkAnalytics(params: {
   slug: string;
   days?: number;
+  interval?: string;
+  startDate?: string;
+  endDate?: string;
+  comparisonLimit?: number;
 }): Promise<Response> {
-  const { slug, days = 30 } = params;
+  const {
+    slug,
+    days,
+    interval = "day",
+    startDate: explicitStartDate,
+    endDate: explicitEndDate,
+    comparisonLimit = 8,
+  } = params;
 
   if (!slug) {
-    return jsonResponse({ error: "stub parameter required" }, 400);
+    return jsonResponse({ error: "slug parameter required" }, 400);
   }
 
   const link = await findLink(slug);
@@ -400,60 +422,147 @@ async function handleLinkAnalytics(params: {
     return jsonResponse({ error: `No link found for: ${slug}` }, 404);
   }
 
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
+  const defaultDays = days ?? 30;
+  const rangeStart = explicitStartDate ? new Date(explicitStartDate) : new Date(Date.now() - defaultDays * 24 * 60 * 60 * 1000);
+  const rangeEnd = explicitEndDate ? new Date(explicitEndDate) : null;
 
-  const [{ count: totalClicks, error: totalClicksError }, { data: dailyClicks, error: dailyError }, { data: weeklyClicks, error: weeklyError }, { data: clickRows, error: clickRowsError }, { data: comparisonLinks, error: comparisonError }] = await Promise.all([
-    supabase
-      .from("click_log")
-      .select("id", { count: "exact", head: true })
-      .eq("link_id", link.id),
-    supabase.rpc("get_click_analytics", {
-      p_interval: "day",
-      p_link_id: link.id,
-      p_start_date: startDate.toISOString(),
-    }),
-    supabase.rpc("get_click_analytics", {
-      p_interval: "week",
-      p_link_id: link.id,
-      p_start_date: startDate.toISOString(),
-    }),
-    supabase
-      .from("click_log")
-      .select("referer, clicked_at")
-      .eq("link_id", link.id)
-      .gte("clicked_at", startDate.toISOString()),
-    supabase
-      .from("links")
-      .select("id, slug, title, destination_url, created_at")
-      .neq("id", link.id)
-      .order("created_at", { ascending: false })
-      .limit(10),
-  ]);
-
-  if (totalClicksError) throw totalClicksError;
-  if (dailyError) throw dailyError;
-  if (weeklyError) throw weeklyError;
-  if (clickRowsError) throw clickRowsError;
-  if (comparisonError) throw comparisonError;
-
-  const referrerCounts: Record<string, number> = {};
-  for (const row of clickRows || []) {
-    const rawReferer = row.referer?.trim();
-    let key = "direct";
-    if (rawReferer) {
-      try {
-        key = new URL(rawReferer).hostname || rawReferer;
-      } catch {
-        key = rawReferer;
-      }
-    }
-    referrerCounts[key] = (referrerCounts[key] || 0) + 1;
+  if (explicitStartDate && Number.isNaN(rangeStart.getTime())) {
+    return jsonResponse({ error: "Invalid start_date" }, 400);
+  }
+  if (explicitEndDate && Number.isNaN(rangeEnd.getTime())) {
+    return jsonResponse({ error: "Invalid end_date" }, 400);
   }
 
-  const referrers = Object.entries(referrerCounts)
-    .map(([referrer, clicks]) => ({ referrer, clicks }))
+  const intervalValue = ["hour", "day", "week", "month"].includes(interval)
+    ? interval
+    : "day";
+
+  const { data: seriesData, error: seriesError } = await supabase.rpc(
+    "get_click_analytics",
+    {
+      p_interval: intervalValue,
+      p_link_id: link.id,
+      p_start_date: rangeStart.toISOString(),
+      p_end_date: rangeEnd?.toISOString() ?? null,
+    },
+  );
+  if (seriesError) throw seriesError;
+
+  const { count: totalClicks, error: totalClicksError } = await supabase
+    .from("click_log")
+    .select("id", { count: "exact", head: true })
+    .eq("link_id", link.id);
+  if (totalClicksError) throw totalClicksError;
+
+  let clickQuery = supabase
+    .from("click_log")
+    .select("id, variant_id, clicked_at, referer, country_code")
+    .eq("link_id", link.id)
+    .gte("clicked_at", rangeStart.toISOString())
+    .order("clicked_at", { ascending: false });
+
+  if (rangeEnd) {
+    clickQuery = clickQuery.lt("clicked_at", rangeEnd.toISOString());
+  }
+
+  const { data: clickRows, error: clickError } = await clickQuery;
+  if (clickError) throw clickError;
+
+  const clicks = clickRows || [];
+  const variantIds = [...new Set(clicks.map((row) => row.variant_id).filter(Boolean))];
+
+  let variantRows:
+    | Array<{
+      id: string;
+      suffix: string;
+      ref: string | null;
+      utm_source: string | null;
+      utm_medium: string | null;
+      utm_campaign: string | null;
+      utm_content: string | null;
+      utm_term: string | null;
+    }>
+    | null = null;
+
+  if (variantIds.length > 0) {
+    const { data, error } = await supabase
+      .from("tracking_variants")
+      .select(
+        "id, suffix, ref, utm_source, utm_medium, utm_campaign, utm_content, utm_term",
+      )
+      .in("id", variantIds);
+    if (error) throw error;
+    variantRows = data;
+  }
+
+  const variantsById = new Map((variantRows || []).map((variant) => [variant.id, variant]));
+  const variantClickCounts = new Map<string, number>();
+  const referrerCounts = new Map<string, number>();
+  const countryCounts = new Map<string, number>();
+
+  for (const click of clicks) {
+    const variantId = click.variant_id || "__direct__";
+    variantClickCounts.set(variantId, (variantClickCounts.get(variantId) || 0) + 1);
+
+    const referrer = normalizeReferrer(click.referer);
+    referrerCounts.set(referrer, (referrerCounts.get(referrer) || 0) + 1);
+
+    const country = (click.country_code || "").trim().toUpperCase() || "Unknown";
+    countryCounts.set(country, (countryCounts.get(country) || 0) + 1);
+  }
+
+  const variantBreakdown = Array.from(variantClickCounts.entries())
+    .map(([variantId, count]) => {
+      if (variantId === "__direct__") {
+        return {
+          id: null,
+          suffix: null,
+          short_url: `https://${DOMAIN}/${link.slug}`,
+          ref: null,
+          utm_source: null,
+          utm_medium: null,
+          utm_campaign: null,
+          utm_content: null,
+          utm_term: null,
+          clicks: count,
+          label: "Direct",
+        };
+      }
+
+      const variant = variantsById.get(variantId);
+      return {
+        id: variantId,
+        suffix: variant?.suffix || null,
+        short_url: variant?.suffix
+          ? `https://${DOMAIN}/${link.slug}-${variant.suffix}`
+          : `https://${DOMAIN}/${link.slug}`,
+        ref: variant?.ref || null,
+        utm_source: variant?.utm_source || null,
+        utm_medium: variant?.utm_medium || null,
+        utm_campaign: variant?.utm_campaign || null,
+        utm_content: variant?.utm_content || null,
+        utm_term: variant?.utm_term || null,
+        clicks: count,
+        label: variant?.utm_source || variant?.suffix || variantId,
+      };
+    })
     .sort((a, b) => b.clicks - a.clicks);
+
+  const referrers = Array.from(referrerCounts.entries())
+    .map(([referrer, count]) => ({ referrer, clicks: count }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const countries = Array.from(countryCounts.entries())
+    .map(([country, count]) => ({ country, clicks: count }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const { data: comparisonLinks, error: comparisonError } = await supabase
+    .from("links")
+    .select("id, slug, title, author, destination_url, created_at")
+    .neq("id", link.id)
+    .order("created_at", { ascending: false })
+    .limit(Math.max(comparisonLimit, 1));
+  if (comparisonError) throw comparisonError;
 
   return jsonResponse({
     link: {
@@ -468,23 +577,29 @@ async function handleLinkAnalytics(params: {
       short_url: `https://${DOMAIN}/${link.slug}`,
     },
     total_clicks: totalClicks ?? 0,
-    days,
-    daily_clicks: (dailyClicks || []).map((row: { period: string; clicks: number }) => ({
-      date: row.period.slice(0, 10),
+    total_variants: variantRows?.length || 0,
+    days: defaultDays,
+    interval: intervalValue,
+    clicks_over_time: (seriesData || []).map((row: { period: string; clicks: number }) => ({
+      period: row.period,
       clicks: row.clicks,
     })),
-    weekly_clicks: (weeklyClicks || []).map((row: { period: string; clicks: number }) => ({
-      week_start: row.period.slice(0, 10),
-      clicks: row.clicks,
-    })),
+    variant_breakdown: variantBreakdown,
     referrers,
+    countries,
     comparison_links: (comparisonLinks || []).map((other) => ({
+      id: other.id,
       slug: other.slug,
       title: other.title,
+      author: other.author,
       destination_url: other.destination_url,
       created_at: other.created_at,
       short_url: `https://${DOMAIN}/${other.slug}`,
     })),
+    range: {
+      start: rangeStart.toISOString(),
+      end: rangeEnd?.toISOString() ?? null,
+    },
   });
 }
 
@@ -501,6 +616,10 @@ Deno.serve(async (req) => {
     let apiKey = req.headers.get("x-api-key") || "";
     let count = 10;
     let all = false;
+    let interval = "day";
+    let startDate = "";
+    let endDate = "";
+    let comparisonLimit = 8;
 
     if (req.method === "POST") {
       const body = await req.json();
@@ -511,6 +630,12 @@ Deno.serve(async (req) => {
       everybody = body.everybody === true;
       if (body.count !== undefined) count = Number(body.count);
       if (body.all !== undefined) all = Boolean(body.all);
+      if (body.interval !== undefined) interval = String(body.interval);
+      if (body.start_date !== undefined) startDate = String(body.start_date || "");
+      if (body.end_date !== undefined) endDate = String(body.end_date || "");
+      if (body.comparison_limit !== undefined) {
+        comparisonLimit = Number(body.comparison_limit) || 8;
+      }
     } else {
       const url = new URL(req.url);
       action = url.searchParams.get("action") || "article-stats";
@@ -522,12 +647,24 @@ Deno.serve(async (req) => {
       if (countParam) count = Number(countParam);
       const allParam = url.searchParams.get("all");
       if (allParam === "true" || allParam === "1") all = true;
+      interval = url.searchParams.get("interval") || "day";
+      startDate = url.searchParams.get("start_date") || "";
+      endDate = url.searchParams.get("end_date") || "";
+      const comparisonLimitParam = url.searchParams.get("comparison_limit");
+      if (comparisonLimitParam) comparisonLimit = Number(comparisonLimitParam) || 8;
     }
 
     if (action === "article-stats") {
       return await handleArticleStats({ slug, days, everybody });
     } else if (action === "link-analytics") {
-      return await handleLinkAnalytics({ slug, days });
+      return await handleLinkAnalytics({
+        slug,
+        days,
+        interval,
+        startDate,
+        endDate,
+        comparisonLimit,
+      });
     } else if (action === "list-custom-links") {
       return await handleListCustomLinks({ apiKey, count, all });
     } else {

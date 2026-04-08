@@ -262,6 +262,35 @@
     .analytics-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .analytics-select, .analytics-input { background: var(--bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 0.85em; }
     .chart-container { position: relative; height: 250px; width: 100%; }
+    .analytics-link-shell { display: grid; gap: 16px; }
+    .analytics-link-hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.9fr); gap: 16px; align-items: start; }
+    .analytics-hero-card { background: linear-gradient(135deg, rgba(37,99,235,0.14), rgba(191,106,255,0.16)); border: 1px solid var(--border-light); border-radius: 18px; padding: 20px; box-shadow: 0 12px 28px var(--card-shadow); }
+    .analytics-hero-kicker { font-size: 0.78em; letter-spacing: 0.14em; text-transform: uppercase; color: var(--author); margin-bottom: 10px; }
+    .analytics-hero-title { font-size: 1.8em; line-height: 1.08; color: var(--text-title); margin-bottom: 10px; word-break: break-word; }
+    .analytics-hero-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .analytics-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-light); border-radius: 999px; padding: 5px 10px; font-size: 0.8em; color: var(--text-muted); background: rgba(255,255,255,0.06); }
+    .analytics-link-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .analytics-link-row .short-url-wrap { max-width: 100%; }
+    .analytics-destination { font-size: 0.88em; color: var(--text-muted); word-break: break-all; }
+    .analytics-destination a { color: var(--accent); text-decoration: none; }
+    .analytics-destination a:hover { text-decoration: underline; }
+    .analytics-sidebar { display: grid; gap: 12px; }
+    .analytics-mini-card { background: var(--card-bg); border: 1px solid var(--border-light); border-radius: 16px; padding: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
+    .analytics-mini-label { font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 8px; }
+    .analytics-mini-value { font-size: 2em; font-weight: 700; color: var(--stat-num); line-height: 1; }
+    .analytics-mini-subtext { font-size: 0.84em; color: var(--text-muted); margin-top: 6px; }
+    .analytics-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr); gap: 16px; }
+    .analytics-list { display: grid; gap: 10px; }
+    .analytics-list-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-faint); }
+    .analytics-list-row:last-child { border-bottom: none; }
+    .analytics-list-label { font-size: 0.9em; color: var(--text); min-width: 0; word-break: break-word; }
+    .analytics-list-meta { font-size: 0.78em; color: var(--text-faint); }
+    .analytics-list-value { font-weight: 600; color: var(--clicks); }
+    .analytics-comparison-item { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--border-faint); }
+    .analytics-comparison-item:last-child { border-bottom: none; }
+    .analytics-comparison-link { color: var(--accent); text-decoration: none; font-weight: 600; }
+    .analytics-comparison-link:hover { text-decoration: underline; }
+    .analytics-empty { color: var(--text-muted); font-size: 0.9em; }
     .error-box { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 8px; padding: 16px; margin: 20px 0; color: var(--error-text); }
     .error-box code { background: var(--error-code-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
     .theme-control { display: inline-flex; align-items: center; gap: 6px; }
@@ -286,6 +315,7 @@
       header { align-items: flex-start; }
       header .header-left { flex-wrap: wrap; }
       header .user-info { flex-wrap: wrap; justify-content: flex-end; }
+      .analytics-link-hero, .analytics-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -410,6 +440,10 @@
     let analyticsEndDate = '';
     let analyticsChart = null;
     let analyticsLoading = false;
+    let analyticsRouteStub = '';
+    let analyticsLinkData = null;
+    let analyticsLinkLoading = false;
+    let analyticsLinkError = '';
     let compactView = true;
     let expandedCards = new Set();
     let currentPage = 'links'; // 'links', 'analytics', or 'api-key'
@@ -417,14 +451,20 @@
 
     function getPageFromHash() {
       const hash = window.location.hash;
-      if (hash === '#/analytics') return 'analytics';
+      if (hash === '#/analytics' || hash.startsWith('#/analytics/')) return 'analytics';
       if (hash === '#/api-key') return 'api-key';
       return 'links';
     }
 
+    function getAnalyticsStubFromHash() {
+      const hash = window.location.hash || '';
+      if (!hash.startsWith('#/analytics/')) return '';
+      return decodeURIComponent(hash.slice('#/analytics/'.length)).trim();
+    }
+
     function navigateTo(page) {
       if (page === 'analytics') {
-        window.location.hash = '#/analytics';
+        window.location.hash = analyticsRouteStub ? '#/analytics/' + encodeURIComponent(analyticsRouteStub) : '#/analytics';
       } else if (page === 'api-key') {
         window.location.hash = '#/api-key';
       } else {
@@ -434,6 +474,7 @@
 
     window.addEventListener('hashchange', async () => {
       const newPage = getPageFromHash();
+      analyticsRouteStub = getAnalyticsStubFromHash();
       if (newPage !== currentPage) {
         currentPage = newPage;
         const { data: { session } } = await sb.auth.getSession();
@@ -445,6 +486,11 @@
           } else {
             await renderDashboard(session);
           }
+        }
+      } else if (newPage === 'analytics') {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
+          await renderAnalyticsPage(session);
         }
       }
     });
@@ -917,6 +963,13 @@
       rerenderDashboard();
     }
 
+    function viewAnalyticsForSlug(slug) {
+      analyticsRouteStub = slug || '';
+      analyticsLinkData = null;
+      analyticsLinkError = '';
+      window.location.hash = analyticsRouteStub ? '#/analytics/' + encodeURIComponent(analyticsRouteStub) : '#/analytics';
+    }
+
     function setAnalyticsVariantFilter(value) {
       analyticsVariantFilter = value;
       rerenderDashboard();
@@ -942,6 +995,22 @@
         return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       }
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function formatLongDate(date) {
+      if (!date) return 'Unknown';
+      const value = new Date(date);
+      if (Number.isNaN(value.getTime())) return 'Unknown';
+      return value.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function getChartColors() {
@@ -1012,8 +1081,190 @@
       });
     }
 
+    async function loadLinkAnalyticsData(stub) {
+      if (!stub || analyticsLinkLoading) return analyticsLinkData;
+      analyticsLinkLoading = true;
+      analyticsLinkError = '';
+      try {
+        const url = new URL(SUPABASE_URL + '/functions/v1/analytics');
+        url.searchParams.set('action', 'link-analytics');
+        url.searchParams.set('slug', stub);
+        url.searchParams.set('interval', analyticsInterval);
+        if (analyticsStartDate) url.searchParams.set('start_date', new Date(analyticsStartDate).toISOString());
+        if (analyticsEndDate) url.searchParams.set('end_date', new Date(analyticsEndDate + 'T23:59:59').toISOString());
+
+        const { data: { session } } = await sb.auth.getSession();
+        const headers = {
+          apikey: SUPABASE_ANON_KEY,
+        };
+        if (session) headers.Authorization = 'Bearer ' + session.access_token;
+
+        const resp = await fetch(url.toString(), { headers });
+        const payload = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(payload.error || 'Failed to load link analytics');
+        }
+        analyticsLinkData = payload;
+        return payload;
+      } catch (err) {
+        analyticsLinkData = null;
+        analyticsLinkError = err && err.message ? err.message : 'Failed to load link analytics';
+        return null;
+      } finally {
+        analyticsLinkLoading = false;
+      }
+    }
+
+    function renderAnalyticsList(items, renderLabel) {
+      if (!items || items.length === 0) {
+        return '<div class="analytics-empty">No data yet.</div>';
+      }
+      return '<div class="analytics-list">' + items.map((item) => {
+        const rendered = renderLabel(item);
+        return '<div class="analytics-list-row">' +
+          '<div class="analytics-list-label">' + rendered.label + (rendered.meta ? '<div class="analytics-list-meta">' + rendered.meta + '</div>' : '') + '</div>' +
+          '<div class="analytics-list-meta">' + Math.round((item.clicks / Math.max(analyticsLinkData.total_clicks || 1, 1)) * 100) + '%</div>' +
+          '<div class="analytics-list-value">' + item.clicks + '</div>' +
+          '</div>';
+      }).join('') + '</div>';
+    }
+
+    function renderLinkAnalyticsPage(session) {
+      const user = session.user;
+      const avatarUrl = user.user_metadata?.avatar_url || '';
+      const displayName = currentPerson ? (currentPerson.name || user.email) : user.email;
+
+      const data = analyticsLinkData;
+      const link = data.link;
+      const createdDate = formatLongDate(link.created_at);
+      const publishedDate = formatLongDate(link.published_at);
+
+      let h = `
+        <header>
+          <div class="header-left">
+            <h1>aicoe.fit</h1>
+            ${renderNavLinks()}
+          </div>
+          <div class="user-info">
+            ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
+            ${displayName}
+            <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
+            ${renderThemeControl()}
+          </div>
+        </header>
+        <div class="analytics-link-shell">
+          <div class="analytics-link-hero">
+            <section class="analytics-hero-card">
+              <div class="analytics-hero-kicker">Per-link analytics</div>
+              <div class="analytics-hero-title">${escapeHtml(link.title || link.slug)}</div>
+              <div class="analytics-hero-meta">
+                <span class="analytics-chip">Stub: ${escapeHtml(link.slug)}</span>
+                <span class="analytics-chip">Created: ${escapeHtml(createdDate)}</span>
+                <span class="analytics-chip">Published: ${escapeHtml(publishedDate)}</span>
+              </div>
+              <div class="analytics-link-row">
+                <span class="short-url-wrap"><a class="short-url" href="${escapeAttr(link.short_url)}" target="_blank" rel="noopener">${escapeHtml(link.short_url)}</a>${renderCopyIconButton(link.short_url)}</span>
+                <button class="btn btn-sm btn-secondary" onclick="navigateTo('analytics')">Back to overview</button>
+              </div>
+              <div class="analytics-destination"><a href="${escapeAttr(link.destination_url)}" target="_blank" rel="noopener">${escapeHtml(link.destination_url)}</a></div>
+            </section>
+            <aside class="analytics-sidebar">
+              <div class="analytics-mini-card">
+                <div class="analytics-mini-label">Total clicks</div>
+                <div class="analytics-mini-value">${data.total_clicks}</div>
+                <div class="analytics-mini-subtext">Across direct visits and all tracked variants.</div>
+              </div>
+              <div class="analytics-mini-card">
+                <div class="analytics-mini-label">Variants</div>
+                <div class="analytics-mini-value">${data.total_variants}</div>
+                <div class="analytics-mini-subtext">Direct traffic is shown separately below.</div>
+              </div>
+            </aside>
+          </div>
+          <div class="analytics-panel">
+            <div class="analytics-header">
+              <div class="analytics-title">Click trend</div>
+              <div class="analytics-filters">
+                <select class="analytics-select" onchange="setAnalyticsInterval(this.value)">
+                  <option value="hour" ${analyticsInterval === 'hour' ? 'selected' : ''}>Hourly</option>
+                  <option value="day" ${analyticsInterval === 'day' ? 'selected' : ''}>Daily</option>
+                  <option value="week" ${analyticsInterval === 'week' ? 'selected' : ''}>Weekly</option>
+                  <option value="month" ${analyticsInterval === 'month' ? 'selected' : ''}>Monthly</option>
+                </select>
+                <input type="date" class="analytics-input" value="${analyticsStartDate}" onchange="setAnalyticsStartDate(this.value)" title="Start date" placeholder="From">
+                <input type="date" class="analytics-input" value="${analyticsEndDate}" onchange="setAnalyticsEndDate(this.value)" title="End date" placeholder="To">
+              </div>
+            </div>
+            <div class="chart-container">
+              <canvas id="analytics-canvas"></canvas>
+            </div>
+          </div>
+          <div class="analytics-grid">
+            <div class="analytics-panel">
+              <div class="analytics-header"><div class="analytics-title">Referrer breakdown</div></div>
+              ${renderAnalyticsList(data.referrers, (item) => ({ label: escapeHtml(item.referrer) }))}
+            </div>
+            <div class="analytics-panel">
+              <div class="analytics-header"><div class="analytics-title">Variant breakdown</div></div>
+              ${renderAnalyticsList(data.variant_breakdown, (item) => ({ label: escapeHtml(item.label), meta: item.ref ? 'ref=' + escapeHtml(item.ref) : '' }))}
+            </div>
+          </div>
+          <div class="analytics-grid">
+            <div class="analytics-panel">
+              <div class="analytics-header"><div class="analytics-title">Other shortened links</div></div>
+              ${(data.comparisons || []).length === 0 ? '<div class="analytics-empty">No comparison links available.</div>' : '<div>' + data.comparisons.map((item) => '<div class="analytics-comparison-item">' +
+                '<a class="analytics-comparison-link" href="#/analytics/' + encodeURIComponent(item.slug) + '">' + escapeHtml(item.title || item.slug) + '</a>' +
+                '<div class="analytics-list-meta">' + escapeHtml(item.short_url) + '</div>' +
+                '<div class="analytics-list-meta">' + item.clicks + ' clicks</div>' +
+                '</div>').join('') + '</div>'}
+            </div>
+            <div class="analytics-panel">
+              <div class="analytics-header"><div class="analytics-title">Top countries</div></div>
+              ${renderAnalyticsList(data.countries, (item) => ({ label: escapeHtml(item.country) }))}
+            </div>
+          </div>
+        </div>
+      `;
+
+      app.innerHTML = h;
+
+      const canvas = document.getElementById('analytics-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const colors = getChartColors();
+      if (analyticsChart) analyticsChart.destroy();
+      const labels = (data.clicks_over_time || []).map((point) => formatChartDate(point.period, analyticsInterval));
+      const values = (data.clicks_over_time || []).map((point) => point.clicks);
+      analyticsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Clicks',
+            data: values,
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: colors.grid }, ticks: { color: colors.text, font: { size: 10 } } },
+            y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.text, font: { size: 10 }, stepSize: 1 } },
+          }
+        }
+      });
+    }
+
     async function init() {
       currentPage = getPageFromHash();
+      analyticsRouteStub = getAnalyticsStubFromHash();
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (session) {
@@ -2220,6 +2471,36 @@ als upgrade
     }
 
     async function renderAnalyticsPage(session) {
+      analyticsRouteStub = getAnalyticsStubFromHash();
+      if (analyticsRouteStub) {
+        await loadLinkAnalyticsData(analyticsRouteStub);
+        if (analyticsLinkError) {
+          const user = session.user;
+          const avatarUrl = user.user_metadata?.avatar_url || '';
+          const displayName = currentPerson ? (currentPerson.name || user.email) : user.email;
+          app.innerHTML = `
+            <header>
+              <div class="header-left">
+                <h1>aicoe.fit</h1>
+                ${renderNavLinks()}
+              </div>
+              <div class="user-info">
+                ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
+                ${displayName}
+                <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
+                ${renderThemeControl()}
+              </div>
+            </header>
+            <div class="error-box">Unable to load analytics for <code>${escapeHtml(analyticsRouteStub)}</code>: ${escapeHtml(analyticsLinkError)}</div>
+          `;
+          return;
+        }
+        if (analyticsLinkData) {
+          renderLinkAnalyticsPage(session);
+          return;
+        }
+      }
+
       const user = session.user;
       const avatarUrl = user.user_metadata?.avatar_url || '';
       const displayName = currentPerson ? (currentPerson.name || user.email) : user.email;
@@ -2335,7 +2616,10 @@ als upgrade
           const author = s.link.author || '-';
           h += `
             <tr>
-              <td><a href="${s.link.destination_url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${title}</a></td>
+              <td>
+                <div><a href="#/analytics/${encodeURIComponent(s.link.slug)}" style="color:var(--accent);text-decoration:none;font-weight:600">${title}</a></div>
+                <div class="analytics-list-meta"><a href="${s.link.destination_url}" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:none">${s.link.slug}</a></div>
+              </td>
               <td style="color:var(--author)">${author}</td>
               <td>${s.variantCount}</td>
               <td class="clicks">${s.totalClicks}</td>
