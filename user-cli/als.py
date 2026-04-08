@@ -1253,6 +1253,9 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
         published_at = result.get("published_at") or result.get("created_at", "")
         date_str = published_at[:10] if published_at else ""
         slug = result.get("slug", "")
+        match_type = result.get("match_type", "")
+        start_time = result.get("start_time")
+        snippet = result.get("text", "")
 
         if len(title) > 40:
             title = title[:39] + "…"
@@ -1265,6 +1268,22 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
         click.echo(
             f"  {id_display} {title:<42s} {author:<17s} {similarity:5.2f}  {date_str:<10s}"
         )
+
+        if match_type == "transcript":
+            ts_label = ""
+            if start_time is not None:
+                m, s = divmod(int(start_time), 60)
+                ts_label = f"at {m}:{s:02d}"
+            reason = click.style("  transcript", fg="cyan")
+            if ts_label:
+                reason += click.style(f" {ts_label}", fg="yellow")
+            if snippet:
+                max_snippet = 80
+                display_text = snippet.replace("\n", " ").strip()
+                if len(display_text) > max_snippet:
+                    display_text = display_text[: max_snippet - 1] + "…"
+                reason += f"  {display_text}"
+            click.echo(reason)
 
         if tracking and slug in tracking_data:
             links = tracking_data[slug].get("links", [])

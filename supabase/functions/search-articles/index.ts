@@ -141,7 +141,10 @@ Deno.serve(async (req) => {
 
       const nonVideoArticles = articles.filter(
         (a) => !chunkVideoIds.has(a.id as string),
-      );
+      ).map((a) => ({
+        ...a,
+        match_type: "article",
+      }));
 
       const chunkResults = chunks.map((c) => ({
         id: c.link_id,
@@ -155,13 +158,14 @@ Deno.serve(async (req) => {
         start_time: c.start_time,
         end_time: c.end_time,
         text: c.text,
+        match_type: "transcript",
       }));
 
       merged = [...nonVideoArticles, ...chunkResults].sort(
         (a, b) => (b.similarity as number) - (a.similarity as number),
       );
     } else {
-      merged = articles;
+      merged = articles.map((a) => ({ ...a, match_type: "article" }));
     }
 
     const finalResults = merged.slice(0, matchCount);

@@ -197,7 +197,9 @@ async def search(query: str, count: int = 3) -> dict:
         count: Number of results to return (default 3, max ~20).
 
     Returns a dict with ``results`` – each containing title, author,
-    similarity score, and personalised tracking links per channel.
+    similarity score, match_type ("transcript" or "article"), and for
+    video transcript matches: start_time, end_time, and text (snippet).
+    Personalised tracking links per channel are also included.
     """
     search_data = await _post(
         "search-articles",
@@ -213,7 +215,14 @@ async def search(query: str, count: int = 3) -> dict:
             "author": r.get("author", ""),
             "similarity": r.get("similarity", 0),
             "published_at": r.get("published_at") or r.get("created_at", ""),
+            "match_type": r.get("match_type", "article"),
         }
+        if r.get("start_time") is not None:
+            entry["start_time"] = r["start_time"]
+        if r.get("end_time") is not None:
+            entry["end_time"] = r["end_time"]
+        if r.get("text"):
+            entry["text"] = r["text"]
         if slug:
             try:
                 link_data = await _post(
