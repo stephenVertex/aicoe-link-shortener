@@ -1,6 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { logError } from "../_shared/errorLogger.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
