@@ -34,7 +34,7 @@ jobs:
           echo "GENERIC_WHEEL=user-cli/dist/als-0-py3-none-any.whl" >> "$GITHUB_ENV"
 
       - name: Create GitHub release and upload wheel
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.GENERIC_WHEEL }}
           generate_release_notes: true
