@@ -41,12 +41,13 @@ Deno.serve(async (req) => {
     }
   }
 
-  const { data: syncLog } = await supabase
+  let syncLogId: string | null = null;
+  supabase
     .from("sync_operations")
     .insert({ source: action, status: "running", force })
     .select("id")
-    .single();
-  const syncLogId = syncLog?.id;
+    .single()
+    .then(({ data }) => { if (data?.id) syncLogId = data.id; }, () => {});
 
   try {
     let result: Response;
