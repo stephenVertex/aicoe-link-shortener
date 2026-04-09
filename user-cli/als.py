@@ -1039,26 +1039,23 @@ def get(slug_or_url: str):
             return
         slug_or_url = resolved
 
-    payload: dict = {"article_url": slug_or_url}
-    resp = _api_request("get-link", api_key=api_key, json_body=payload)
+    core_resp = _api_request(
+        "get-link", api_key="", json_body={"article_url": slug_or_url, "fields": "core"}
+    )
 
-    if resp.status_code == 404:
+    if core_resp.status_code == 404:
         click.echo(f"Article not found: {slug_or_url}", err=True)
         sys.exit(1)
-    if resp.status_code == 401:
-        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    if resp.status_code != 200:
-        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+    if core_resp.status_code != 200:
+        click.echo(f"Error ({core_resp.status_code}): {core_resp.text}", err=True)
         sys.exit(1)
 
-    data = resp.json()
-    article = data.get("article", {})
-    links = data.get("links", [])
+    core_data = core_resp.json()
+    article = core_data.get("article", {})
+    slug = article.get("slug", "")
 
     title = article.get("title") or ""
     author = article.get("author", "")
-    slug = article.get("slug", "")
     destination = article.get("url", "")
     published_at = article.get("published_at") or ""
     date_str = published_at[:10] if published_at else ""
@@ -1071,6 +1068,18 @@ def get(slug_or_url: str):
     if destination:
         click.echo(f"  URL: {destination}")
     click.echo(f"  Short: https://aicoe.fit/{slug}")
+
+    tracking_resp = _api_request(
+        "batch-get-links",
+        api_key=api_key,
+        json_body={"slugs": [slug]},
+    )
+
+    links = []
+    if tracking_resp.status_code == 200:
+        tracking_data = tracking_resp.json().get("results", {})
+        if slug in tracking_data:
+            links = tracking_data[slug].get("links", [])
 
     if links:
         click.echo(f"\n  Your tracking links:")
@@ -1086,10 +1095,13 @@ def get(slug_or_url: str):
 def _resolve_short_id(api_key: str, short_id: str) -> str | None:
     """Resolve a short ID prefix to a slug.
 
-    Uses server-side lookup via get-link?id_prefix=... endpoint.
+    Uses server-side lookup via get-link?id_prefix=...&fields=core endpoint.
+    Core-only mode requires no auth and skips tracking variant generation.
     Returns the slug if unique match, None if ambiguous or not found.
     """
-    resp = _api_request("get-link", api_key=api_key, json_body={"id_prefix": short_id})
+    resp = _api_request(
+        "get-link", api_key="", json_body={"id_prefix": short_id, "fields": "core"}
+    )
 
     if resp.status_code == 404:
         data = (

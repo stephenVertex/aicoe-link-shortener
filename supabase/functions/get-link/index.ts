@@ -216,6 +216,27 @@ async function buildTrackingResponse(
   );
 }
 
+function buildCoreResponse(
+  link: LinkInfo,
+  corsHeaders: Record<string, string>,
+): Response {
+  return new Response(
+    JSON.stringify({
+      article: {
+        id: link.id,
+        title: link.title,
+        author: link.author,
+        slug: link.slug,
+        url: link.destination_url,
+        published_at: link.published_at,
+      },
+    }),
+    {
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    },
+  );
+}
+
 Deno.serve(async (req) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -232,7 +253,8 @@ Deno.serve(async (req) => {
   let apiKey = req.headers.get("x-api-key") || "";
   let articleUrl = "";
   let idPrefix = "";
-  let source = ""; // optional: specific source to get variant for
+  let source = "";
+  let fields = "";
 
   if (req.method === "POST") {
     try {
@@ -241,6 +263,7 @@ Deno.serve(async (req) => {
       articleUrl = body.article_url || body.url || body.slug || "";
       idPrefix = body.id_prefix || "";
       source = body.source || "";
+      fields = body.fields || "";
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid JSON body" }),
@@ -256,29 +279,10 @@ Deno.serve(async (req) => {
     articleUrl = url.searchParams.get("url") || url.searchParams.get("slug") || "";
     idPrefix = url.searchParams.get("id_prefix") || "";
     source = url.searchParams.get("source") || "";
+    fields = url.searchParams.get("fields") || "";
   }
 
-  // Validate API key
-  if (!apiKey) {
-    return new Response(
-      JSON.stringify({ error: "API key required. Pass via x-api-key header or api_key parameter." }),
-      {
-        status: 401,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
-  }
-
-  const person = await validateApiKey(apiKey);
-  if (!person) {
-    return new Response(
-      JSON.stringify({ error: "Invalid API key" }),
-      {
-        status: 401,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
-  }
+  const coreOnly = fields === "core";
 
   // Handle ID prefix lookup (server-side short ID resolution)
   if (idPrefix) {
@@ -309,11 +313,76 @@ Deno.serve(async (req) => {
     }
 
     const link = result;
+    if (coreOnly) {
+      return buildCoreResponse(link, corsHeaders);
+    }
+  }
+
+  // For full mode, validate auth before further processing (supports login key validation)
+  if (!coreOnly) {
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: "API key required. Pass via x-api-key header or api_key parameter." }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+
+    const person = await validateApiKey(apiKey);
+    if (!person) {
+      return new Response(
+        JSON.stringify({ error: "Invalid API key" }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+
+    // Validate required params after auth (allows empty-body key validation)
+    if (!articleUrl && !idPrefix) {
+      return new Response(
+        JSON.stringify({ error: "article_url or slug parameter required" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+
+    let link: LinkInfo | null = null;
+    if (idPrefix) {
+      const result = await findLinkByIdPrefix(idPrefix);
+      if (!result || "matches" in result) {
+        return new Response(
+          JSON.stringify({ error: `No article found with ID starting with '${idPrefix}'` }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          },
+        );
+      }
+      link = result;
+    } else {
+      link = await findLink(articleUrl);
+      if (!link) {
+        return new Response(
+          JSON.stringify({ error: `No article found for: ${articleUrl}` }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          },
+        );
+      }
+    }
+
     return buildTrackingResponse(link, person, source, corsHeaders);
   }
 
-  // Find the link
-  if (!articleUrl) {
+  // Core-only mode: no auth required, just link lookup
+  if (!articleUrl && !idPrefix) {
     return new Response(
       JSON.stringify({ error: "article_url or slug parameter required" }),
       {
@@ -323,16 +392,31 @@ Deno.serve(async (req) => {
     );
   }
 
-  const link = await findLink(articleUrl);
-  if (!link) {
-    return new Response(
-      JSON.stringify({ error: `No article found for: ${articleUrl}` }),
-      {
-        status: 404,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
+  let link: LinkInfo | null = null;
+  if (idPrefix) {
+    const result = await findLinkByIdPrefix(idPrefix);
+    if (!result || "matches" in result) {
+      return new Response(
+        JSON.stringify({ error: `No article found with ID starting with '${idPrefix}'` }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
+    link = result;
+  } else {
+    link = await findLink(articleUrl);
+    if (!link) {
+      return new Response(
+        JSON.stringify({ error: `No article found for: ${articleUrl}` }),
+        {
+          status: 404,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
   }
 
-  return buildTrackingResponse(link, person, source, corsHeaders);
+  return buildCoreResponse(link, corsHeaders);
 });
