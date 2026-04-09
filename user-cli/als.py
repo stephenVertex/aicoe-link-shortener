@@ -1247,12 +1247,12 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
     for result in results:
         full_id = result.get("id", "")
         short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
-        title = result.get("title", result.get("slug", ""))
+        title = result.get("title") or result.get("slug") or ""
         author = result.get("author") or ""
         similarity = result.get("similarity", 0)
         published_at = result.get("published_at") or result.get("created_at", "")
         date_str = published_at[:10] if published_at else ""
-        slug = result.get("slug", "")
+        slug = result.get("slug") or ""
         match_type = result.get("match_type", "")
         start_time = result.get("start_time")
         snippet = result.get("text", "")
@@ -1410,9 +1410,9 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
             tracking_data = batch_resp.json().get("results", {})
 
     for i, result in enumerate(results, 1):
-        title = result.get("title") or result.get("slug", "")
-        article_author = result.get("author", "")
-        slug = result.get("slug", "")
+        title = result.get("title") or result.get("slug") or ""
+        article_author = result.get("author") or ""
+        slug = result.get("slug") or ""
         published_at = result.get("published_at") or result.get("created_at", "")
         destination_url = result.get("url", "")
         date_str = published_at[:10] if published_at else ""
