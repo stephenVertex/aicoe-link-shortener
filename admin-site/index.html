@@ -1447,6 +1447,7 @@
                 ${renderCopyIconButton(`https://${DOMAIN}/${link.slug}`)}
               </span>
               ${clicksAvailable && directClicks > 0 ? `<span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks} direct clicks</span>` : ''}
+              <a href="./analytics.html?stub=${encodeURIComponent(link.slug)}" style="margin-left:8px;font-size:0.82em;color:var(--text-faint);text-decoration:none" title="View analytics">&#128202; Analytics</a>
             </div>
         `;
 
@@ -2373,7 +2374,7 @@ als upgrade
           const author = s.link.author || '-';
           h += `
             <tr>
-              <td><a href="${s.link.destination_url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${title}</a></td>
+              <td><a href="${s.link.destination_url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${title}</a> <a href="./analytics.html?stub=${encodeURIComponent(s.link.slug)}" style="font-size:0.78em;color:var(--text-faint);margin-left:4px" title="View analytics">&#128202;</a></td>
               <td style="color:var(--author)">${author}</td>
               <td>${s.variantCount}</td>
               <td class="clicks">${s.totalClicks}</td>

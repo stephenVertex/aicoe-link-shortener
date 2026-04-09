@@ -420,7 +420,7 @@ async function handleLinkAnalytics(params: {
     }),
     supabase
       .from("click_log")
-      .select("referer, clicked_at")
+      .select("referer, clicked_at, country_code")
       .eq("link_id", link.id)
       .gte("clicked_at", startDate.toISOString()),
     supabase
@@ -455,6 +455,16 @@ async function handleLinkAnalytics(params: {
     .map(([referrer, clicks]) => ({ referrer, clicks }))
     .sort((a, b) => b.clicks - a.clicks);
 
+  const countryCounts: Record<string, number> = {};
+  for (const row of clickRows || []) {
+    const cc = row.country_code?.trim() || "unknown";
+    countryCounts[cc] = (countryCounts[cc] || 0) + 1;
+  }
+
+  const byCountry = Object.entries(countryCounts)
+    .map(([country, clicks]) => ({ country, clicks }))
+    .sort((a, b) => b.clicks - a.clicks);
+
   return jsonResponse({
     link: {
       id: link.id,
@@ -478,7 +488,9 @@ async function handleLinkAnalytics(params: {
       clicks: row.clicks,
     })),
     referrers,
+    by_country: byCountry,
     comparison_links: (comparisonLinks || []).map((other) => ({
+      id: other.id,
       slug: other.slug,
       title: other.title,
       destination_url: other.destination_url,

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link Analytics - aicoe.fit</title>
+  <script src="./supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --text: #333;
+      --text-muted: #666;
+      --text-faint: #888;
+      --text-title: #111;
+      --card-bg: white;
+      --card-shadow: rgba(0,0,0,0.08);
+      --border: #e0e0e0;
+      --border-light: #e5e7eb;
+      --border-faint: #f3f4f6;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --author: #6b21a8;
+      --clicks: #059669;
+      --badge-bg: #dbeafe;
+      --badge-text: #1e40af;
+      --mine-bg: #eff6ff;
+      --btn-secondary-bg: #e5e7eb;
+      --btn-secondary-text: #374151;
+      --btn-secondary-hover: #d1d5db;
+      --copy-btn-border: #d1d5db;
+      --copy-btn-hover: #f3f4f6;
+      --copied-bg: #dcfce7;
+      --copied-border: #86efac;
+      --copied-text: #166534;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --error-text: #991b1b;
+      --google-bg: white;
+      --google-border: #dadce0;
+      --google-text: #3c4043;
+      --google-hover: #f8f9fa;
+      --stat-num: #2563eb;
+    }
+    html[data-theme="synthwave-dark"] {
+      --bg: #1a1a2e;
+      --text: #e0e0e0;
+      --text-muted: #a0a0b8;
+      --text-faint: #707088;
+      --text-title: #ff6ec7;
+      --card-bg: #16213e;
+      --card-shadow: rgba(0,0,0,0.4);
+      --border: #2a2a4a;
+      --border-light: #252545;
+      --border-faint: #202040;
+      --accent: #00d4ff;
+      --accent-hover: #33ddff;
+      --author: #bf6aff;
+      --clicks: #72f1b8;
+      --badge-bg: #1a1a3e;
+      --badge-text: #00d4ff;
+      --mine-bg: #1a2438;
+      --btn-secondary-bg: #252545;
+      --btn-secondary-text: #e0e0e0;
+      --btn-secondary-hover: #2a2a5a;
+      --copy-btn-border: #3a3a5a;
+      --copy-btn-hover: #252545;
+      --copied-bg: #1a2e2a;
+      --copied-border: #72f1b8;
+      --copied-text: #72f1b8;
+      --error-bg: #2e1a1a;
+      --error-border: #6a3a3a;
+      --error-text: #ff6ec7;
+      --google-bg: #16213e;
+      --google-border: #3a3a5a;
+      --google-text: #e0e0e0;
+      --google-hover: #1a2a4e;
+      --stat-num: #ff6ec7;
+    }
+    html[data-theme="solarized-dark"] {
+      --bg: #002b36;
+      --text: #93a1a1;
+      --text-muted: #839496;
+      --text-faint: #657b83;
+      --text-title: #b58900;
+      --card-bg: #073642;
+      --card-shadow: rgba(0,0,0,0.28);
+      --border: #0d4a59;
+      --border-light: #114b59;
+      --border-faint: #0c4250;
+      --accent: #268bd2;
+      --accent-hover: #3aa0e8;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #11333d;
+      --badge-text: #6cbeff;
+      --mine-bg: #0c3640;
+      --btn-secondary-bg: #11404d;
+      --btn-secondary-text: #93a1a1;
+      --btn-secondary-hover: #15505f;
+      --copy-btn-border: #1a5564;
+      --copy-btn-hover: #11404d;
+      --copied-bg: #123f40;
+      --copied-border: #2aa198;
+      --copied-text: #7ee5dd;
+      --error-bg: #3a2323;
+      --error-border: #6d3f3f;
+      --error-text: #dc322f;
+      --google-bg: #073642;
+      --google-border: #1a5564;
+      --google-text: #93a1a1;
+      --google-hover: #11404d;
+      --stat-num: #b58900;
+    }
+    html[data-theme="solarized-light"] {
+      --bg: #fdf6e3;
+      --text: #586e75;
+      --text-muted: #657b83;
+      --text-faint: #93a1a1;
+      --text-title: #b58900;
+      --card-bg: #fffdf4;
+      --card-shadow: rgba(88,110,117,0.12);
+      --border: #eee8d5;
+      --border-light: #e6dfca;
+      --border-faint: #f2ecdc;
+      --accent: #268bd2;
+      --accent-hover: #1f76b4;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #e8f1f3;
+      --badge-text: #268bd2;
+      --mine-bg: #f3f0df;
+      --btn-secondary-bg: #eee8d5;
+      --btn-secondary-text: #586e75;
+      --btn-secondary-hover: #e6dfca;
+      --copy-btn-border: #d8d2c0;
+      --copy-btn-hover: #f2ecdc;
+      --copied-bg: #e6f4ef;
+      --copied-border: #9dd7c5;
+      --copied-text: #20756d;
+      --error-bg: #fff1f0;
+      --error-border: #f3c7c2;
+      --error-text: #b8332f;
+      --google-bg: #fffdf4;
+      --google-border: #d8d2c0;
+      --google-text: #586e75;
+      --google-hover: #f6f0de;
+      --stat-num: #b58900;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); transition: background 0.2s, color 0.2s; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+    header h1 { font-size: 1.4em; font-weight: 700; }
+    header .header-left { display: flex; align-items: center; gap: 0; }
+    header .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.9em; color: var(--text-muted); }
+    header .user-info img { width: 32px; height: 32px; border-radius: 50%; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); }
+    .btn-secondary:hover { background: var(--btn-secondary-hover); }
+    .btn-sm { padding: 4px 10px; font-size: 0.8em; }
+    .link-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
+    .link-card h3 { font-size: 1.1em; margin-bottom: 4px; }
+    .link-card .title { font-size: 0.95em; color: var(--text-title); margin-bottom: 2px; }
+    .link-card .meta { font-size: 0.8em; color: var(--text-faint); margin-bottom: 8px; }
+    .link-card .meta .author { color: var(--author); font-weight: 500; }
+    .link-card .dest { font-size: 0.85em; color: var(--text-muted); margin-bottom: 12px; word-break: break-all; }
+    .link-card .dest a { color: var(--accent); text-decoration: none; }
+    .link-card .dest a:hover { text-decoration: underline; }
+    .nav-links { display: flex; align-items: center; gap: 4px; margin-left: 16px; }
+    .nav-link { padding: 4px 12px; font-size: 0.85em; font-weight: 500; color: var(--text-muted); text-decoration: none; border-radius: 6px; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+    .nav-link:hover { background: var(--copy-btn-hover); color: var(--text); }
+    .nav-link.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .stats-row { display: flex; gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px var(--card-shadow); flex: 1; text-align: center; }
+    .stat-card .num { font-size: 2em; font-weight: 700; color: var(--stat-num); }
+    .stat-card .label { font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
+    .analytics-panel { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
+    .analytics-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .analytics-title { font-size: 1em; font-weight: 600; color: var(--text-title); }
+    .analytics-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .analytics-select, .analytics-input { background: var(--bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 0.85em; }
+    .chart-container { position: relative; height: 250px; width: 100%; }
+    .error-box { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 8px; padding: 16px; margin: 20px 0; color: var(--error-text); }
+    .error-box code { background: var(--error-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
+    .theme-control { display: inline-flex; align-items: center; gap: 6px; }
+    .theme-label { font-size: 0.75em; color: var(--text-faint); }
+    .theme-select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 0.8em; }
+    .variant-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    .variant-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-light); color: var(--text-muted); font-weight: 500; }
+    .variant-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-faint); }
+    .clicks { font-weight: 600; color: var(--clicks); }
+    .loading { text-align: center; padding: 60px; color: var(--text-faint); }
+    .short-url { font-family: monospace; font-size: 0.9em; color: var(--accent); text-decoration: none; white-space: nowrap; }
+    .short-url:hover { text-decoration: underline; }
+    .copy-btn { background: none; border: 1px solid var(--copy-btn-border); border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: var(--text-muted); }
+    .copy-btn:hover { background: var(--copy-btn-hover); }
+    .copy-btn.copied { background: var(--copied-bg); border-color: var(--copied-border); color: var(--copied-text); }
+    .source-breakdown-list { display: grid; gap: 6px; }
+    .source-row { display: flex; align-items: center; gap: 8px; font-size: 0.88em; }
+    .source-bar { height: 18px; border-radius: 4px; background: var(--accent); opacity: 0.7; min-width: 4px; transition: width 0.3s; }
+    .source-label { color: var(--text-muted); min-width: 100px; }
+    .source-count { font-weight: 600; color: var(--clicks); min-width: 30px; text-align: right; }
+    .comparison-list { display: grid; gap: 8px; }
+    .comparison-item { display: flex; align-items: center; gap: 10px; font-size: 0.88em; padding: 8px 12px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border-faint); }
+    .comparison-item.current { border-color: var(--accent); background: var(--mine-bg); }
+    .comparison-item .title { flex: 1; color: var(--text-title); }
+    .comparison-item .click-count { font-weight: 600; color: var(--clicks); min-width: 40px; text-align: right; }
+    .comparison-item a { color: var(--accent); text-decoration: none; font-size: 0.85em; }
+    .comparison-item a:hover { text-decoration: underline; }
+    @media (max-width: 720px) {
+      .stats-row { flex-wrap: wrap; }
+      header { align-items: flex-start; }
+      header .header-left { flex-wrap: wrap; }
+      header .user-info { flex-wrap: wrap; justify-content: flex-end; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="app"><div class="loading">Loading analytics...</div></div>
+  </div>
+
+  <script>
+    const THEME_KEY = 'theme';
+
+    function resolveTheme(theme) {
+      if (theme === 'dark') return 'synthwave-dark';
+      if (theme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'synthwave-dark' : 'light';
+      }
+      return theme || 'synthwave-dark';
+    }
+
+    function applyTheme(theme) {
+      const resolved = resolveTheme(theme);
+      if (resolved === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', resolved);
+      }
+    }
+
+    function setTheme(theme) {
+      localStorage.setItem(THEME_KEY, theme);
+      applyTheme(theme);
+    }
+
+    function getSavedTheme() {
+      const saved = localStorage.getItem(THEME_KEY) || 'synthwave-dark';
+      return saved === 'dark' ? 'synthwave-dark' : saved;
+    }
+
+    function renderThemeControl() {
+      const currentTheme = getSavedTheme();
+      const options = [
+        ['synthwave-dark', 'Synthwave'],
+        ['solarized-dark', 'Solarized Dark'],
+        ['solarized-light', 'Solarized Light'],
+        ['light', 'Light'],
+        ['system', 'System'],
+      ];
+      return '<div class="theme-control"><span class="theme-label">Theme</span><select class="theme-select" onchange="setTheme(this.value)">' +
+        options.map(([value, label]) => '<option value="' + value + '"' + (currentTheme === value ? ' selected' : '') + '>' + label + '</option>').join('') +
+        '</select></div>';
+    }
+
+    applyTheme(getSavedTheme());
+
+    const SUPABASE_URL = 'https://dumhbtxskncofwwzrmfx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
+    const DOMAIN = 'aicoe.fit';
+
+    let sb;
+    try {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      document.getElementById('app').innerHTML = '<div class="error-box">Failed to initialize Supabase client: <code>' + e.message + '</code></div>';
+      throw e;
+    }
+
+    const app = document.getElementById('app');
+
+    function getStubFromUrl() {
+      const path = window.location.pathname;
+      const match = path.match(/^\/analytics\/(.+)$/);
+      if (match) return decodeURIComponent(match[1]);
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('stub')) return params.get('stub');
+      const hash = window.location.hash;
+      if (hash && hash.length > 1) return hash.substring(1);
+      return '';
+    }
+
+    function escapeAttr(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function getChartColors() {
+      const style = getComputedStyle(document.documentElement);
+      const accent = style.getPropertyValue('--accent').trim() || '#2563eb';
+      return {
+        border: accent,
+        background: accent + '33',
+        grid: style.getPropertyValue('--border-faint').trim() || '#f3f4f6',
+        text: style.getPropertyValue('--text-muted').trim() || '#666',
+      };
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '—';
+      return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function formatChartDate(date, interval) {
+      const d = new Date(date);
+      if (interval === 'week') {
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' week';
+      } else if (interval === 'month') {
+        return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    let analyticsChart = null;
+    let currentInterval = 'day';
+    let analyticsData = null;
+
+    function setInterval_(value) {
+      currentInterval = value;
+      if (analyticsData) renderChart();
+    }
+
+    function renderChart() {
+      const canvas = document.getElementById('analytics-canvas');
+      if (!canvas || !analyticsData) return;
+
+      const clicks = analyticsData.daily_clicks || [];
+      const ctx = canvas.getContext('2d');
+      const colors = getChartColors();
+
+      if (analyticsChart) analyticsChart.destroy();
+
+      const labels = clicks.map(d => formatChartDate(d.date, currentInterval));
+      const values = clicks.map(d => d.clicks);
+
+      analyticsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Clicks',
+            data: values,
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(0,0,0,0.8)',
+              titleFont: { size: 12 },
+              bodyFont: { size: 12 },
+              padding: 10,
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: colors.grid },
+              ticks: { color: colors.text, font: { size: 10 } }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: colors.grid },
+              ticks: { color: colors.text, font: { size: 10 }, stepSize: 1 }
+            }
+          }
+        }
+      });
+    }
+
+    function copyUrl(btn) {
+      const url = btn.getAttribute('data-copy-url');
+      if (!url) return;
+      navigator.clipboard.writeText(url).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    async function loadAnalytics(stub, session) {
+      app.innerHTML = '<div class="loading">Loading analytics for ' + escapeAttr(stub) + '...</div>';
+
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+        };
+        if (session) {
+          headers['Authorization'] = 'Bearer ' + session.access_token;
+        }
+
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/analytics?action=link-analytics&slug=' + encodeURIComponent(stub) + '&days=30', {
+          method: 'GET',
+          headers,
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ error: 'Request failed' }));
+          throw new Error(err.error || 'Request failed with status ' + resp.status);
+        }
+
+        analyticsData = await resp.json();
+
+        const comparisonLinks = analyticsData.comparison_links || [];
+        let comparisonClicks = {};
+        if (comparisonLinks.length > 0) {
+          const { data: clicksData } = await sb
+            .from('click_log')
+            .select('link_id')
+            .in('link_id', comparisonLinks.map(l => l.id || ''));
+          if (clicksData) {
+            for (const c of clicksData) {
+              comparisonClicks[c.link_id] = (comparisonClicks[c.link_id] || 0) + 1;
+            }
+          }
+        }
+
+        renderPage(analyticsData, comparisonLinks, comparisonClicks);
+      } catch (err) {
+        app.innerHTML = '<div class="error-box">Error: <code>' + escapeAttr(err.message) + '</code></div>';
+      }
+    }
+
+    function renderPage(data, comparisonLinks, comparisonClicks) {
+      const article = data.link || {};
+      const totalClicks = data.total_clicks || 0;
+      const dailyClicks = data.daily_clicks || [];
+      const weeklyClicks = data.weekly_clicks || [];
+      const referrers = data.referrers || [];
+      const byCountry = data.by_country || [];
+
+      const maxRefClicks = referrers.length > 0 ? referrers[0].clicks : 1;
+
+      let comparisonHtml = '';
+      if (comparisonLinks && comparisonLinks.length > 0) {
+        const sorted = comparisonLinks
+          .map(l => ({ ...l, clicks: (l.id && comparisonClicks[l.id]) || 0 }))
+          .sort((a, b) => b.clicks - a.clicks)
+          .slice(0, 10);
+
+        comparisonHtml = '<div class="analytics-panel">' +
+          '<div class="analytics-header"><div class="analytics-title">Other Links (by clicks)</div></div>' +
+          '<div class="comparison-list">' +
+          sorted.map(l => {
+            const isCurrent = l.slug === article.slug;
+            return '<div class="comparison-item' + (isCurrent ? ' current' : '') + '">' +
+              '<span class="title">' + escapeAttr(l.title || l.slug) + (isCurrent ? ' <span style="color:var(--accent);font-size:0.8em">(this link)</span>' : '') + '</span>' +
+              '<span class="click-count">' + l.clicks + '</span>' +
+              (!isCurrent ? '<a href="./analytics.html?stub=' + encodeURIComponent(l.slug) + '">View</a>' : '') +
+              '</div>';
+          }).join('') +
+          '</div></div>';
+      }
+
+      let sourceBreakdownHtml = '';
+      if (referrers.length > 0) {
+        sourceBreakdownHtml = '<div class="analytics-panel">' +
+          '<div class="analytics-header"><div class="analytics-title">Referrer Breakdown</div></div>' +
+          '<div class="source-breakdown-list">' +
+          referrers.map(s => {
+            const pct = Math.max(4, (s.clicks / maxRefClicks) * 100);
+            return '<div class="source-row">' +
+              '<span class="source-label">' + escapeAttr(s.referrer) + '</span>' +
+              '<div class="source-bar" style="width:' + pct + '%"></div>' +
+              '<span class="source-count">' + s.clicks + '</span>' +
+              '</div>';
+          }).join('') +
+          '</div></div>';
+      }
+
+      let variantBreakdownHtml = '';
+      if (data.by_variant && data.by_variant.length > 0) {
+        variantBreakdownHtml = '<div class="analytics-panel">' +
+          '<div class="analytics-header"><div class="analytics-title">Clicks by Tracking Variant</div></div>' +
+          '<table class="variant-table">' +
+          '<thead><tr><th>Variant</th><th class="clicks">Clicks</th></tr></thead><tbody>' +
+          data.by_variant.map(v => '<tr><td>' + escapeAttr(v.label) + '</td><td class="clicks">' + v.clicks + '</td></tr>').join('') +
+          '</tbody></table></div>';
+      }
+
+      let countryBreakdownHtml = '';
+      if (byCountry && byCountry.length > 0) {
+        countryBreakdownHtml = '<div class="analytics-panel">' +
+          '<div class="analytics-header"><div class="analytics-title">Clicks by Country</div></div>' +
+          '<table class="variant-table">' +
+          '<thead><tr><th>Country</th><th class="clicks">Clicks</th></tr></thead><tbody>' +
+          byCountry.map(c => '<tr><td>' + escapeAttr(c.country || 'Unknown') + '</td><td class="clicks">' + c.clicks + '</td></tr>').join('') +
+          '</tbody></table></div>';
+      }
+
+      const shortUrl = article.short_url || ('https://' + DOMAIN + '/' + (article.slug || ''));
+
+      const h = `
+        <header>
+          <div class="header-left">
+            <h1><a href="./" style="color:var(--text-title);text-decoration:none">aicoe.fit</a></h1>
+            <div class="nav-links">
+              <a class="nav-link" href="./">Links</a>
+              <a class="nav-link active">Analytics</a>
+            </div>
+          </div>
+          <div class="user-info">
+            ${renderThemeControl()}
+          </div>
+        </header>
+
+        <div class="link-card">
+          <div class="title" style="font-size:1.2em;margin-bottom:8px">${escapeAttr(article.title || article.slug)}</div>
+          <div class="meta">
+            ${article.author ? '<span class="author">' + escapeAttr(article.author) + '</span> &middot; ' : ''}
+            ${formatDate(article.published_at || article.created_at)}
+          </div>
+          <div class="dest"><a href="${escapeAttr(article.destination_url || '')}" target="_blank" rel="noopener">${escapeAttr(article.destination_url || '')}</a></div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <a class="short-url" href="${escapeAttr(shortUrl)}" target="_blank" rel="noopener">${escapeAttr(shortUrl)}</a>
+            <button class="copy-btn" data-copy-url="${escapeAttr(shortUrl)}" onclick="copyUrl(this)">Copy</button>
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="num">${totalClicks}</div>
+            <div class="label">Total Clicks</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${dailyClicks.length}</div>
+            <div class="label">Days Active</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${referrers.length}</div>
+            <div class="label">Referrer Sources</div>
+          </div>
+        </div>
+
+        <div class="analytics-panel">
+          <div class="analytics-header">
+            <div class="analytics-title">Clicks Over Time</div>
+            <div class="analytics-filters">
+              <select class="analytics-select" onchange="setInterval_(this.value)">
+                <option value="day" ${currentInterval === 'day' ? 'selected' : ''}>Daily</option>
+                <option value="week" ${currentInterval === 'week' ? 'selected' : ''}>Weekly</option>
+                <option value="month" ${currentInterval === 'month' ? 'selected' : ''}>Monthly</option>
+              </select>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="analytics-canvas"></canvas>
+          </div>
+        </div>
+
+        ${sourceBreakdownHtml}
+        ${variantBreakdownHtml}
+        ${countryBreakdownHtml}
+        ${comparisonHtml}
+      `;
+
+      app.innerHTML = h;
+      renderChart();
+    }
+
+    async function init() {
+      const stub = getStubFromUrl();
+      if (!stub) {
+        app.innerHTML = '<div class="error-box">No link specified. Usage: <code>/analytics/{stub}</code> or <code>?stub={slug}</code></div>';
+        return;
+      }
+
+      document.title = stub + ' — Analytics — aicoe.fit';
+
+      const { data: { session } } = await sb.auth.getSession();
+      await loadAnalytics(stub, session);
+    }
+
+    init();
+  </script>
+</body>
+</html>
