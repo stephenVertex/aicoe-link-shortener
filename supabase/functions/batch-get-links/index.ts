@@ -218,6 +218,7 @@ Deno.serve(async (req) => {
   let slugs: string[] = [];
   let ids: string[] = [];
   let source = "";
+  let fields = "";
 
   if (req.method === "POST") {
     try {
@@ -226,6 +227,7 @@ Deno.serve(async (req) => {
       slugs = body.slugs || [];
       ids = body.ids || [];
       source = body.source || "";
+      fields = body.fields || "";
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid JSON body" }),
@@ -255,9 +257,14 @@ Deno.serve(async (req) => {
       }
     }
     source = url.searchParams.get("source") || "";
+    fields = url.searchParams.get("fields") || "";
   }
 
-  if (!apiKey) {
+  const coreOnly = fields === "core";
+
+  if (coreOnly) {
+    // Core lookup: no auth, no tracking variants
+  } else if (!apiKey) {
     return new Response(
       JSON.stringify({ error: "API key required. Pass via x-api-key header or api_key parameter." }),
       {
@@ -267,15 +274,18 @@ Deno.serve(async (req) => {
     );
   }
 
-  const person = await validateApiKey(apiKey);
-  if (!person) {
-    return new Response(
-      JSON.stringify({ error: "Invalid API key" }),
-      {
-        status: 401,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
+  let person: PersonInfo | null = null;
+  if (!coreOnly) {
+    person = await validateApiKey(apiKey);
+    if (!person) {
+      return new Response(
+        JSON.stringify({ error: "Invalid API key" }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
   }
 
   if (slugs.length === 0 && ids.length === 0) {
@@ -315,7 +325,46 @@ Deno.serve(async (req) => {
   }
 
   const links = Array.from(linksMap.values());
-  const trackingData = await buildTrackingLinksForBatch(links, person, source || undefined);
+
+  if (coreOnly) {
+    const results: Record<string, { article: Record<string, unknown> }> = {};
+    for (const [key, link] of linksMap) {
+      results[key] = {
+        article: {
+          id: link.id,
+          title: link.title,
+          author: link.author,
+          slug: link.slug,
+          url: link.destination_url,
+          published_at: link.published_at,
+        },
+      };
+    }
+
+    const notFound: string[] = [];
+    for (const slug of slugs) {
+      if (!results[slug]) {
+        notFound.push(slug);
+      }
+    }
+    for (const id of ids) {
+      if (!results[id]) {
+        notFound.push(id);
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        results,
+        not_found: notFound.length > 0 ? notFound : undefined,
+      }),
+      {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      },
+    );
+  }
+
+  const trackingData = await buildTrackingLinksForBatch(links, person!, source || undefined);
 
   const results: Record<string, { article: Record<string, unknown>; links: Array<Record<string, unknown>> }> = {};
   for (const [key, data] of trackingData) {
@@ -338,7 +387,7 @@ Deno.serve(async (req) => {
     JSON.stringify({
       results,
       not_found: notFound.length > 0 ? notFound : undefined,
-      person: { name: person.name, slug: person.slug },
+      person: { name: person!.name, slug: person!.slug },
     }),
     {
       headers: { "Content-Type": "application/json", ...corsHeaders },

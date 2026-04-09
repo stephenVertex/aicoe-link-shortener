@@ -228,11 +228,11 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  // Extract API key from header or body
   let apiKey = req.headers.get("x-api-key") || "";
   let articleUrl = "";
   let idPrefix = "";
-  let source = ""; // optional: specific source to get variant for
+  let source = "";
+  let fields = "";
 
   if (req.method === "POST") {
     try {
@@ -241,6 +241,7 @@ Deno.serve(async (req) => {
       articleUrl = body.article_url || body.url || body.slug || "";
       idPrefix = body.id_prefix || "";
       source = body.source || "";
+      fields = body.fields || "";
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid JSON body" }),
@@ -256,10 +257,14 @@ Deno.serve(async (req) => {
     articleUrl = url.searchParams.get("url") || url.searchParams.get("slug") || "";
     idPrefix = url.searchParams.get("id_prefix") || "";
     source = url.searchParams.get("source") || "";
+    fields = url.searchParams.get("fields") || "";
   }
 
-  // Validate API key
-  if (!apiKey) {
+  const coreOnly = fields === "core";
+
+  if (coreOnly) {
+    // Core lookup: no auth, no tracking variants
+  } else if (!apiKey) {
     return new Response(
       JSON.stringify({ error: "API key required. Pass via x-api-key header or api_key parameter." }),
       {
@@ -269,15 +274,18 @@ Deno.serve(async (req) => {
     );
   }
 
-  const person = await validateApiKey(apiKey);
-  if (!person) {
-    return new Response(
-      JSON.stringify({ error: "Invalid API key" }),
-      {
-        status: 401,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
+  let person: PersonInfo | null = null;
+  if (!coreOnly) {
+    person = await validateApiKey(apiKey);
+    if (!person) {
+      return new Response(
+        JSON.stringify({ error: "Invalid API key" }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        },
+      );
+    }
   }
 
   // Handle ID prefix lookup (server-side short ID resolution)
@@ -309,10 +317,24 @@ Deno.serve(async (req) => {
     }
 
     const link = result;
-    return buildTrackingResponse(link, person, source, corsHeaders);
+    if (coreOnly) {
+      return new Response(
+        JSON.stringify({
+          article: {
+            id: link.id,
+            title: link.title,
+            author: link.author,
+            slug: link.slug,
+            url: link.destination_url,
+            published_at: link.published_at,
+          },
+        }),
+        { headers: { "Content-Type": "application/json", ...corsHeaders } },
+      );
+    }
+    return buildTrackingResponse(link, person!, source, corsHeaders);
   }
 
-  // Find the link
   if (!articleUrl) {
     return new Response(
       JSON.stringify({ error: "article_url or slug parameter required" }),
@@ -334,5 +356,21 @@ Deno.serve(async (req) => {
     );
   }
 
-  return buildTrackingResponse(link, person, source, corsHeaders);
+  if (coreOnly) {
+    return new Response(
+      JSON.stringify({
+        article: {
+          id: link.id,
+          title: link.title,
+          author: link.author,
+          slug: link.slug,
+          url: link.destination_url,
+          published_at: link.published_at,
+        },
+      }),
+      { headers: { "Content-Type": "application/json", ...corsHeaders } },
+    );
+  }
+
+  return buildTrackingResponse(link, person!, source, corsHeaders);
 });

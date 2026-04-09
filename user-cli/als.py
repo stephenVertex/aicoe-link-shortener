@@ -1021,7 +1021,12 @@ def context_archive(ctx_id: str):
 
 @cli.command()
 @click.argument("slug_or_url")
-def get(slug_or_url: str):
+@click.option(
+    "--tracking/--no-tracking",
+    default=True,
+    help="Include personalised tracking links (default: on). Use --no-tracking for fast metadata-only lookup.",
+)
+def get(slug_or_url: str, tracking: bool):
     """Get full details and tracking links for a single article.
 
     Fetches the article by slug, URL, or short ID and displays its details
@@ -1032,17 +1037,26 @@ def get(slug_or_url: str):
       als get your-agent-my-agent
       als get https://trilogyai.substack.com/p/your-agent-my-agent
       als get lnk-edk
+      als get lnk-edk --no-tracking
     """
-    api_key = _get_api_key()
+    api_key = _get_api_key() if tracking else ""
 
     if slug_or_url.startswith("lnk-"):
-        resolved = _resolve_short_id(api_key, slug_or_url)
+        resolved = _resolve_short_id(slug_or_url, core_only=not tracking)
         if resolved is None:
             return
         slug_or_url = resolved
 
     payload: dict = {"article_url": slug_or_url}
-    resp = _api_request("get-link", api_key=api_key, json_body=payload)
+    if not tracking:
+        payload["fields"] = "core"
+        resp = requests.post(
+            f"{API_BASE}/get-link",
+            json=payload,
+            timeout=30,
+        )
+    else:
+        resp = _api_request("get-link", api_key=api_key, json_body=payload)
 
     if resp.status_code == 404:
         click.echo(f"Article not found: {slug_or_url}", err=True)
@@ -1056,11 +1070,32 @@ def get(slug_or_url: str):
 
     data = resp.json()
     article = data.get("article", {})
+
+    if not tracking:
+        title = article.get("title") or ""
+        author = article.get("author") or ""
+        slug = article.get("slug") or ""
+        destination = article.get("url", "")
+        published_at = article.get("published_at") or ""
+        date_str = published_at[:10] if published_at else ""
+
+        click.echo(f"\n{click.style(title or slug, bold=True)}")
+        if author:
+            click.echo(f"  by {author}")
+        if date_str:
+            click.echo(f"  Published: {date_str}")
+        if destination:
+            click.echo(f"  URL: {destination}")
+        click.echo(f"  Short: https://aicoe.fit/{slug}")
+        click.echo(f"\n  Use --tracking to see your personalised links.")
+        click.echo()
+        return
+
     links = data.get("links", [])
 
     title = article.get("title") or ""
-    author = article.get("author", "")
-    slug = article.get("slug", "")
+    author = article.get("author") or ""
+    slug = article.get("slug") or ""
     destination = article.get("url", "")
     published_at = article.get("published_at") or ""
     date_str = published_at[:10] if published_at else ""
@@ -1085,13 +1120,26 @@ def get(slug_or_url: str):
     click.echo()
 
 
-def _resolve_short_id(api_key: str, short_id: str) -> str | None:
+def _resolve_short_id(short_id: str, core_only: bool = False) -> str | None:
     """Resolve a short ID prefix to a slug.
 
     Uses server-side lookup via get-link?id_prefix=... endpoint.
     Returns the slug if unique match, None if ambiguous or not found.
+    When core_only=True, uses fields=core to avoid auth/tracking overhead.
     """
-    resp = _api_request("get-link", api_key=api_key, json_body={"id_prefix": short_id})
+    payload: dict = {"id_prefix": short_id}
+    if core_only:
+        payload["fields"] = "core"
+
+    if core_only:
+        resp = requests.post(
+            f"{API_BASE}/get-link",
+            json=payload,
+            timeout=30,
+        )
+    else:
+        api_key = _get_api_key()
+        resp = _api_request("get-link", api_key=api_key, json_body=payload)
 
     if resp.status_code == 404:
         data = (
