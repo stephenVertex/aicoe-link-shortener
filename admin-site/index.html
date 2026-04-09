@@ -379,6 +379,7 @@
     let dashboardData = null;
     let dashboardLoaded = false;
     let dashboardLoading = false;
+    let clicksLoaded = false;
     let mySources = [];
     let sourceComposerOpen = false;
     let sourceSaving = false;
@@ -460,11 +461,14 @@
       rerenderDashboard();
     }
 
-    function toggleCardExpanded(linkId) {
+    async function toggleCardExpanded(linkId) {
       if (expandedCards.has(linkId)) {
         expandedCards.delete(linkId);
       } else {
         expandedCards.add(linkId);
+      }
+      if (!clicksLoaded) {
+        await ensureClicksLoaded();
       }
       rerenderDashboard();
     }
@@ -483,18 +487,26 @@
     }
 
     async function refreshDashboardData() {
-      const [linksResult, variantsResult, clicksResult] = await Promise.all([
+      const [linksResult, variantsResult] = await Promise.all([
         sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false }),
         fetchAllRows('tracking_variants', '*', 'created_at'),
-        fetchAllRows('click_log', 'id, variant_id, link_id', 'clicked_at'),
       ]);
 
       if (linksResult.error) throw linksResult.error;
       dashboardData = {
         links: linksResult.data || [],
         variants: variantsResult || [],
-        clicks: clicksResult || [],
+        clicks: clicksLoaded ? (dashboardData?.clicks || []) : [],
       };
+    }
+
+    async function ensureClicksLoaded() {
+      if (clicksLoaded) return;
+      clicksLoaded = true;
+      const clicksResult = await fetchAllRows('click_log', 'id, variant_id, link_id', 'clicked_at');
+      if (dashboardData) {
+        dashboardData.clicks = clicksResult || [];
+      }
     }
 
     function resetSourceDraft() {
@@ -1027,6 +1039,7 @@
             await loadDashboard(session);
           } else if (event === 'SIGNED_OUT') {
             dashboardLoaded = false;
+            clicksLoaded = false;
             dashboardData = null;
             currentPerson = null;
             mySources = [];
@@ -1078,6 +1091,7 @@
     async function signOut() {
       await sb.auth.signOut();
       dashboardLoaded = false;
+      clicksLoaded = false;
       dashboardData = null;
       currentPerson = null;
       mySources = [];
@@ -1180,6 +1194,12 @@
         await refreshDashboardData();
       }
 
+      // Lazy-load clicks only when we need click counts (not on first fast render)
+      const needsClicks = expandedCards.size > 0 || clicksLoaded;
+      if (needsClicks) {
+        await ensureClicksLoaded();
+      }
+
       const links = dashboardData.links;
       const variants = dashboardData.variants;
       const clicks = dashboardData.clicks;
@@ -1272,7 +1292,8 @@
       }
 
       const myVariants = (variants || []).filter(v => v.ref === mySlug);
-      const myClicks = myVariants.reduce((sum, v) => sum + (clicksByVariant[v.id] || 0), 0);
+      const clicksAvailable = !!(clicks && clicks.length > 0) || clicksLoaded;
+      const myClicks = clicksAvailable ? myVariants.reduce((sum, v) => sum + (clicksByVariant[v.id] || 0), 0) : null;
       const myArticleCount = new Set(myVariants.map(v => v.link_id)).size;
 
       let h = `
@@ -1303,8 +1324,8 @@
             <div class="label">My Sources</div>
           </div>
           <div class="stat-card">
-            <div class="num">${myClicks}</div>
-            <div class="label">My Clicks</div>
+            <div class="num">${myClicks !== null ? myClicks : '—'}</div>
+            <div class="label">My Clicks${myClicks === null ? ' <span style="font-size:0.8em;color:var(--text-faint)">(expand to load)</span>' : ''}</div>
           </div>
         </div>
 
@@ -1400,8 +1421,8 @@
 
       for (const link of displayLinks) {
         const lvs = variantsByLink[link.id] || [];
-        const variantClicks = lvs.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0);
-        const directClicks = (clicksByLink[link.id] || 0) - variantClicks;
+        const variantClicks = clicksAvailable ? lvs.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0) : 0;
+        const directClicks = clicksAvailable ? ((clicksByLink[link.id] || 0) - variantClicks) : 0;
 
         const displayVariants = showAll ? lvs : lvs.filter(v => v.ref === mySlug);
 
@@ -1424,7 +1445,7 @@
                 <a class="short-url" href="https://${DOMAIN}/${link.slug}" target="_blank" rel="noopener">https://${DOMAIN}/${link.slug}</a>
                 ${renderCopyIconButton(`https://${DOMAIN}/${link.slug}`)}
               </span>
-              <span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks > 0 ? directClicks + ' direct clicks' : ''}</span>
+              ${clicksAvailable && directClicks > 0 ? `<span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks} direct clicks</span>` : ''}
             </div>
         `;
 
@@ -1445,12 +1466,12 @@
                 const meta = getVariantSourceMeta(v);
                 return meta ? meta.label : [v.utm_source, v.utm_medium, v.utm_content, v.utm_term].filter(Boolean).join(' / ');
               })(),
-              clicks: clicksByVariant[v.id] || 0,
+              clicks: clicksAvailable ? (clicksByVariant[v.id] || 0) : 0,
             })),
           };
 
           const cardExpanded = !compactView || expandedCards.has(link.id);
-          const variantClickTotal = displayVariants.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0);
+          const variantClickTotal = clicksAvailable ? displayVariants.reduce((s, v) => s + (clicksByVariant[v.id] || 0), 0) : null;
 
           h += `
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px">
@@ -1458,7 +1479,7 @@
                 <span class="chevron ${cardExpanded ? 'open' : ''}">&#9656;</span>
                 ${cardExpanded ? 'Hide links' : 'Show links'}
               </button>
-              <span style="font-size:0.8em; color:var(--text-faint); font-weight:500">${displayVariants.length} variant${displayVariants.length !== 1 ? 's' : ''} &middot; ${variantClickTotal} click${variantClickTotal !== 1 ? 's' : ''}</span>
+              <span style="font-size:0.8em; color:var(--text-faint); font-weight:500">${displayVariants.length} variant${displayVariants.length !== 1 ? 's' : ''}${variantClickTotal !== null ? ' &middot; ' + variantClickTotal + ' click' + (variantClickTotal !== 1 ? 's' : '') : ''}</span>
               ${cardExpanded ? `<button class="copy-btn" onclick="copyCardTable(this, '${cardId}')">Copy table</button>` : ''}
             </div>
           `;
@@ -1472,7 +1493,7 @@
             for (const v of displayVariants) {
               const isMine = v.ref === mySlug;
               const url = 'https://' + DOMAIN + '/' + link.slug + '-' + v.suffix;
-              const vc = clicksByVariant[v.id] || 0;
+              const vc = clicksAvailable ? (clicksByVariant[v.id] || 0) : 0;
               h += `
                 <tr class="${isMine ? 'mine' : ''}">
                   <td>${v.ref || '-'} ${isMine ? '<span class="badge badge-you">you</span>' : ''}</td>
@@ -1748,22 +1769,26 @@ Search results for: cursor workshop
 
 ### \`als last\`
 
-Show the most recently published articles with your personalised tracking
-links. Optionally filter by author.
+Show the most recently published articles, optionally with your personalised
+tracking links. By default, only article metadata is shown (fast, no auth).
+
+Use --tracking to include your personalised tracking links (one batch call).
 
 \`\`\`bash
-als last [N] [--author NAME]
+als last [N] [--author NAME] [--tracking]
 \`\`\`
 
 | Argument/Option | Default | Description |
 |-----------------|---------|-------------|
 | \`N\` | 10 | Number of articles to show |
 | \`--author\` | (none) | Filter by author name (case-insensitive substring match) |
+| \`--tracking\` | off | Include personalised tracking links |
 
 **Examples:**
 \`\`\`bash
 als last
 als last 5
+als last 5 --tracking
 als last 3 --author "Simon"
 als last 20 --author "stephen"
 \`\`\`
@@ -1775,8 +1800,8 @@ Last 5 article(s):
   1. Cursor Workshop: Practical AI Coding
      by Stephen
      2026-03-10
-     linkedin      https://aicoe.fit/workshop-cursor-practical-d7sc
-     email         https://aicoe.fit/workshop-cursor-practical-a1b2
+
+  Use --tracking to include tracking links, or als get <slug> for a specific article.
 \`\`\`
 
 ---
@@ -1865,6 +1890,9 @@ als whoami
 
 # 3. Find recent articles
 als last 5
+
+# 4. Get tracking links for an article
+als get lnk-3f7
 
 # 4. Search for something specific
 als search "GLM-5" --count 5
@@ -2057,22 +2085,26 @@ Search results for: cursor workshop
 
 ### \`als last\`
 
-Show the most recently published articles with your personalised tracking
-links. Optionally filter by author.
+Show the most recently published articles, optionally with your personalised
+tracking links. By default, only article metadata is shown (fast, no auth).
+
+Use --tracking to include your personalised tracking links (one batch call).
 
 \`\`\`bash
-als last [N] [--author NAME]
+als last [N] [--author NAME] [--tracking]
 \`\`\`
 
 | Argument/Option | Default | Description |
 |-----------------|---------|-------------|
 | \`N\` | 10 | Number of articles to show |
 | \`--author\` | (none) | Filter by author name (case-insensitive substring match) |
+| \`--tracking\` | off | Include personalised tracking links |
 
 **Examples:**
 \`\`\`bash
 als last
 als last 5
+als last 5 --tracking
 als last 3 --author "Simon"
 als last 20 --author "stephen"
 \`\`\`
@@ -2084,8 +2116,8 @@ Last 5 article(s):
   1. Cursor Workshop: Practical AI Coding
      by Stephen
      2026-03-10
-     linkedin      https://aicoe.fit/workshop-cursor-practical-d7sc
-     email         https://aicoe.fit/workshop-cursor-practical-a1b2
+
+  Use --tracking to include tracking links, or als get <slug> for a specific article.
 \`\`\`
 
 ---
@@ -2175,6 +2207,9 @@ als whoami
 # 3. Find recent articles
 als last 5
 
+# 4. Get tracking links for an article
+als get lnk-3f7
+
 # 4. Search for something specific
 als search "GLM-5" --count 5
 
@@ -2227,6 +2262,8 @@ als upgrade
       if (!dashboardData) {
         await refreshDashboardData();
       }
+
+      await ensureClicksLoaded();
 
       const links = dashboardData.links;
       const variants = dashboardData.variants;

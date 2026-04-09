@@ -192,7 +192,8 @@ def cli():
 
     \b
     Workflow:
-      als last 10 --summary          # scan recent articles
+      als last 10                    # scan recent articles (fast, no auth)
+      als last 10 --tracking         # with your tracking links
       als get lnk-3f7                # get full details + tracking links
       als search 'AI agents'         # find by topic
       als stats lnk-3f7              # check click performance
@@ -264,7 +265,8 @@ def help_cmd():
             "5. See the latest articles",
             "Quick scan of what has been published recently and get your tracking links.",
             [
-                "als last 5                            # last 5 articles, all tracking links",
+                "als last 5                            # last 5 articles (fast)",
+                "als last 10 --tracking                # with tracking links",
                 "als last 10 --me                      # filter to articles you authored",
                 "als last 10 --summary                 # compact table view",
             ],
@@ -1322,13 +1324,19 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
     default=False,
     help="Show compact table instead of full details with tracking links.",
 )
-def last(n: int, author: str | None, filter_me: bool, summary: bool):
-    """Show the last N articles with your personalised tracking links.
+@click.option(
+    "--tracking",
+    is_flag=True,
+    default=False,
+    help="Include tracking links for each article (makes a batch API call).",
+)
+def last(n: int, author: str | None, filter_me: bool, summary: bool, tracking: bool):
+    """Show the last N articles, optionally with tracking links.
 
     N defaults to 10. Shows the most recently published articles in the
-    database, with your personalised tracking link for each one.
+    database. By default, only article metadata is shown (fast, no auth needed).
 
-    Uses a batch API call for tracking links (no N+1 queries).
+    Use --tracking to include your personalised tracking links (one batch call).
 
     Use --author to filter to a specific author, e.g.:
 
@@ -1337,8 +1345,12 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
     Use --me to filter to your own articles automatically:
 
         als last 5 --me
+
+    Use --tracking to include tracking links:
+
+        als last 10 --tracking
     """
-    api_key = _get_api_key()
+    api_key = _get_api_key() if tracking or filter_me else ""
 
     if filter_me:
         if author:
@@ -1397,17 +1409,17 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
     else:
         click.echo(f"\nLast {len(results)} article(s):\n")
 
-    slugs = [r.get("slug", "") for r in results if r.get("slug")]
     tracking_data: dict[str, dict] = {}
-
-    if slugs:
-        batch_resp = _api_request(
-            "batch-get-links",
-            api_key=api_key,
-            json_body={"slugs": slugs},
-        )
-        if batch_resp.status_code == 200:
-            tracking_data = batch_resp.json().get("results", {})
+    if tracking:
+        slugs = [r.get("slug", "") for r in results if r.get("slug")]
+        if slugs:
+            batch_resp = _api_request(
+                "batch-get-links",
+                api_key=api_key,
+                json_body={"slugs": slugs},
+            )
+            if batch_resp.status_code == 200:
+                tracking_data = batch_resp.json().get("results", {})
 
     for i, result in enumerate(results, 1):
         title = result.get("title") or result.get("slug") or ""
@@ -1425,14 +1437,16 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool):
         if destination_url:
             click.echo(f"     URL:  {destination_url}")
 
-        if slug in tracking_data:
+        if tracking and slug in tracking_data:
             links = tracking_data[slug].get("links", [])
             for link in links:
                 label = link.get("label") or link.get("source", "")
                 click.echo(f"     {label:12s}  {link['short_url']}")
-        else:
-            click.echo(f"     (could not generate tracking link)")
 
+    if not tracking:
+        click.echo(
+            f"\n  Use --tracking to include tracking links, or als get <slug> for a specific article."
+        )
     click.echo()
 
 
