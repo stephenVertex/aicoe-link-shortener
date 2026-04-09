@@ -93,6 +93,13 @@ Deno.serve(async (req) => {
     }
   }
 
+  const { data: syncLog } = await supabase
+    .from("sync_operations")
+    .insert({ source: "substack", status: "running", force })
+    .select("id")
+    .single();
+  const syncLogId = syncLog?.id;
+
   try {
     const [sitemapEntries, postMeta] = await Promise.all([
       fetchSitemapEntries(),
@@ -259,6 +266,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (syncLogId) {
+      supabase
+        .from("sync_operations")
+        .update({
+          status: "success",
+          completed_at: new Date().toISOString(),
+          items_checked: sitemapEntries.length,
+          items_created: created.length,
+          items_updated: updated.length,
+          details: { created, updated, skipped, checked: sitemapEntries.length },
+        })
+        .eq("id", syncLogId)
+        .then(() => {}, () => {});
+    }
+
     return new Response(JSON.stringify({
       message: `Created ${created.length}, updated ${updated.length} links (skipped ${skipped.length} restacks)`,
       created,
@@ -271,9 +293,17 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Sync error:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    await logError("sync-substack", errorMessage, {
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    if (syncLogId) {
+      supabase
+        .from("sync_operations")
+        .update({
+          status: "error",
+          completed_at: new Date().toISOString(),
+          error_message: errorMessage,
+        })
+        .eq("id", syncLogId)
+        .then(() => {}, () => {});
+    }
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...corsHeaders },

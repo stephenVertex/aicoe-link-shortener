@@ -41,23 +41,66 @@ Deno.serve(async (req) => {
     }
   }
 
+  const { data: syncLog } = await supabase
+    .from("sync_operations")
+    .insert({ source: action, status: "running", force })
+    .select("id")
+    .single();
+  const syncLogId = syncLog?.id;
+
   try {
+    let result: Response;
     switch (action) {
       case "substack":
-        return await handleSyncSubstack(force);
+        result = await handleSyncSubstack(force);
+        break;
       case "youtube":
-        return await handleSyncYoutube(url.searchParams.get("limit"), force);
+        result = await handleSyncYoutube(url.searchParams.get("limit"), force);
+        break;
       case "embed":
-        return await handleEmbedArticles(force);
+        result = await handleEmbedArticles(force);
+        break;
       case "chunk":
-        return await handleChunkVideos(url.searchParams.get("limit"), force);
+        result = await handleChunkVideos(url.searchParams.get("limit"), force);
+        break;
       default:
-        return new Response(
+        result = new Response(
           JSON.stringify({ error: `Unknown action '${action}'. Valid actions: substack, youtube, embed, chunk` }),
           { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
         );
     }
+
+    if (syncLogId) {
+      result.clone().json().then((body) => {
+        supabase
+          .from("sync_operations")
+          .update({
+            status: "success",
+            completed_at: new Date().toISOString(),
+            items_checked: body.checked ?? null,
+            items_created: body.created?.length ?? null,
+            items_updated: body.updated?.length ?? null,
+            details: body,
+          })
+          .eq("id", syncLogId)
+          .then(() => {}, () => {});
+      }).catch(() => {});
+    }
+
+    return result;
   } catch (error) {
+    if (syncLogId) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      supabase
+        .from("sync_operations")
+        .update({
+          status: "error",
+          completed_at: new Date().toISOString(),
+          error_message: errorMessage,
+        })
+        .eq("id", syncLogId)
+        .then(() => {}, () => {});
+    }
     console.error(`Content-sync error (${action}):`, error);
     return new Response(JSON.stringify({ error: String(error) }), {
       status: 500,
