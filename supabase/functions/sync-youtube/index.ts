@@ -1,6 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { logError } from "../_shared/errorLogger.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -319,6 +318,14 @@ Deno.serve(async (req) => {
     );
   }
 
+  const { data: syncLog } = await supabase
+    .from("sync_operations")
+    .insert({ source: "youtube", status: "running", force })
+    .select("id")
+    .single();
+  const syncLogId = syncLog?.id;
+  const startTime = Date.now();
+
   try {
     // 1. Fetch all videos from the AIFS channel
     const uploadsPlaylistId = await getUploadsPlaylistId(YOUTUBE_CHANNEL_ID);
@@ -489,6 +496,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (syncLogId) {
+      try {
+        await supabase
+          .from("sync_operations")
+          .update({
+            status: "success",
+            completed_at: new Date().toISOString(),
+            items_checked: videos.length,
+            items_created: created.length,
+            items_updated: updated.length,
+            details: { created, updated, transcripts_fetched: transcriptsFetched.length, checked: videos.length },
+          })
+          .eq("id", syncLogId);
+      } catch { /* best effort */ }
+    }
+
     return new Response(
       JSON.stringify({
         message:
@@ -505,8 +528,22 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("YouTube sync error:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    await logError("sync-youtube", errorMessage, {
-      stack: error instanceof Error ? error.stack : undefined,
+    if (syncLogId) {
+      try {
+        await supabase
+          .from("sync_operations")
+          .update({
+            status: "error",
+            completed_at: new Date().toISOString(),
+            error_message: errorMessage,
+          })
+          .eq("id", syncLogId);
+      } catch { /* best effort */ }
+    }
+    await supabase.rpc("log_error", {
+      p_function_name: "sync-youtube",
+      p_error_message: errorMessage,
+      p_context: { stack: error instanceof Error ? error.stack : undefined },
     });
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,

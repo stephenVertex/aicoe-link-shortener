@@ -42,20 +42,70 @@ Deno.serve(async (req) => {
   }
 
   try {
-    switch (action) {
-      case "substack":
-        return await handleSyncSubstack(force);
-      case "youtube":
-        return await handleSyncYoutube(url.searchParams.get("limit"), force);
-      case "embed":
-        return await handleEmbedArticles(force);
-      case "chunk":
-        return await handleChunkVideos(url.searchParams.get("limit"), force);
-      default:
-        return new Response(
-          JSON.stringify({ error: `Unknown action '${action}'. Valid actions: substack, youtube, embed, chunk` }),
-          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
-        );
+    const { data: syncLog } = await supabase
+      .from("sync_operations")
+      .insert({ source: action, status: "running", force })
+      .select("id")
+      .single();
+
+    const syncLogId = syncLog?.id;
+
+    try {
+      let result: Response;
+      switch (action) {
+        case "substack":
+          result = await handleSyncSubstack(force);
+          break;
+        case "youtube":
+          result = await handleSyncYoutube(url.searchParams.get("limit"), force);
+          break;
+        case "embed":
+          result = await handleEmbedArticles(force);
+          break;
+        case "chunk":
+          result = await handleChunkVideos(url.searchParams.get("limit"), force);
+          break;
+        default:
+          result = new Response(
+            JSON.stringify({ error: `Unknown action '${action}'. Valid actions: substack, youtube, embed, chunk` }),
+            { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+          );
+      }
+
+      if (syncLogId) {
+        const durationMs = Date.now() - startTime;
+        try {
+          const body = await result.clone().json();
+          await supabase
+            .from("sync_operations")
+            .update({
+              status: "success",
+              completed_at: new Date().toISOString(),
+              items_checked: body.checked ?? null,
+              items_created: body.created?.length ?? null,
+              items_updated: body.updated?.length ?? null,
+              details: body,
+            })
+            .eq("id", syncLogId);
+        } catch { /* best effort */ }
+      }
+
+      return result;
+    } catch (error) {
+      if (syncLogId) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        try {
+          await supabase
+            .from("sync_operations")
+            .update({
+              status: "error",
+              completed_at: new Date().toISOString(),
+              error_message: errorMessage,
+            })
+            .eq("id", syncLogId);
+        } catch { /* best effort */ }
+      }
+      throw error;
     }
   } catch (error) {
     console.error(`Content-sync error (${action}):`, error);

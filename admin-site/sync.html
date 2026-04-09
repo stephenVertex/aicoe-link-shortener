@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>aicoe.fit - Sync Operations</title>
+  <script src="./supabase.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --text: #333;
+      --text-muted: #666;
+      --text-faint: #888;
+      --text-title: #111;
+      --card-bg: white;
+      --card-shadow: rgba(0,0,0,0.08);
+      --border: #e0e0e0;
+      --border-light: #e5e7eb;
+      --border-faint: #f3f4f6;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --author: #6b21a8;
+      --clicks: #059669;
+      --badge-bg: #dbeafe;
+      --badge-text: #1e40af;
+      --btn-secondary-bg: #e5e7eb;
+      --btn-secondary-text: #374151;
+      --btn-secondary-hover: #d1d5db;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --error-text: #991b1b;
+      --success-bg: #dcfce7;
+      --success-border: #86efac;
+      --success-text: #166534;
+      --warn-bg: #fef9c3;
+      --warn-border: #fde68a;
+      --warn-text: #92400e;
+      --stat-num: #2563eb;
+    }
+    html[data-theme="synthwave-dark"] {
+      --bg: #1a1a2e;
+      --text: #e0e0e0;
+      --text-muted: #a0a0b8;
+      --text-faint: #707088;
+      --text-title: #ff6ec7;
+      --card-bg: #16213e;
+      --card-shadow: rgba(0,0,0,0.4);
+      --border: #2a2a4a;
+      --border-light: #252545;
+      --border-faint: #202040;
+      --accent: #00d4ff;
+      --accent-hover: #33ddff;
+      --author: #bf6aff;
+      --clicks: #72f1b8;
+      --badge-bg: #1a1a3e;
+      --badge-text: #00d4ff;
+      --btn-secondary-bg: #252545;
+      --btn-secondary-text: #e0e0e0;
+      --btn-secondary-hover: #2a2a5a;
+      --error-bg: #2e1a1a;
+      --error-border: #6a3a3a;
+      --error-text: #ff6ec7;
+      --success-bg: #1a2e2a;
+      --success-border: #72f1b8;
+      --success-text: #72f1b8;
+      --warn-bg: #2e2a1a;
+      --warn-border: #6a5a2a;
+      --warn-text: #fbbf24;
+      --stat-num: #ff6ec7;
+    }
+    html[data-theme="solarized-dark"] {
+      --bg: #002b36;
+      --text: #93a1a1;
+      --text-muted: #839496;
+      --text-faint: #657b83;
+      --text-title: #b58900;
+      --card-bg: #073642;
+      --card-shadow: rgba(0,0,0,0.28);
+      --border: #0d4a59;
+      --border-light: #114b59;
+      --border-faint: #0c4250;
+      --accent: #268bd2;
+      --accent-hover: #3aa0e8;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #11333d;
+      --badge-text: #6cbeff;
+      --btn-secondary-bg: #11404d;
+      --btn-secondary-text: #93a1a1;
+      --btn-secondary-hover: #15505f;
+      --error-bg: #3a2323;
+      --error-border: #6d3f3f;
+      --error-text: #dc322f;
+      --success-bg: #123f40;
+      --success-border: #2aa198;
+      --success-text: #7ee5dd;
+      --warn-bg: #3a3223;
+      --warn-border: #6d5f3f;
+      --warn-text: #b58900;
+      --stat-num: #b58900;
+    }
+    html[data-theme="solarized-light"] {
+      --bg: #fdf6e3;
+      --text: #586e75;
+      --text-muted: #657b83;
+      --text-faint: #93a1a1;
+      --text-title: #b58900;
+      --card-bg: #fffdf4;
+      --card-shadow: rgba(88,110,117,0.12);
+      --border: #eee8d5;
+      --border-light: #e6dfca;
+      --border-faint: #f2ecdc;
+      --accent: #268bd2;
+      --accent-hover: #1f76b4;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #e8f1f3;
+      --badge-text: #268bd2;
+      --btn-secondary-bg: #eee8d5;
+      --btn-secondary-text: #586e75;
+      --btn-secondary-hover: #e6dfca;
+      --error-bg: #fff1f0;
+      --error-border: #f3c7c2;
+      --error-text: #b8332f;
+      --success-bg: #e6f4ef;
+      --success-border: #9dd7c5;
+      --success-text: #20756d;
+      --warn-bg: #fef9c3;
+      --warn-border: #fde68a;
+      --warn-text: #92400e;
+      --stat-num: #b58900;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); transition: background 0.2s, color 0.2s; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+    header h1 { font-size: 1.4em; font-weight: 700; }
+    header .header-left { display: flex; align-items: center; gap: 0; }
+    header .user-info { display: flex; align-items: center; gap: 12px; font-size: 0.9em; color: var(--text-muted); }
+    header .user-info img { width: 32px; height: 32px; border-radius: 50%; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); }
+    .btn-secondary:hover { background: var(--btn-secondary-hover); }
+    .btn-sm { padding: 4px 10px; font-size: 0.8em; }
+    .btn-danger { background: var(--error-text); color: white; }
+    .btn-danger:hover { opacity: 0.9; }
+    .nav-links { display: flex; align-items: center; gap: 4px; margin-left: 16px; }
+    .nav-link { padding: 4px 12px; font-size: 0.85em; font-weight: 500; color: var(--text-muted); text-decoration: none; border-radius: 6px; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+    .nav-link:hover { background: var(--btn-secondary-hover); color: var(--text); }
+    .nav-link.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .theme-control { display: inline-flex; align-items: center; gap: 6px; }
+    .theme-label { font-size: 0.75em; color: var(--text-faint); }
+    .theme-select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 0.8em; }
+    .loading { text-align: center; padding: 60px; color: var(--text-faint); }
+    .error-box { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 8px; padding: 16px; margin: 20px 0; color: var(--error-text); }
+    .error-box code { background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
+    .stat-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px var(--card-shadow); flex: 1; text-align: center; }
+    .stat-card .num { font-size: 2em; font-weight: 700; color: var(--stat-num); }
+    .stat-card .label { font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
+    .stats-row { display: flex; gap: 16px; margin-bottom: 24px; }
+    .sync-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 12px; box-shadow: 0 1px 3px var(--card-shadow); }
+    .sync-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .sync-source { font-weight: 600; font-size: 1em; color: var(--text-title); text-transform: capitalize; }
+    .sync-time { font-size: 0.82em; color: var(--text-muted); }
+    .sync-duration { font-size: 0.78em; color: var(--text-faint); margin-left: 8px; }
+    .status-badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 0.75em; font-weight: 600; }
+    .status-running { background: var(--badge-bg); color: var(--badge-text); }
+    .status-success { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+    .status-error { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); }
+    .sync-details { font-size: 0.85em; color: var(--text-muted); display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin-top: 8px; }
+    .sync-details dt { color: var(--text-faint); font-weight: 500; }
+    .sync-details dd { color: var(--text); }
+    .sync-error { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 6px; padding: 10px 14px; margin-top: 8px; font-size: 0.85em; color: var(--error-text); word-break: break-word; }
+    .sync-ids { margin-top: 6px; font-size: 0.82em; color: var(--text-faint); }
+    .sync-ids summary { cursor: pointer; color: var(--text-muted); }
+    .sync-ids summary:hover { color: var(--text); }
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+    .filter-bar select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 0.85em; }
+    .filter-bar input { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 0.85em; }
+    .empty-state { text-align: center; padding: 40px; color: var(--text-faint); }
+    .force-badge { font-size: 0.7em; background: var(--warn-bg); color: var(--warn-text); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--warn-border); }
+    @media (max-width: 720px) {
+      .stats-row { flex-wrap: wrap; }
+      .filter-bar { flex-wrap: wrap; }
+      header { align-items: flex-start; }
+      header .header-left { flex-wrap: wrap; }
+      header .user-info { flex-wrap: wrap; justify-content: flex-end; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="app"><div class="loading">Loading...</div></div>
+  </div>
+
+  <script>
+    const THEME_KEY = 'theme';
+
+    function resolveTheme(theme) {
+      if (theme === 'dark') return 'synthwave-dark';
+      if (theme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'synthwave-dark' : 'light';
+      }
+      return theme || 'synthwave-dark';
+    }
+
+    function applyTheme(theme) {
+      const resolved = resolveTheme(theme);
+      if (resolved === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', resolved);
+      }
+    }
+
+    function setTheme(theme) {
+      localStorage.setItem(THEME_KEY, theme);
+      applyTheme(theme);
+    }
+
+    function getSavedTheme() {
+      const saved = localStorage.getItem(THEME_KEY) || 'synthwave-dark';
+      return saved === 'dark' ? 'synthwave-dark' : saved;
+    }
+
+    function renderThemeControl() {
+      const currentTheme = getSavedTheme();
+      const options = [
+        ['synthwave-dark', 'Synthwave'],
+        ['solarized-dark', 'Solarized Dark'],
+        ['solarized-light', 'Solarized Light'],
+        ['light', 'Light'],
+        ['system', 'System'],
+      ];
+      return '<div class="theme-control"><span class="theme-label">Theme</span><select class="theme-select" onchange="setTheme(this.value)">' +
+        options.map(([value, label]) => '<option value="' + value + '"' + (currentTheme === value ? ' selected' : '') + '>' + label + '</option>').join('') +
+        '</select></div>';
+    }
+
+    function renderNavLinks() {
+      return '<div class="nav-links">' +
+        '<a class="nav-link" href="./index.html">Links</a>' +
+        '<a class="nav-link" href="./index.html#/analytics">Analytics</a>' +
+        '<a class="nav-link active" onclick="location.reload()">Sync</a>' +
+        '</div>';
+    }
+
+    applyTheme(getSavedTheme());
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (getSavedTheme() === 'system') applyTheme('system');
+    });
+
+    const SUPABASE_URL = 'https://dumhbtxskncofwwzrmfx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
+
+    let sb;
+    try {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      document.getElementById('app').innerHTML = '<div class="error-box">Failed to initialize Supabase client: <code>' + e.message + '</code></div>';
+      throw e;
+    }
+
+    const app = document.getElementById('app');
+    let currentPerson = null;
+    let syncOps = [];
+    let filterSource = 'all';
+    let filterStatus = 'all';
+    let syncRunning = false;
+    let syncNotice = '';
+
+    function formatTime(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      return d.toLocaleString('en-US', {
+        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+        hour12: true,
+      });
+    }
+
+    function formatDuration(ms) {
+      if (!ms && ms !== 0) return '-';
+      if (ms < 1000) return ms + 'ms';
+      const s = Math.floor(ms / 1000);
+      if (s < 60) return s + 's';
+      const m = Math.floor(s / 60);
+      const remS = s % 60;
+      return m + 'm ' + remS + 's';
+    }
+
+    function escapeAttr(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    async function loadSyncOps() {
+      const { data, error } = await sb
+        .from('sync_operations')
+        .select('*')
+        .order('started_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      syncOps = data || [];
+    }
+
+    async function triggerSync(source) {
+      if (syncRunning) return;
+      syncRunning = true;
+      syncNotice = '';
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { syncRunning = false; renderPage(); return; }
+
+      renderPage();
+
+      try {
+        const endpoint = source === 'substack'
+          ? SUPABASE_URL + '/functions/v1/sync-substack?force=true'
+          : SUPABASE_URL + '/functions/v1/sync-youtube?force=true';
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + session.access_token },
+        });
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result.error || 'Sync failed');
+
+        const created = (result.created || []).length;
+        const updated = (result.updated || []).length;
+        syncNotice = source + ': ' + created + ' created, ' + updated + ' updated';
+      } catch (err) {
+        syncNotice = 'Sync error: ' + err.message;
+        console.error(err);
+      } finally {
+        syncRunning = false;
+        await loadSyncOps();
+        renderPage();
+        setTimeout(() => { syncNotice = ''; renderPage(); }, 6000);
+      }
+    }
+
+    function renderPage() {
+      if (!currentPerson) {
+        app.innerHTML = '<div class="loading">Loading...</div>';
+        return;
+      }
+
+      const user = currentPerson;
+      const avatarUrl = '';
+
+      let filtered = syncOps;
+      if (filterSource !== 'all') {
+        filtered = filtered.filter(op => op.source === filterSource);
+      }
+      if (filterStatus !== 'all') {
+        filtered = filtered.filter(op => op.status === filterStatus);
+      }
+
+      const totalRuns = syncOps.length;
+      const successRuns = syncOps.filter(op => op.status === 'success').length;
+      const errorRuns = syncOps.filter(op => op.status === 'error').length;
+      const runningRuns = syncOps.filter(op => op.status === 'running').length;
+      const lastSuccess = syncOps.find(op => op.status === 'success');
+      const lastSuccessTime = lastSuccess ? formatTime(lastSuccess.completed_at) : 'Never';
+
+      let h = `
+        <header>
+          <div class="header-left">
+            <h1>aicoe.fit</h1>
+            ${renderNavLinks()}
+          </div>
+          <div class="user-info">
+            ${avatarUrl ? '<img src="' + avatarUrl + '" alt="">' : ''}
+            ${user.name || user.email}
+            <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign out</button>
+            ${renderThemeControl()}
+          </div>
+        </header>
+        ${syncNotice ? '<div style="background:var(--success-bg);border:1px solid var(--success-border);color:var(--success-text);padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9em;">' + escapeAttr(syncNotice) + '</div>' : ''}
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="num">${totalRuns}</div>
+            <div class="label">Total Runs</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${successRuns}</div>
+            <div class="label">Successful</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${errorRuns}</div>
+            <div class="label">Errors</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${lastSuccessTime}</div>
+            <div class="label" style="font-size:0.75em">Last Success</div>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <select onchange="filterSource=this.value;renderPage()">
+            <option value="all"${filterSource === 'all' ? ' selected' : ''}>All Sources</option>
+            <option value="substack"${filterSource === 'substack' ? ' selected' : ''}>Substack</option>
+            <option value="youtube"${filterSource === 'youtube' ? ' selected' : ''}>YouTube</option>
+            <option value="embed"${filterSource === 'embed' ? ' selected' : ''}>Embed</option>
+            <option value="chunk"${filterSource === 'chunk' ? ' selected' : ''}>Chunk</option>
+          </select>
+          <select onchange="filterStatus=this.value;renderPage()">
+            <option value="all"${filterStatus === 'all' ? ' selected' : ''}>All Statuses</option>
+            <option value="success"${filterStatus === 'success' ? ' selected' : ''}>Success</option>
+            <option value="error"${filterStatus === 'error' ? ' selected' : ''}>Error</option>
+            <option value="running"${filterStatus === 'running' ? ' selected' : ''}>Running</option>
+          </select>
+          <button class="btn btn-sm btn-primary" onclick="triggerSync('substack')" ${syncRunning ? 'disabled' : ''}>${syncRunning ? 'Syncing...' : 'Sync Substack'}</button>
+          <button class="btn btn-sm btn-primary" onclick="triggerSync('youtube')" ${syncRunning ? 'disabled' : ''}>${syncRunning ? 'Syncing...' : 'Sync YouTube'}</button>
+        </div>
+      `;
+
+      if (filtered.length === 0) {
+        h += '<div class="empty-state">No sync operations recorded yet.</div>';
+      } else {
+        for (const op of filtered) {
+          const startedAt = new Date(op.started_at);
+          const completedAt = op.completed_at ? new Date(op.completed_at) : null;
+          const durationMs = completedAt ? (completedAt.getTime() - startedAt.getTime()) : null;
+
+          const statusClass = op.status === 'success' ? 'status-success' : op.status === 'error' ? 'status-error' : 'status-running';
+          const statusLabel = op.status === 'success' ? 'Success' : op.status === 'error' ? 'Error' : 'Running';
+
+          h += '<div class="sync-card">';
+          h += '<div class="sync-card-header">';
+          h += '<span class="sync-source">' + escapeAttr(op.source) + '</span>';
+          h += '<span class="status-badge ' + statusClass + '">' + statusLabel + '</span>';
+          if (op.force) h += '<span class="force-badge">force</span>';
+          h += '<span class="sync-time">' + formatTime(op.started_at) + '</span>';
+          if (durationMs !== null) h += '<span class="sync-duration">(' + formatDuration(durationMs) + ')</span>';
+          h += '</div>';
+
+          h += '<dl class="sync-details">';
+          h += '<dt>Checked</dt><dd>' + (op.items_checked ?? '-') + '</dd>';
+          h += '<dt>Created</dt><dd>' + (op.items_created ?? '-') + '</dd>';
+          h += '<dt>Updated</dt><dd>' + (op.items_updated ?? '-') + '</dd>';
+          if (completedAt) {
+            h += '<dt>Completed</dt><dd>' + formatTime(op.completed_at) + '</dd>';
+          }
+          h += '</dl>';
+
+          if (op.error_message) {
+            h += '<div class="sync-error">' + escapeAttr(op.error_message) + '</div>';
+          }
+
+          if (op.details) {
+            const d = op.details;
+            const slugs = d.created || d.updated || d.skipped;
+            if (slugs && Array.isArray(slugs) && slugs.length > 0) {
+              h += '<details class="sync-ids"><summary>' + slugs.length + ' items</summary>';
+              h += '<div style="margin-top:4px;font-family:monospace;font-size:0.82em;word-break:break-all;">' + escapeAttr(slugs.join(', ')) + '</div>';
+              h += '</details>';
+            }
+          }
+
+          h += '</div>';
+        }
+      }
+
+      app.innerHTML = h;
+    }
+
+    async function signOut() {
+      await sb.auth.signOut();
+      currentPerson = null;
+      app.innerHTML = '<div class="loading">Please sign in...</div>';
+    }
+
+    async function init() {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
+          const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
+          if (personErr) throw personErr;
+          currentPerson = person;
+          await loadSyncOps();
+          renderPage();
+        } else {
+          app.innerHTML = '<div class="loading">Redirecting to dashboard for sign-in...</div>';
+          window.location.href = './index.html';
+        }
+
+        sb.auth.onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+            const { data: person } = await sb.rpc('get_or_create_person');
+            currentPerson = person;
+            await loadSyncOps();
+            renderPage();
+          } else if (event === 'SIGNED_OUT') {
+            currentPerson = null;
+            window.location.href = './index.html';
+          }
+        });
+      } catch (err) {
+        app.innerHTML = '<div class="error-box">Error loading sync operations: <code>' + err.message + '</code></div>';
+        console.error(err);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
