@@ -403,7 +403,7 @@ async function handleLinkAnalytics(params: {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  const [{ count: totalClicks, error: totalClicksError }, { data: dailyClicks, error: dailyError }, { data: weeklyClicks, error: weeklyError }, { data: clickRows, error: clickRowsError }, { data: comparisonLinks, error: comparisonError }] = await Promise.all([
+  const [{ count: totalClicks, error: totalClicksError }, { data: dailyClicks, error: dailyError }, { data: weeklyClicks, error: weeklyError }, { data: clickRows, error: clickRowsError }, { data: comparisonLinks, error: comparisonError }, { data: variantClickRows, error: variantClickRowsError }, { data: allVariantDetails, error: allVariantDetailsError }] = await Promise.all([
     supabase
       .from("click_log")
       .select("id", { count: "exact", head: true })
@@ -420,7 +420,7 @@ async function handleLinkAnalytics(params: {
     }),
     supabase
       .from("click_log")
-      .select("referer, clicked_at")
+      .select("referer, country_code, clicked_at")
       .eq("link_id", link.id)
       .gte("clicked_at", startDate.toISOString()),
     supabase
@@ -429,6 +429,14 @@ async function handleLinkAnalytics(params: {
       .neq("id", link.id)
       .order("created_at", { ascending: false })
       .limit(10),
+    supabase
+      .from("click_log")
+      .select("variant_id")
+      .eq("link_id", link.id),
+    supabase
+      .from("tracking_variants")
+      .select("id, suffix, utm_source, ref")
+      .eq("link_id", link.id),
   ]);
 
   if (totalClicksError) throw totalClicksError;
@@ -436,6 +444,8 @@ async function handleLinkAnalytics(params: {
   if (weeklyError) throw weeklyError;
   if (clickRowsError) throw clickRowsError;
   if (comparisonError) throw comparisonError;
+  if (variantClickRowsError) throw variantClickRowsError;
+  if (allVariantDetailsError) throw allVariantDetailsError;
 
   const referrerCounts: Record<string, number> = {};
   for (const row of clickRows || []) {
@@ -453,6 +463,55 @@ async function handleLinkAnalytics(params: {
 
   const referrers = Object.entries(referrerCounts)
     .map(([referrer, clicks]) => ({ referrer, clicks }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const countryCounts: Record<string, number> = {};
+  for (const row of clickRows || []) {
+    const cc = row.country_code?.trim();
+    if (cc) countryCounts[cc] = (countryCounts[cc] || 0) + 1;
+  }
+  const countries = Object.entries(countryCounts)
+    .map(([country, clicks]) => ({ country, clicks }))
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const variantMap: Record<string, { suffix: string; utm_source: string; ref: string }> = {};
+  for (const v of allVariantDetails || []) {
+    variantMap[v.id] = { suffix: v.suffix, utm_source: v.utm_source || "", ref: v.ref || "" };
+  }
+
+  const variantCounts: Record<string, number> = {};
+  for (const row of variantClickRows || []) {
+    const vid = row.variant_id || "__direct__";
+    variantCounts[vid] = (variantCounts[vid] || 0) + 1;
+  }
+
+  const byVariant = Object.entries(variantCounts)
+    .map(([vid, clicks]) => {
+      if (vid === "__direct__") return { label: "direct (no variant)", clicks };
+      const detail = variantMap[vid];
+      if (detail) {
+        return {
+          label: detail.utm_source ? `${detail.utm_source} (ref=${detail.ref})` : detail.suffix,
+          suffix: detail.suffix,
+          utm_source: detail.utm_source,
+          ref: detail.ref,
+          clicks,
+        };
+      }
+      return { label: vid, clicks };
+    })
+    .sort((a, b) => b.clicks - a.clicks);
+
+  const sourceCounts: Record<string, number> = {};
+  for (const row of variantClickRows || []) {
+    let source = "direct";
+    if (row.variant_id && variantMap[row.variant_id]?.utm_source) {
+      source = variantMap[row.variant_id].utm_source;
+    }
+    sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+  }
+  const bySource = Object.entries(sourceCounts)
+    .map(([source, clicks]) => ({ source, clicks }))
     .sort((a, b) => b.clicks - a.clicks);
 
   return jsonResponse({
@@ -478,6 +537,9 @@ async function handleLinkAnalytics(params: {
       clicks: row.clicks,
     })),
     referrers,
+    countries,
+    by_variant: byVariant,
+    by_source: bySource,
     comparison_links: (comparisonLinks || []).map((other) => ({
       slug: other.slug,
       title: other.title,

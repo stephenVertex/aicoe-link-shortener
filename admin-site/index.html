@@ -1425,6 +1425,7 @@
                 ${renderCopyIconButton(`https://${DOMAIN}/${link.slug}`)}
               </span>
               <span style="margin-left:8px; font-size:0.85em; color:#666">${directClicks > 0 ? directClicks + ' direct clicks' : ''}</span>
+              <a href="/analytics/${link.slug}" style="margin-left:8px;font-size:0.8em;color:var(--text-faint);text-decoration:none" title="View analytics">&#128202;</a>
             </div>
         `;
 
@@ -2327,7 +2328,7 @@ als upgrade
               <div class="analytics-title">Clicks by Article</div>
             </div>
             <table class="variant-table">
-              <thead><tr><th>Article</th><th>Author</th><th>Variants</th><th class="clicks">Clicks</th></tr></thead>
+              <thead><tr><th>Article</th><th>Author</th><th>Variants</th><th class="clicks">Clicks</th><th></th></tr></thead>
               <tbody>
         `;
         for (const s of linkClickSummary) {
@@ -2339,6 +2340,7 @@ als upgrade
               <td style="color:var(--author)">${author}</td>
               <td>${s.variantCount}</td>
               <td class="clicks">${s.totalClicks}</td>
+              <td><a href="/analytics/${s.link.slug}" style="color:var(--accent);text-decoration:none;font-size:0.85em" title="View analytics">&#128202;</a></td>
             </tr>
           `;
         }

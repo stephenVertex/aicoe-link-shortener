@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>aicoe.fit - Link Analytics</title>
+  <script src="../supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --text: #333;
+      --text-muted: #666;
+      --text-faint: #888;
+      --text-title: #111;
+      --card-bg: white;
+      --card-shadow: rgba(0,0,0,0.08);
+      --border: #e0e0e0;
+      --border-light: #e5e7eb;
+      --border-faint: #f3f4f6;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --author: #6b21a8;
+      --clicks: #059669;
+      --badge-bg: #dbeafe;
+      --badge-text: #1e40af;
+      --btn-secondary-bg: #e5e7eb;
+      --btn-secondary-text: #374151;
+      --btn-secondary-hover: #d1d5db;
+      --copy-btn-border: #d1d5db;
+      --copy-btn-hover: #f3f4f6;
+      --copied-bg: #dcfce7;
+      --copied-border: #86efac;
+      --copied-text: #166534;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --error-text: #991b1b;
+      --stat-num: #2563eb;
+    }
+    html[data-theme="synthwave-dark"] {
+      --bg: #1a1a2e;
+      --text: #e0e0e0;
+      --text-muted: #a0a0b8;
+      --text-faint: #707088;
+      --text-title: #ff6ec7;
+      --card-bg: #16213e;
+      --card-shadow: rgba(0,0,0,0.4);
+      --border: #2a2a4a;
+      --border-light: #252545;
+      --border-faint: #202040;
+      --accent: #00d4ff;
+      --accent-hover: #33ddff;
+      --author: #bf6aff;
+      --clicks: #72f1b8;
+      --badge-bg: #1a1a3e;
+      --badge-text: #00d4ff;
+      --btn-secondary-bg: #252545;
+      --btn-secondary-text: #e0e0e0;
+      --btn-secondary-hover: #2a2a5a;
+      --copy-btn-border: #3a3a5a;
+      --copy-btn-hover: #252545;
+      --copied-bg: #1a2e2a;
+      --copied-border: #72f1b8;
+      --copied-text: #72f1b8;
+      --error-bg: #2e1a1a;
+      --error-border: #6a3a3a;
+      --error-text: #ff6ec7;
+      --stat-num: #ff6ec7;
+    }
+    html[data-theme="solarized-dark"] {
+      --bg: #002b36;
+      --text: #93a1a1;
+      --text-muted: #839496;
+      --text-faint: #657b83;
+      --text-title: #b58900;
+      --card-bg: #073642;
+      --card-shadow: rgba(0,0,0,0.28);
+      --border: #0d4a59;
+      --border-light: #114b59;
+      --border-faint: #0c4250;
+      --accent: #268bd2;
+      --accent-hover: #3aa0e8;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #11333d;
+      --badge-text: #6cbeff;
+      --btn-secondary-bg: #11404d;
+      --btn-secondary-text: #93a1a1;
+      --btn-secondary-hover: #15505f;
+      --copy-btn-border: #1a5564;
+      --copy-btn-hover: #11404d;
+      --copied-bg: #123f40;
+      --copied-border: #2aa198;
+      --copied-text: #7ee5dd;
+      --error-bg: #3a2323;
+      --error-border: #6d3f3f;
+      --error-text: #dc322f;
+      --stat-num: #b58900;
+    }
+    html[data-theme="solarized-light"] {
+      --bg: #fdf6e3;
+      --text: #586e75;
+      --text-muted: #657b83;
+      --text-faint: #93a1a1;
+      --text-title: #b58900;
+      --card-bg: #fffdf4;
+      --card-shadow: rgba(88,110,117,0.12);
+      --border: #eee8d5;
+      --border-light: #e6dfca;
+      --border-faint: #f2ecdc;
+      --accent: #268bd2;
+      --accent-hover: #1f76b4;
+      --author: #d33682;
+      --clicks: #2aa198;
+      --badge-bg: #e8f1f3;
+      --badge-text: #268bd2;
+      --btn-secondary-bg: #eee8d5;
+      --btn-secondary-text: #586e75;
+      --btn-secondary-hover: #e6dfca;
+      --copy-btn-border: #d8d2c0;
+      --copy-btn-hover: #f2ecdc;
+      --copied-bg: #e6f4ef;
+      --copied-border: #9dd7c5;
+      --copied-text: #20756d;
+      --error-bg: #fff1f0;
+      --error-border: #f3c7c2;
+      --error-text: #b8332f;
+      --stat-num: #b58900;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); transition: background 0.2s, color 0.2s; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+    header h1 { font-size: 1.4em; font-weight: 700; }
+    header h1 a { color: var(--text-title); text-decoration: none; }
+    header h1 a:hover { text-decoration: underline; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 500; transition: all 0.15s; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); }
+    .btn-secondary:hover { background: var(--btn-secondary-hover); }
+    .btn-sm { padding: 4px 10px; font-size: 0.8em; }
+    .card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
+    .card h2 { font-size: 1.1em; font-weight: 600; color: var(--text-title); margin-bottom: 12px; }
+    .card h3 { font-size: 0.95em; font-weight: 600; color: var(--text-title); margin-bottom: 8px; }
+    .stats-row { display: flex; gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 3px var(--card-shadow); flex: 1; text-align: center; }
+    .stat-card .num { font-size: 2em; font-weight: 700; color: var(--stat-num); }
+    .stat-card .label { font-size: 0.85em; color: var(--text-muted); margin-top: 4px; }
+    .link-title { font-size: 1.3em; font-weight: 700; color: var(--text-title); margin-bottom: 4px; }
+    .link-slug { font-size: 0.9em; color: var(--accent); margin-bottom: 8px; font-family: monospace; }
+    .link-slug a { color: var(--accent); text-decoration: none; }
+    .link-slug a:hover { text-decoration: underline; }
+    .link-dest { font-size: 0.85em; color: var(--text-muted); margin-bottom: 8px; word-break: break-all; }
+    .link-dest a { color: var(--accent); text-decoration: none; }
+    .link-dest a:hover { text-decoration: underline; }
+    .link-meta { font-size: 0.82em; color: var(--text-faint); margin-bottom: 4px; }
+    .link-meta .author { color: var(--author); font-weight: 500; }
+    .chart-container { position: relative; height: 250px; width: 100%; }
+    .chart-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .chart-controls select, .chart-controls input { background: var(--bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 0.85em; }
+    .breakdown-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    .breakdown-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-light); color: var(--text-muted); font-weight: 500; }
+    .breakdown-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-faint); }
+    .breakdown-table .clicks { font-weight: 600; color: var(--clicks); }
+    .comparison-link { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-faint); }
+    .comparison-link:last-child { border-bottom: none; }
+    .comparison-link .title { font-size: 0.9em; color: var(--text-title); }
+    .comparison-link .title a { color: var(--accent); text-decoration: none; }
+    .comparison-link .title a:hover { text-decoration: underline; }
+    .comparison-link .meta { font-size: 0.8em; color: var(--text-faint); }
+    .loading { text-align: center; padding: 60px; color: var(--text-faint); }
+    .error-box { background: var(--error-bg); border: 1px solid var(--error-border); border-radius: 8px; padding: 16px; margin: 20px 0; color: var(--error-text); }
+    .error-box code { background: var(--error-bg); padding: 2px 6px; border-radius: 3px; font-size: 0.85em; }
+    .theme-control { display: inline-flex; align-items: center; gap: 6px; }
+    .theme-label { font-size: 0.75em; color: var(--text-faint); }
+    .theme-select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 0.8em; }
+    .copy-btn { background: none; border: 1px solid var(--copy-btn-border); border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.8em; color: var(--text-muted); }
+    .copy-btn:hover { background: var(--copy-btn-hover); }
+    .copy-btn.copied { background: var(--copied-bg); border-color: var(--copied-border); color: var(--copied-text); }
+    .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85em; color: var(--text-muted); text-decoration: none; margin-bottom: 8px; }
+    .back-link:hover { color: var(--accent); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 500; }
+    .badge-source { background: var(--badge-bg); color: var(--badge-text); }
+    .bar-chart { display: flex; flex-direction: column; gap: 6px; }
+    .bar-row { display: flex; align-items: center; gap: 8px; }
+    .bar-label { min-width: 120px; font-size: 0.82em; color: var(--text-muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { flex: 1; height: 20px; background: var(--border-faint); border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s; min-width: 2px; }
+    .bar-count { font-size: 0.82em; color: var(--text-muted); min-width: 32px; }
+    @media (max-width: 720px) {
+      .stats-row { flex-wrap: wrap; }
+      .chart-controls { flex-wrap: wrap; }
+      .bar-label { min-width: 80px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="app"><div class="loading">Loading analytics...</div></div>
+  </div>
+
+  <script>
+    const THEME_KEY = 'theme';
+
+    function resolveTheme(theme) {
+      if (theme === 'dark') return 'synthwave-dark';
+      if (theme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'synthwave-dark' : 'light';
+      }
+      return theme || 'synthwave-dark';
+    }
+
+    function applyTheme(theme) {
+      const resolved = resolveTheme(theme);
+      if (resolved === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', resolved);
+      }
+    }
+
+    function setTheme(theme) {
+      localStorage.setItem(THEME_KEY, theme);
+      applyTheme(theme);
+      renderPage();
+    }
+
+    function getSavedTheme() {
+      const saved = localStorage.getItem(THEME_KEY) || 'synthwave-dark';
+      return saved === 'dark' ? 'synthwave-dark' : saved;
+    }
+
+    function renderThemeControl() {
+      const currentTheme = getSavedTheme();
+      const options = [
+        ['synthwave-dark', 'Synthwave'],
+        ['solarized-dark', 'Solarized Dark'],
+        ['solarized-light', 'Solarized Light'],
+        ['light', 'Light'],
+        ['system', 'System'],
+      ];
+      return '<div class="theme-control"><span class="theme-label">Theme</span><select class="theme-select" onchange="setTheme(this.value)">' +
+        options.map(([value, label]) => '<option value="' + value + '"' + (currentTheme === value ? ' selected' : '') + '>' + label + '</option>').join('') +
+        '</select></div>';
+    }
+
+    applyTheme(getSavedTheme());
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (getSavedTheme() === 'system') applyTheme('system');
+    });
+
+    const SUPABASE_URL = 'https://dumhbtxskncofwwzrmfx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bWhidHhza25jb2Z3d3pybWZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTk0MzcsImV4cCI6MjA4ODkzNTQzN30.kYLAKAtgA18pyQxp1RzmPnmySdXtxDrTkgs5qlB2fXY';
+    const DOMAIN = 'aicoe.fit';
+
+    function getStub() {
+      const path = window.location.pathname;
+      const match = path.match(/^\/analytics\/(.+?)\/?$/);
+      if (match) return match[1];
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('stub')) return params.get('stub');
+      const hash = window.location.hash;
+      if (hash && hash.length > 1) return hash.slice(1);
+      return '';
+    }
+
+    function escapeAttr(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    let analyticsData = null;
+    let analyticsError = null;
+    let analyticsLoading = false;
+    let clickChart = null;
+    let chartInterval = 'day';
+    let chartDays = 30;
+
+    async function fetchAnalytics(slug, days) {
+      analyticsLoading = true;
+      analyticsError = null;
+      renderPage();
+
+      try {
+        const url = SUPABASE_URL + '/functions/v1/analytics?action=link-analytics&slug=' + encodeURIComponent(slug) + '&days=' + (days || 30);
+        const resp = await fetch(url, {
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ error: 'Request failed' }));
+          throw new Error(err.error || 'Request failed');
+        }
+        analyticsData = await resp.json();
+      } catch (err) {
+        analyticsError = err.message || 'Unknown error';
+      } finally {
+        analyticsLoading = false;
+        renderPage();
+      }
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function formatChartDate(dateStr, interval) {
+      const d = new Date(dateStr);
+      if (interval === 'week') {
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' week';
+      } else if (interval === 'month') {
+        return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function getChartColors() {
+      const style = getComputedStyle(document.documentElement);
+      const accent = style.getPropertyValue('--accent').trim() || '#2563eb';
+      return {
+        border: accent,
+        background: accent + '33',
+        grid: style.getPropertyValue('--border-faint').trim() || '#f3f4f6',
+        text: style.getPropertyValue('--text-muted').trim() || '#666',
+      };
+    }
+
+    function renderClickChart() {
+      const canvas = document.getElementById('click-canvas');
+      if (!canvas || !analyticsData) return;
+
+      const colors = getChartColors();
+      const data = chartInterval === 'week' ? analyticsData.weekly_clicks : analyticsData.daily_clicks;
+
+      if (clickChart) clickChart.destroy();
+
+      const labels = data.map(d => formatChartDate(d.date || d.week_start, chartInterval));
+      const values = data.map(d => d.clicks);
+
+      clickChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Clicks',
+            data: values,
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(0,0,0,0.8)',
+              titleFont: { size: 12 },
+              bodyFont: { size: 12 },
+              padding: 10,
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: colors.grid },
+              ticks: { color: colors.text, font: { size: 10 } }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: colors.grid },
+              ticks: { color: colors.text, font: { size: 10 }, stepSize: 1 }
+            }
+          }
+        }
+      });
+    }
+
+    function setChartInterval(value) {
+      chartInterval = value;
+      renderPage();
+    }
+
+    function setChartDays(value) {
+      chartDays = parseInt(value, 10) || 30;
+      const stub = getStub();
+      if (stub) fetchAnalytics(stub, chartDays);
+    }
+
+    function copyUrl(btn, url) {
+      navigator.clipboard.writeText(url).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    function renderPage() {
+      const app = document.getElementById('app');
+      const stub = getStub();
+
+      if (!stub) {
+        app.innerHTML = `
+          <header>
+            <h1><a href="/">aicoe.fit</a></h1>
+            ${renderThemeControl()}
+          </header>
+          <div class="error-box">No link specified. Use <code>/analytics/{stub}</code> or <code>?stub={slug}</code></div>
+        `;
+        return;
+      }
+
+      if (analyticsLoading) {
+        app.innerHTML = `
+          <header>
+            <h1><a href="/">aicoe.fit</a></h1>
+            ${renderThemeControl()}
+          </header>
+          <div class="loading">Loading analytics for ${escapeAttr(stub)}...</div>
+        `;
+        return;
+      }
+
+      if (analyticsError) {
+        app.innerHTML = `
+          <header>
+            <h1><a href="/">aicoe.fit</a></h1>
+            ${renderThemeControl()}
+          </header>
+          <div class="error-box">Error loading analytics: <code>${escapeAttr(analyticsError)}</code></div>
+          <a class="back-link" href="/">&larr; Back to dashboard</a>
+        `;
+        return;
+      }
+
+      if (!analyticsData) return;
+
+      const link = analyticsData.link;
+      const title = link.title || link.slug;
+      const shortUrl = link.short_url || ('https://' + DOMAIN + '/' + link.slug);
+      const totalClicks = analyticsData.total_clicks || 0;
+      const days = analyticsData.days || 30;
+      const dailyClicks = analyticsData.daily_clicks || [];
+      const weeklyClicks = analyticsData.weekly_clicks || [];
+      const referrers = analyticsData.referrers || [];
+      const comparisonLinks = analyticsData.comparison_links || [];
+      const countries = analyticsData.countries || [];
+      const variants = analyticsData.by_variant || [];
+      const sources = analyticsData.by_source || [];
+
+      const chartData = chartInterval === 'week' ? weeklyClicks : dailyClicks;
+      const maxClicks = chartData.length > 0 ? Math.max(...chartData.map(d => d.clicks)) : 0;
+
+      let h = `
+        <header>
+          <h1><a href="/">aicoe.fit</a></h1>
+          ${renderThemeControl()}
+        </header>
+
+        <a class="back-link" href="/">&larr; Back to dashboard</a>
+
+        <div class="card">
+          <div class="link-title">${escapeAttr(title)}</div>
+          <div class="link-slug">
+            <a href="${escapeAttr(shortUrl)}" target="_blank" rel="noopener">${escapeAttr(shortUrl)}</a>
+            <button class="copy-btn" onclick="copyUrl(this, '${escapeAttr(shortUrl)}')">Copy</button>
+          </div>
+          <div class="link-dest"><a href="${escapeAttr(link.destination_url)}" target="_blank" rel="noopener">${escapeAttr(link.destination_url)}</a></div>
+          <div class="link-meta">
+            ${link.author ? '<span class="author">' + escapeAttr(link.author) + '</span> &middot; ' : ''}
+            ${link.published_at ? 'Published ' + formatDate(link.published_at) + ' &middot; ' : ''}
+            Created ${formatDate(link.created_at)}
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="num">${totalClicks}</div>
+            <div class="label">Total Clicks</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${dailyClicks.length > 0 ? dailyClicks.reduce((s, d) => s + d.clicks, 0) : 0}</div>
+            <div class="label">Clicks (${days}d)</div>
+          </div>
+          <div class="stat-card">
+            <div class="num">${referrers.length}</div>
+            <div class="label">Referrers</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="chart-controls">
+            <h2 style="margin:0;flex:1">Clicks Over Time</h2>
+            <select onchange="setChartInterval(this.value)">
+              <option value="day" ${chartInterval === 'day' ? 'selected' : ''}>Daily</option>
+              <option value="week" ${chartInterval === 'week' ? 'selected' : ''}>Weekly</option>
+            </select>
+            <select onchange="setChartDays(this.value)">
+              <option value="7" ${chartDays === 7 ? 'selected' : ''}>7 days</option>
+              <option value="30" ${chartDays === 30 ? 'selected' : ''}>30 days</option>
+              <option value="90" ${chartDays === 90 ? 'selected' : ''}>90 days</option>
+              <option value="365" ${chartDays === 365 ? 'selected' : ''}>1 year</option>
+            </select>
+          </div>
+          <div class="chart-container">
+            <canvas id="click-canvas"></canvas>
+          </div>
+        </div>
+      `;
+
+      if (referrers.length > 0) {
+        const maxRef = referrers[0].clicks || 1;
+        h += `
+          <div class="card">
+            <h2>Referrers</h2>
+            <div class="bar-chart">
+              ${referrers.map(r => `
+                <div class="bar-row">
+                  <span class="bar-label" title="${escapeAttr(r.referrer)}">${escapeAttr(r.referrer)}</span>
+                  <div class="bar-track"><div class="bar-fill" style="width:${Math.round((r.clicks / maxRef) * 100)}%"></div></div>
+                  <span class="bar-count">${r.clicks}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      if (countries.length > 0) {
+        const maxCountry = countries[0].clicks || 1;
+        h += `
+          <div class="card">
+            <h2>Countries</h2>
+            <div class="bar-chart">
+              ${countries.map(c => `
+                <div class="bar-row">
+                  <span class="bar-label" title="${escapeAttr(c.country)}">${escapeAttr(c.country)}</span>
+                  <div class="bar-track"><div class="bar-fill" style="width:${Math.round((c.clicks / maxCountry) * 100)}%"></div></div>
+                  <span class="bar-count">${c.clicks}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      if (sources.length > 0) {
+        const maxSource = sources[0].clicks || 1;
+        h += `
+          <div class="card">
+            <h2>Clicks by Source</h2>
+            <div class="bar-chart">
+              ${sources.map(s => `
+                <div class="bar-row">
+                  <span class="bar-label" title="${escapeAttr(s.source)}">${escapeAttr(s.source)}</span>
+                  <div class="bar-track"><div class="bar-fill" style="width:${Math.round((s.clicks / maxSource) * 100)}%"></div></div>
+                  <span class="bar-count">${s.clicks}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      if (variants.length > 0) {
+        h += `
+          <div class="card">
+            <h2>Tracking Variants</h2>
+            <table class="breakdown-table">
+              <thead><tr><th>Source</th><th>Ref</th><th class="clicks">Clicks</th></tr></thead>
+              <tbody>
+                ${variants.map(v => `
+                  <tr>
+                    <td><span class="badge badge-source">${escapeAttr(v.label || v.utm_source || v.suffix || '-')}</span></td>
+                    <td>${escapeAttr(v.ref || '-')}</td>
+                    <td class="clicks">${v.clicks}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      if (comparisonLinks.length > 0) {
+        h += `
+          <div class="card">
+            <h2>Other Links</h2>
+            ${comparisonLinks.map(other => `
+              <div class="comparison-link">
+                <div class="title"><a href="/analytics/${escapeAttr(other.slug)}">${escapeAttr(other.title || other.slug)}</a></div>
+                <div class="meta">
+                  ${formatDate(other.created_at)}
+                  &middot;
+                  <a href="${escapeAttr(other.short_url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${DOMAIN}/${escapeAttr(other.slug)}</a>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      h += `<a class="back-link" href="/">&larr; Back to dashboard</a>`;
+
+      app.innerHTML = h;
+      renderClickChart();
+    }
+
+    async function init() {
+      const stub = getStub();
+      if (stub) {
+        await fetchAnalytics(stub, chartDays);
+      } else {
+        renderPage();
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
