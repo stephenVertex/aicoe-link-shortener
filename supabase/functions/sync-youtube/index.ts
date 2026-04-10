@@ -271,7 +271,21 @@ function generateShortSlug(title: string): string {
   return keyWords.join("-");
 }
 
+async function authenticateApiKey(apiKey: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("people")
+    .select("id")
+    .eq("api_key", apiKey)
+    .maybeSingle();
+  return !error && !!data;
+}
+
 async function authenticateRequest(req: Request): Promise<boolean> {
+  // Check x-api-key first (CLI auth)
+  const apiKey = req.headers.get("x-api-key");
+  if (apiKey) return authenticateApiKey(apiKey);
+
+  // Fall back to Bearer token (browser/JWT auth)
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return false;
   const token = authHeader.slice(7);
@@ -283,7 +297,7 @@ Deno.serve(async (req) => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
+      "authorization, x-client-info, apikey, content-type, x-api-key",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   };
 
@@ -298,7 +312,8 @@ Deno.serve(async (req) => {
 
   // Validate auth if provided
   const authHeader = req.headers.get("Authorization");
-  if (authHeader) {
+  const apiKeyHeader = req.headers.get("x-api-key");
+  if (authHeader || apiKeyHeader) {
     const isAuthenticated = await authenticateRequest(req);
     if (!isAuthenticated) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {

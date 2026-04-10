@@ -56,7 +56,21 @@ async function fetchAllPostMeta(): Promise<Map<string, ApiPost>> {
   return posts;
 }
 
+async function authenticateApiKey(apiKey: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("people")
+    .select("id")
+    .eq("api_key", apiKey)
+    .maybeSingle();
+  return !error && !!data;
+}
+
 async function authenticateRequest(req: Request): Promise<boolean> {
+  // Check x-api-key first (CLI auth)
+  const apiKey = req.headers.get("x-api-key");
+  if (apiKey) return authenticateApiKey(apiKey);
+
+  // Fall back to Bearer token (browser/JWT auth)
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return false;
   const token = authHeader.slice(7);
@@ -68,7 +82,7 @@ Deno.serve(async (req) => {
   // CORS headers for browser requests
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-api-key",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   };
 
@@ -80,9 +94,10 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "true";
 
-  // If Authorization header is present, validate it
+  // If any auth header is present, validate it
   const authHeader = req.headers.get("Authorization");
-  if (authHeader) {
+  const apiKeyHeader = req.headers.get("x-api-key");
+  if (authHeader || apiKeyHeader) {
     const isAuthenticated = await authenticateRequest(req);
     if (!isAuthenticated) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
