@@ -153,6 +153,11 @@ Deno.serve(async (req) => {
     .eq("ref", person.slug)
     .order("utm_source");
 
+  // Build slug lookup map for O(1) access
+  const slugById = new Map(
+    (links || []).map((l: { id: string; slug: string }) => [l.id, l.slug]),
+  );
+
   // Group variants by link_id
   const variantsByLink: Record<
     string,
@@ -174,13 +179,12 @@ Deno.serve(async (req) => {
       v.utm_term || "",
     ].join("|");
     const label = sourceLabels[key] || v.utm_source;
+    const linkSlug = slugById.get(v.link_id) || "";
     variantsByLink[v.link_id].push({
       suffix: v.suffix,
       utm_source: v.utm_source,
       label,
-      short_url: `https://${DOMAIN}/${
-        (links || []).find((l: { id: string }) => l.id === v.link_id)?.slug
-      }-${v.suffix}`,
+      short_url: `https://${DOMAIN}/${linkSlug}-${v.suffix}`,
     });
   }
 
