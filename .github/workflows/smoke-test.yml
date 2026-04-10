@@ -1,0 +1,43 @@
+name: Smoke Test
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  smoke-test:
+    name: als CLI smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Install als CLI with dev deps
+        working-directory: user-cli
+        run: |
+          uv venv .venv
+          uv pip install -e ".[dev]" --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Configure als credentials
+        run: |
+          cat > ~/.als.credentials <<CREDS
+          [default]
+          api_key = ${{ secrets.AICOE_API_KEY }}
+          CREDS
+          chmod 600 ~/.als.credentials
+
+      - name: Run smoke tests
+        working-directory: user-cli
+        run: uv run pytest tests/test_smoke.py -v
