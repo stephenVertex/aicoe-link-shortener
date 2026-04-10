@@ -181,6 +181,44 @@ If MCP tools are not available, STOP and mail the witness.
 
 <!-- END BEADS INTEGRATION -->
 
+## CLI Architecture — API Key Only
+
+**CRITICAL RULE**: All `als` CLI commands MUST authenticate using the user's API key (`x-api-key` header). No CLI command may require `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, or any other Supabase credential.
+
+### Why
+
+The `als` CLI is a multi-tenant user tool. Users have API keys, not service-role keys. Requiring Supabase credentials would make the CLI unusable for anyone outside the admin team, and leaks internal infrastructure details.
+
+### How to implement a new command
+
+1. **Build a Supabase edge function** that accepts `x-api-key` (validated via the `api_keys` table) and performs the database operation server-side.
+2. **Call that edge function** from the CLI using `_api_request(...)` with `api_key=api_key`.
+3. **Never** call Supabase directly from the CLI (no `supabase` SDK, no REST calls to `supabase.co`).
+
+### If you see `_get_supabase()` or `SUPABASE_SERVICE_ROLE_KEY` in CLI code
+
+That is a bug. File a bead (`bd create "fix: move <command> off service-role to API" -t bug -p 1`) and refactor it to use an edge function before shipping.
+
+### Edge function pattern
+
+```typescript
+// supabase/functions/my-command/index.ts
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+Deno.serve(async (req) => {
+  const apiKey = req.headers.get("x-api-key");
+  // validate apiKey against api_keys table, get person_id
+  // ... do the work ...
+  return new Response(JSON.stringify(result), {
+    headers: { "Content-Type": "application/json" },
+  });
+});
+```
+
+Deploy with `supabase_aicoe` MCP → `deploy_edge_function`.
+
+---
+
 ## Supabase MCP Access
 
 This project uses the `supabase_aicoe` MCP server for direct database operations (queries, migrations, edge function deployment).
@@ -213,6 +251,13 @@ GitHub Actions will automatically:
 The install script and `als upgrade` always pull from `releases/latest/download/` so no URL updates are needed.
 
 ## Supabase Edge Functions
+
+**CRITICAL: After deploying any edge function update, you MUST:**
+1. Bump the CLI version in `user-cli/pyproject.toml`
+2. Build and release a new CLI version (see "Releasing a New Version" above)
+3. Run the smoke tests (`uv run pytest user-cli/tests/test_smoke.py`) to verify the deployment didn't break anything
+
+Edge function changes are invisible to git — they deploy to Supabase and can silently break CLI commands. The smoke tests are the only safety net. Do NOT consider an edge function deployment "done" until the smoke tests pass.
 
 The project uses Supabase Edge Functions for various operations. Functions are consolidated to reduce cold-start surface.
 
