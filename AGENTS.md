@@ -252,12 +252,36 @@ The install script and `als upgrade` always pull from `releases/latest/download/
 
 ## Supabase Edge Functions
 
-**CRITICAL: After deploying any edge function update, you MUST:**
-1. Bump the CLI version in `user-cli/pyproject.toml`
-2. Build and release a new CLI version (see "Releasing a New Version" above)
-3. Run the smoke tests (`uv run pytest user-cli/tests/test_smoke.py`) to verify the deployment didn't break anything
+### Edge Function Deployment Protocol
 
-Edge function changes are invisible to git — they deploy to Supabase and can silently break CLI commands. The smoke tests are the only safety net. Do NOT consider an edge function deployment "done" until the smoke tests pass.
+Edge function changes are invisible to git — they deploy to Supabase and can silently break CLI commands. To prevent regressions, **every bead that touches an edge function MUST have a deployment child bead**.
+
+**When your bead involves edge function changes:**
+
+1. **Create a deployment child bead** before deploying:
+   ```bash
+   bd create "deploy <function-name>" --parent <parent-bead-id> -t task -p 1 \
+     --description "Deploy <function-name> edge function and verify with smoke tests"
+   ```
+   This creates a hierarchical child (e.g., `als-3w9.1`) under the parent bead.
+
+2. **Deploy the edge function** via `supabase_aicoe` MCP → `deploy_edge_function`.
+
+3. **Verify the deployment** — run the smoke tests:
+   ```bash
+   cd user-cli && uv run pytest tests/test_smoke.py -v
+   ```
+
+4. **Close the deployment child** only after smoke tests pass:
+   ```bash
+   bd close <child-id> --reason "Deployed <function-name> v<N>, smoke tests pass"
+   ```
+
+5. **Do NOT close the parent bead** until all deployment children are closed.
+
+**Why this matters:** A polecat once "fixed" a bug by deploying the wrong edge function. The parent bead was closed, but the CLI was still broken. Child beads force verification before the parent can be marked done.
+
+If the smoke tests fail after deployment, do NOT close the child — investigate and redeploy.
 
 The project uses Supabase Edge Functions for various operations. Functions are consolidated to reduce cold-start surface.
 
