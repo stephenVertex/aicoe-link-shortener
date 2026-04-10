@@ -1,0 +1,130 @@
+name: Deploy Edge Functions
+
+# Auto-deploy changed Supabase edge functions when code lands on main.
+# Requires GitHub secrets: SUPABASE_PROJECT_REF, SUPABASE_ACCESS_TOKEN, AICOE_API_KEY
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+jobs:
+  deploy:
+    name: Deploy changed edge functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      deployed: ${{ steps.deploy.outputs.deployed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Detect and deploy changed functions
+        id: deploy
+        run: |
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          CHANGED_FILES=$(git diff --name-only "$BEFORE" "$AFTER" -- supabase/functions/)
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No edge function changes detected"
+            echo "deployed=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # If _shared/ changed, deploy ALL functions (any could import shared code)
+          if echo "$CHANGED_FILES" | grep -q "^supabase/functions/_shared/"; then
+            echo "Shared code changed — deploying ALL functions"
+            FUNCTIONS=$(find supabase/functions -maxdepth 2 -name index.ts \
+              | sed 's|supabase/functions/||;s|/index.ts||' \
+              | sort)
+          else
+            FUNCTIONS=$(echo "$CHANGED_FILES" \
+              | grep -oP '^supabase/functions/\K[^/]+' \
+              | grep -v '^_shared$' \
+              | sort -u)
+          fi
+
+          if [ -z "$FUNCTIONS" ]; then
+            echo "No deployable functions changed"
+            echo "deployed=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Functions to deploy:"
+          echo "$FUNCTIONS"
+
+          DEPLOYED=""
+          FAILED=""
+          for fn in $FUNCTIONS; do
+            echo "::group::Deploying $fn"
+            if supabase functions deploy "$fn" \
+              --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" \
+              --no-verify-jwt; then
+              DEPLOYED="$DEPLOYED $fn"
+              echo "deployed $fn"
+            else
+              FAILED="$FAILED $fn"
+              echo "::error::Failed to deploy $fn"
+            fi
+            echo "::endgroup::"
+          done
+
+          DEPLOYED_TRIMMED=$(echo "$DEPLOYED" | xargs)
+          echo "deployed=${DEPLOYED_TRIMMED:-none}" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Failed to deploy:$FAILED"
+            exit 1
+          fi
+
+  smoke-test:
+    name: Post-deploy smoke tests
+    needs: deploy
+    if: needs.deploy.outputs.deployed != 'none'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Setup Python 3.12
+        run: uv python install 3.12
+
+      - name: Install als CLI with dev deps
+        working-directory: user-cli
+        run: |
+          uv venv .venv
+          uv pip install -e ".[dev]" --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Configure als credentials
+        run: |
+          cat > ~/.als.credentials <<CREDS
+          [default]
+          api_key = ${{ secrets.AICOE_API_KEY }}
+          CREDS
+          chmod 600 ~/.als.credentials
+
+      - name: Run smoke tests
+        working-directory: user-cli
+        run: uv run pytest tests/test_smoke.py -v

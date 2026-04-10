@@ -215,7 +215,7 @@ Deno.serve(async (req) => {
 });
 ```
 
-Deploy with `supabase_aicoe` MCP → `deploy_edge_function`.
+Deploy: commit and push to main — CI auto-deploys via `.github/workflows/deploy-edge-functions.yml`.
 
 ---
 
@@ -254,34 +254,29 @@ The install script and `als upgrade` always pull from `releases/latest/download/
 
 ### Edge Function Deployment Protocol
 
-Edge function changes are invisible to git — they deploy to Supabase and can silently break CLI commands. To prevent regressions, **every bead that touches an edge function MUST have a deployment child bead**.
+Edge functions are **auto-deployed by CI** when changes land on `main`. Polecats do NOT deploy via MCP — they commit and push; CI handles the rest.
+
+**How it works:**
+- `.github/workflows/deploy-edge-functions.yml` triggers on push to `main` when `supabase/functions/**` changes
+- CI uses `git diff` to detect which functions changed and deploys only those via the Supabase CLI
+- If `supabase/functions/_shared/` changes, ALL functions are redeployed
+- Smoke tests run automatically after deployment
 
 **When your bead involves edge function changes:**
 
-1. **Create a deployment child bead** before deploying:
-   ```bash
-   bd create "deploy <function-name>" --parent <parent-bead-id> -t task -p 1 \
-     --description "Deploy <function-name> edge function and verify with smoke tests"
-   ```
-   This creates a hierarchical child (e.g., `als-3w9.1`) under the parent bead.
-
-2. **Deploy the edge function** via `supabase_aicoe` MCP → `deploy_edge_function`.
-
-3. **Verify the deployment** — run the smoke tests:
+1. **Edit the edge function code** in `supabase/functions/<name>/index.ts`
+2. **Commit and push** — CI will auto-deploy when your branch merges to main
+3. **Verify locally** before pushing (optional but recommended):
    ```bash
    cd user-cli && uv run pytest tests/test_smoke.py -v
    ```
 
-4. **Close the deployment child** only after smoke tests pass:
-   ```bash
-   bd close <child-id> --reason "Deployed <function-name> v<N>, smoke tests pass"
-   ```
+**Required GitHub secrets** (already configured):
+- `SUPABASE_PROJECT_REF` — the Supabase project reference
+- `SUPABASE_ACCESS_TOKEN` — Supabase Management API access token
+- `AICOE_API_KEY` — API key for post-deploy smoke tests
 
-5. **Do NOT close the parent bead** until all deployment children are closed.
-
-**Why this matters:** A polecat once "fixed" a bug by deploying the wrong edge function. The parent bead was closed, but the CLI was still broken. Child beads force verification before the parent can be marked done.
-
-If the smoke tests fail after deployment, do NOT close the child — investigate and redeploy.
+**Do NOT use `supabase_aicoe` MCP `deploy_edge_function` for routine deploys.** MCP deploy is reserved for emergency hotfixes that can't wait for CI. If you must use it, document why in the bead notes.
 
 The project uses Supabase Edge Functions for various operations. Functions are consolidated to reduce cold-start surface.
 
