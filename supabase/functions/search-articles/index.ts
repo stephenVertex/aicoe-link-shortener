@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
           id: c.link_id,
           slug: c.video_slug,
           title: c.video_title,
-          author: null,
+          author: c.video_author || null,
           destination_url: c.video_url,
           video_url: videoUrlWithTs,
           published_at: null,
