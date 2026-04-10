@@ -281,6 +281,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Generate embeddings for any newly-created or updated articles so they
+    // become searchable immediately.
+    let embedded = 0;
+    if (created.length > 0 || updated.length > 0) {
+      try {
+        const embedResp = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/embed-articles`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+        if (embedResp.ok) {
+          const embedResult = await embedResp.json();
+          embedded = embedResult.embedded ?? 0;
+        }
+      } catch (e) {
+        console.error("Failed to trigger embed-articles:", e);
+      }
+    }
+
     if (syncLogId) {
       supabase
         .from("sync_operations")
@@ -290,17 +311,18 @@ Deno.serve(async (req) => {
           items_checked: sitemapEntries.length,
           items_created: created.length,
           items_updated: updated.length,
-          details: { created, updated, skipped, checked: sitemapEntries.length },
+          details: { created, updated, skipped, embedded, checked: sitemapEntries.length },
         })
         .eq("id", syncLogId)
         .then(() => {}, () => {});
     }
 
     return new Response(JSON.stringify({
-      message: `Created ${created.length}, updated ${updated.length} links (skipped ${skipped.length} restacks)`,
+      message: `Created ${created.length}, updated ${updated.length} links (skipped ${skipped.length} restacks, embedded ${embedded})`,
       created,
       updated,
       skipped,
+      embedded,
       checked: sitemapEntries.length,
     }), {
       headers: { "Content-Type": "application/json", ...corsHeaders },
