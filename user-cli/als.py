@@ -188,6 +188,7 @@ def cli():
          Get article: als get <slug>
          My articles: als last --me 5
          Shorten URL: als shorten <url>
+      Pre-publish: als pre-publish <slug-or-url>
          Upgrade:     als upgrade
 
     \b
@@ -676,6 +677,96 @@ def _shorten_with_note(
     else:
         click.echo(f"  Expires: never")
     click.echo(f"  Short:   {variant.get('short_url', '')}")
+    click.echo()
+
+
+@cli.command("pre-publish")
+@click.argument("slug_or_url")
+def pre_publish(slug_or_url: str):
+    """Create tracking links for an unpublished Substack article.
+
+    Accepts a Substack URL or just the article slug. Creates a link record
+    and tracking variants for all team members BEFORE the article is published.
+
+    When you later publish and sync-substack runs, the title, author, and
+    publish date will be filled in automatically. No action needed after publish.
+
+    \b
+    Examples:
+      als pre-publish https://trilogyai.substack.com/p/my-upcoming-post
+      als pre-publish my-upcoming-post
+    """
+    # Validate input: if it looks like a URL, check it's a substack URL
+    if slug_or_url.startswith("http://") or slug_or_url.startswith("https://"):
+        if "trilogyai.substack.com/p/" not in slug_or_url:
+            click.echo(
+                "Error: URL must be a trilogyai.substack.com/p/<slug> URL",
+                err=True,
+            )
+            sys.exit(1)
+
+    # Extract slug for display
+    if "trilogyai.substack.com/p/" in slug_or_url:
+        display_slug = slug_or_url.split("/p/")[-1].rstrip("/")
+    else:
+        display_slug = slug_or_url.rstrip("/")
+
+    click.echo(f"\n  Pre-publishing: {click.style(display_slug, bold=True)}\n")
+
+    resp = _api_request("pre-publish", json_body={"slug_or_url": slug_or_url})
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    slug = data.get("slug", "")
+    existed = data.get("existed", False)
+    caller_links = data.get("caller_links", [])
+    total_variants = data.get("total_variants_created", 0)
+    person = data.get("person", {})
+
+    if existed:
+        article = data.get("article", {})
+        title = article.get("title") or slug
+        click.echo(f"  {click.style('Link already exists:', bold=True)}")
+        click.echo(f"    {title}")
+        if article.get("author"):
+            click.echo(f"    by {article['author']}")
+    else:
+        click.echo(f"  {click.style('\u2713', fg='green')} Link created with slug: {slug}")
+        click.echo(
+            f"  {click.style('\u2713', fg='green')} Tracking links created"
+            f" for all {total_variants} variants"
+        )
+
+    click.echo()
+    if caller_links:
+        click.echo(f"  Your tracking links ({person.get('name', '')}):")
+        for link in caller_links:
+            label = link.get("label") or link.get("source", "")
+            click.echo(f"    {label:12s}  {link['short_url']}")
+    else:
+        click.echo("  No tracking links generated.")
+
+    click.echo()
+    click.echo(f"  {click.style('What happens next:', underline=True)}")
+    click.echo(
+        "    \u2022 These links work NOW \u2014 they'll redirect to the Substack URL"
+    )
+    click.echo(
+        "    \u2022 When you publish and `als sync-substack` runs, the title, author,"
+    )
+    click.echo("      and publish date will be filled in automatically")
+    click.echo("    \u2022 All team members already have their tracking links ready")
+    click.echo("    \u2022 No action needed from you after publish")
     click.echo()
 
 
