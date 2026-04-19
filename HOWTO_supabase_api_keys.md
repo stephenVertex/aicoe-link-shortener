@@ -347,14 +347,15 @@ Deno.serve(async (req) => {
 
 ### Deploy the Function
 
+Edge functions are **auto-deployed by CI** when changes land on `main`. See
+`.github/workflows/deploy-edge-functions.yml` for details. Do not deploy
+manually unless it is an emergency hotfix.
+
 ```bash
+# CI auto-deploys on push to main — no manual step needed
+# Emergency hotfix only:
 supabase functions deploy <name>
 ```
-
-Or use the Supabase MCP `deploy_edge_function` tool. No `--no-verify-jwt` is needed
-since authentication is handled inside the function via `x-api-key`, not by the
-Supabase gateway JWT check (though JWT verification can be left enabled as an
-additional layer — the `als` CLI does not send a JWT).
 
 ---
 

@@ -4,7 +4,6 @@
 links for articles on the AI Center of Excellence Substack
 ([trilogyai.substack.com](https://trilogyai.substack.com)).
 
-Version: 0.2.2  
 Credentials stored at: `~/.als.credentials`
 
 ---
@@ -170,8 +169,8 @@ Database statistics:
 
 ### `als upgrade`
 
-Upgrade `als` to the latest version. Fetches the pre-built wheel from S3
-and reinstalls via `uv`.
+Upgrade `als` to the latest version. Fetches the pre-built wheel from
+GitHub Releases and reinstalls via `uv`.
 
 ```bash
 als upgrade [--force]
@@ -195,7 +194,7 @@ Print the installed version of `als`.
 
 ```bash
 als --version
-# als, version 0.2.2
+# als, version X.Y.Z
 ```
 
 ---

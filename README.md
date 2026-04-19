@@ -45,9 +45,10 @@ Every link gets per-person tracking variants with UTM parameters so you can see 
 |-----------|------|---------|
 | **Redirect proxy** | Cloudflare Worker on `aicoe.fit` | Intercepts short link requests, proxies to Supabase edge function |
 | **Redirect logic** | Supabase Edge Function (`redirect`) | Resolves slug/suffix, appends UTM params, logs clicks, returns 302 |
-| **Substack sync** | Supabase Edge Function (`sync-substack`) | Crawls Substack sitemap for new articles, creates links + variants (runs every 6h via pg_cron) |
+| **Content sync** | Supabase Edge Function (`content-sync`) | Consolidated sync: Substack, YouTube, embeddings, chunking (runs every 6h via pg_cron with action parameter) |
 | **Admin dashboard** | Static HTML on AWS Amplify (`admin.aicoe.fit`) | Google sign-in, view links/clicks, copy tracking URLs |
-| **CLI** | Python (typer/click, uv) | Create links, manage people, import articles, view stats |
+| **User CLI** | Python (click, uv) — `user-cli/` | `als` commands: search, last, shorten, stats, authors, upgrade |
+| **Admin CLI** | Python (click, uv) — `cli/` | Internal tool: `links` commands for admin operations (requires Supabase credentials) |
 | **Database** | Supabase PostgreSQL | links, tracking_variants, click_log, people tables with RLS |
 | **Auth** | Supabase Auth + Google OAuth | Team members sign in with Google, auto-provisioned to people table |
 
@@ -113,8 +114,8 @@ All `aicoe.fit` links are clean — the URL you copy and share contains no track
 ### Suffix generation
 Deterministic 4-char hash of `utm_source|utm_medium|utm_campaign|utm_content|utm_term|ref` using SHA-256 -> first 8 hex chars -> base36 -> first 4 chars. Same inputs always produce the same suffix.
 
-### Substack sync
-A pg_cron job runs every 6 hours, calling the `sync-substack` edge function. It fetches the Substack sitemap, finds new articles, creates links with `published_at` dates, and generates tracking variants for all people.
+### Content sync
+A pg_cron job runs every 6 hours, calling the `content-sync` edge function with `action: substack`. It fetches the Substack sitemap, finds new articles, creates links with `published_at` dates, and generates tracking variants for all people. The same function also handles YouTube sync (`action: youtube`), article embedding (`action: embed`), and video chunking (`action: chunk`).
 
 ### Admin dashboard
 - Google sign-in via Supabase Auth
@@ -195,7 +196,7 @@ Tests 8 queries across topics like Cerebras inference, prompt injection, MCP ser
 ## Setup
 
 ### Prerequisites
-- Python 3.14+ with [uv](https://docs.astral.sh/uv/)
+- Python 3.12+ with [uv](https://docs.astral.sh/uv/)
 - Node.js (for Cloudflare Worker)
 - Cloudflare account with `aicoe.fit` domain
 - AWS account (for Amplify hosting)
@@ -220,15 +221,20 @@ als search <query>
 als last 5
 ```
 
-### Admin CLI
+### Admin CLI (internal)
+
+The admin CLI under `cli/` is an internal tool that requires direct Supabase credentials. For day-to-day use, prefer the `als` user CLI instead.
+
+> **Note:** Content sync (Substack, YouTube) runs automatically every 6 hours via pg_cron calling the `content-sync` edge function. The admin CLI's `sync-substack` and `import-substack` commands are for manual/one-off syncs only.
+
 ```bash
 cd cli
-cp .env.example .env  # fill in Supabase URL and keys
+cp .env.example .env  # fill in Supabase URL and service-role key
 uv sync
 uv run links --help
 ```
 
-### CLI Commands
+**Admin commands:**
 ```bash
 uv run links list-links          # List all short links
 uv run links list-people         # List team members
@@ -238,7 +244,7 @@ uv run links create-variant      # Create a tracking variant
 uv run links generate-all        # Generate variants for all people
 uv run links add-person          # Add a team member
 uv run links import-substack     # Import articles from Substack
-uv run links sync-substack       # Trigger Substack sync
+uv run links sync-substack       # Manual Substack sync (automated sync runs via content-sync + pg_cron)
 ```
 
 ### Cloudflare Worker
@@ -278,14 +284,43 @@ The previous manual deploy script is archived at `scripts/deploy-admin.sh.archiv
 | CNAME | `_e1d5...` | `_417c...acm-validations.aws.` | DNS only (grey) |
 
 ### Supabase Edge Functions
-| Function | Purpose | JWT |
-|----------|---------|-----|
+
+#### Consolidated Functions (action-based routing)
+
+| Function | Actions | Purpose | Auth |
+|----------|---------|---------|------|
+| `analytics` | article-stats, list-custom-links | Article statistics and custom link queries | Optional (API key for list-custom-links) |
+| `manage-content` | list-tags, create-tag, delete-tag, tag-article, untag-article, update-transcript, list-authors, stats | Content management and database queries | API key required for write operations |
+| `content-sync` | substack, youtube, embed, chunk | Content ingestion and processing | Optional (Bearer token) |
+
+#### Standalone Functions (performance-critical)
+
+| Function | Purpose | Auth |
+|----------|---------|------|
 | `redirect` | Slug lookup + click logging + 302 redirect | No |
-| `sync-substack` | Crawl sitemap, create links + variants | No |
-| `admin` | (Legacy, replaced by Amplify) | No |
+| `log-click` | Async click logging | No |
+| `get-link` | Single link lookup | No |
+| `batch-get-links` | Multiple link lookup | No |
+| `search-articles` | Semantic article search | No |
+
+#### Utility Functions
+
+| Function | Purpose | Auth |
+|----------|---------|------|
+| `aifs` | AI-First Show specific operations | Varies |
+| `shorten-url` | Create short links | API key |
+| `manage-links` | Link CRUD operations | API key |
+| `manage-contexts` | Context management | API key |
+| `manage-tracking-variants` | Tracking variant CRUD | API key |
+| `last-articles` | Get recent articles | No |
+| `validate-key` | API key validation | API key |
+| `pre-publish` | Pre-publish link preparation and social snippet generation | API key |
+| `sync-health-alert` | Monitor content sync freshness and send alerts | Bearer token |
+
+> **Note:** Legacy standalone functions (`sync-substack`, `sync-youtube`, `embed-articles`, `chunk-videos`, `article-stats`, `list-custom-links`, `manage-tags`, `update-transcript`, `list-authors`, `db-stats`) still exist in the codebase but have been consolidated into the action-routed functions above. pg_cron jobs now call `content-sync` with an action parameter.
 
 ## Stats
 - **124** articles imported from Substack
 - **744** tracking variants (6 people x 124 articles)
 - **6** team members with pre-configured emails
-- Substack sync runs every 6 hours via pg_cron
+- Content sync runs every 6 hours via pg_cron (calls `content-sync` with `action: substack`)
