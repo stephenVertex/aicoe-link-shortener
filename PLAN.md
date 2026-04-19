@@ -1,5 +1,7 @@
 # Link Shortener with UTM Campaign Attribution
 
+> **⚠️ Historical document.** This was the original planning document for the project. It is preserved for reference but is no longer authoritative — the current architecture is documented in `README.md` and `AGENTS.md`. Some items described here (CLI commands, function names, deployment steps) have been superseded.
+
 ## Architecture
 
 **Supabase project:** `dumhbtxskncofwwzrmfx`  

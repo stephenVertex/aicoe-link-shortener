@@ -2,7 +2,13 @@
 # Release script for als CLI
 # Usage: ./scripts/release.sh
 #
-# Steps:
+# ⚠️ NOTE: This is the legacy manual release script. The current release process
+# is automated via GitHub Actions (.github/workflows/release.yml), which builds
+# the wheel, creates a GitHub Release, and deploys the Cloudflare Worker on tag
+# push. This script is retained for reference but should not be needed for
+# routine releases.
+#
+# Legacy steps:
 #   1. Build the wheel in user-cli/
 #   2. Upload the wheel via shup (S3)
 #   3. Update WHEEL_URL in scripts/install.sh and worker/src/worker.js
