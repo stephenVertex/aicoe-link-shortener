@@ -309,6 +309,8 @@ The project uses Supabase Edge Functions for various operations. Functions are c
 | `manage-tracking-variants` | Tracking variant CRUD | API key |
 | `last-articles` | Get recent articles | No |
 | `validate-key` | API key validation | API key |
+| `pre-publish` | Pre-create Substack links with tracking variants | API key |
+| `sync-health-alert` | Monitor content sync freshness and send alerts | Internal (pg_cron) |
 
 ### Migration Notes
 

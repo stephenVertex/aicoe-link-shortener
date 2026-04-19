@@ -314,8 +314,8 @@ The previous manual deploy script is archived at `scripts/deploy-admin.sh.archiv
 | `manage-tracking-variants` | Tracking variant CRUD | API key |
 | `last-articles` | Get recent articles | No |
 | `validate-key` | API key validation | API key |
-| `pre-publish` | Pre-publish link preparation and social snippet generation | API key |
-| `sync-health-alert` | Monitor content sync freshness and send alerts | Bearer token |
+| `pre-publish` | Pre-create Substack links with tracking variants | API key |
+| `sync-health-alert` | Monitor content sync freshness and send alerts | Internal (pg_cron) |
 
 > **Note:** Legacy standalone functions (`sync-substack`, `sync-youtube`, `embed-articles`, `chunk-videos`, `article-stats`, `list-custom-links`, `manage-tags`, `update-transcript`, `list-authors`, `db-stats`) still exist in the codebase but have been consolidated into the action-routed functions above. pg_cron jobs now call `content-sync` with an action parameter.
 
