@@ -185,6 +185,54 @@ Deno.serve(async (req) => {
     return jsonResponse({ pinned: true, link });
   }
 
+  if (action === "unpin") {
+    const slugOrId = body.slug_or_id as string;
+    if (!slugOrId) {
+      return jsonResponse({ error: "slug_or_id is required" }, 400);
+    }
+
+    let query;
+    if (slugOrId.startsWith("lnk-")) {
+      query = supabase
+        .from("links")
+        .select("id, slug")
+        .like("id", `${slugOrId}%`);
+    } else {
+      query = supabase
+        .from("links")
+        .select("id, slug")
+        .eq("slug", slugOrId);
+    }
+
+    const { data: matches, error: findError } = await query;
+    if (findError) {
+      return jsonResponse({ error: findError.message }, 500);
+    }
+    if (!matches || matches.length === 0) {
+      return jsonResponse({ error: `Link not found: ${slugOrId}` }, 404);
+    }
+    if (matches.length > 1) {
+      return jsonResponse(
+        {
+          error: `Ambiguous match for '${slugOrId}'`,
+          matches: matches.slice(0, 5),
+        },
+        400,
+      );
+    }
+
+    const link = matches[0];
+    const { error: updateError } = await supabase
+      .from("links")
+      .update({ is_pinned: false })
+      .eq("id", link.id);
+    if (updateError) {
+      return jsonResponse({ error: updateError.message }, 500);
+    }
+
+    return jsonResponse({ unpinned: true, link });
+  }
+
   if (action === "shorten_with_note") {
     const linkIdOrUrl = body.link as string;
     const note = (body.note as string) || "";

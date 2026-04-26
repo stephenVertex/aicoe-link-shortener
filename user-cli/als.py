@@ -864,6 +864,39 @@ def links_pin(slug_or_id: str):
     click.echo()
 
 
+@links_group.command("unpin")
+@click.argument("slug_or_id")
+def links_unpin(slug_or_id: str):
+    """Unpin a link so it no longer participates in context generation.
+
+    Accepts a link slug or lnk-xxx ID.
+
+    \b
+    Examples:
+      als links unpin substack
+      als links unpin lnk-abc123
+    """
+    resp = _api_request(
+        "manage-links",
+        json_body={"action": "unpin", "slug_or_id": slug_or_id},
+    )
+    data = resp.json()
+    if resp.status_code != 200:
+        if "matches" in data:
+            click.echo(f"Ambiguous match for '{slug_or_id}':", err=True)
+            for r in data["matches"]:
+                click.echo(f"  {r['id']}  {r['slug']}", err=True)
+        else:
+            click.echo(f"{data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+
+    link = data.get("link", {})
+    click.echo(
+        f"\nUnpinned: {click.style(link.get('slug', slug_or_id), bold=True)} ({link.get('id', '')})"
+    )
+    click.echo()
+
+
 @cli.group("context")
 def context_group():
     """Manage link contexts for grouped tracking variants.
