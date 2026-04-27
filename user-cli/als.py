@@ -118,9 +118,11 @@ def _update_credentials(**fields: str) -> None:
 
 
 def _get_api_key() -> str:
-    """Get the API key from credentials file, or exit with an error."""
-    creds = _read_credentials()
-    api_key = creds.get("api_key", "")
+    """Get the API key from env var, credentials file, or exit with an error."""
+    api_key = os.environ.get("AICOE_API_KEY", "")
+    if not api_key:
+        creds = _read_credentials()
+        api_key = creds.get("api_key", "")
     if not api_key:
         click.echo("Not logged in. Run: als login --api-key <your-key>", err=True)
         sys.exit(1)

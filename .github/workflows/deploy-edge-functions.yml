@@ -127,4 +127,6 @@ jobs:
 
       - name: Run smoke tests
         working-directory: user-cli
+        env:
+          AICOE_API_KEY: ${{ secrets.AICOE_API_KEY }}
         run: uv run pytest tests/test_smoke.py -v
