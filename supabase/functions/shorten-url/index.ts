@@ -40,8 +40,8 @@ function randomSlug(length = 6): string {
 
 /**
  * Find or create a link record for the given URL.
- * If customSlug is provided, use it instead of generating a random one.
- * Returns the link record.
+ * If customSlug is provided, validate it and use it instead of generating a random one.
+ * Returns the link record with an `existed` flag.
  */
 async function findOrCreateLink(url: string, customSlug?: string): Promise<{
   id: string;
