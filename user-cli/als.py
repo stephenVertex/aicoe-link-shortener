@@ -2805,6 +2805,12 @@ def tracking_variants_delete(label: str, source: str):
     default=False,
     help="Archive all active submissions.",
 )
+@click.option(
+    "--as",
+    "discord_user",
+    default="",
+    help="Act as a Discord user (maps to a person via static config).",
+)
 def aifs(
     url_or_action: str | None,
     ids: tuple[str, ...],
@@ -2815,6 +2821,7 @@ def aifs(
     note: str,
     before_date: str,
     archive_all: bool,
+    discord_user: str,
 ):
     """AI First Show episode candidate submission and voting.
 
@@ -2835,7 +2842,7 @@ def aifs(
       als aifs unarchive aifs-c6u                     # unarchive
     """
     if item:
-        _aifs_submit(item, comment)
+        _aifs_submit(item, comment, discord_user)
         return
 
     if not url_or_action:
@@ -2844,27 +2851,29 @@ def aifs(
 
     if url_or_action == "list":
         filter_val = "all" if show_all else ("archived" if archived else "active")
-        _aifs_list(filter_val)
+        _aifs_list(filter_val, discord_user)
         return
 
     if url_or_action == "archive":
-        _aifs_archive(list(ids), note, before_date, archive_all)
+        _aifs_archive(list(ids), note, before_date, archive_all, discord_user)
         return
 
     if url_or_action == "unarchive":
-        _aifs_unarchive(list(ids))
+        _aifs_unarchive(list(ids), discord_user)
         return
 
     # Treat as a URL submission
-    _aifs_submit(url_or_action, comment)
+    _aifs_submit(url_or_action, comment, discord_user)
 
 
-def _aifs_submit(url: str, comment: str):
+def _aifs_submit(url: str, comment: str, discord_user: str = ""):
     """Submit a URL as a candidate for the next AI First Show episode."""
     body: dict = {"action": "submit", "url": url}
     if comment:
         comment = re.sub(r"\\([?=&#])", r"\1", comment)
         body["comment"] = comment
+    if discord_user:
+        body["discord_user"] = discord_user
 
     resp = _api_request("aifs", json_body=body)
 
@@ -2912,7 +2921,7 @@ def _aifs_submit(url: str, comment: str):
     click.echo()
 
 
-def _aifs_list(filter_val: str = "active"):
+def _aifs_list(filter_val: str = "active", discord_user: str = ""):
     """Show current AI First Show candidates sorted by vote count.
 
     Displays all submitted URLs with their vote counts, the submitter,
@@ -2924,7 +2933,10 @@ def _aifs_list(filter_val: str = "active"):
       als aifs list --archived   # archived only
       als aifs list --all        # everything
     """
-    resp = _api_request("aifs", json_body={"action": "list", "filter": filter_val})
+    body: dict = {"action": "list", "filter": filter_val}
+    if discord_user:
+        body["discord_user"] = discord_user
+    resp = _api_request("aifs", json_body=body)
 
     if resp.status_code == 401:
         click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
@@ -2998,7 +3010,7 @@ def _aifs_list(filter_val: str = "active"):
 
 
 def _aifs_archive(
-    ids: list[str], note: str, before_date: str, archive_all: bool
+    ids: list[str], note: str, before_date: str, archive_all: bool, discord_user: str = ""
 ) -> None:
     """Archive AI First Show submissions."""
     if not note:
@@ -3006,7 +3018,10 @@ def _aifs_archive(
         sys.exit(1)
 
     if archive_all:
-        resp = _api_request("aifs", json_body={"action": "list", "filter": "active"})
+        body: dict = {"action": "list", "filter": "active"}
+        if discord_user:
+            body["discord_user"] = discord_user
+        resp = _api_request("aifs", json_body=body)
         if resp.status_code != 200:
             click.echo(f"Error fetching submissions: {resp.text}", err=True)
             sys.exit(1)
@@ -3029,6 +3044,8 @@ def _aifs_archive(
         body["ids"] = ids
     if before_date:
         body["before_date"] = before_date
+    if discord_user:
+        body["discord_user"] = discord_user
 
     resp = _api_request("aifs", json_body=body)
 
@@ -3058,13 +3075,15 @@ def _aifs_archive(
     click.echo()
 
 
-def _aifs_unarchive(ids: list[str]) -> None:
+def _aifs_unarchive(ids: list[str], discord_user: str = "") -> None:
     """Unarchive AI First Show submissions."""
     if not ids:
         click.echo("Error: provide IDs for unarchive action.", err=True)
         sys.exit(1)
 
     body: dict = {"action": "unarchive", "ids": ids}
+    if discord_user:
+        body["discord_user"] = discord_user
 
     resp = _api_request("aifs", json_body=body)
 

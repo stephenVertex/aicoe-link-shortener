@@ -13,12 +13,26 @@ interface PersonInfo {
   email: string;
 }
 
+// Static mapping: Discord username → person slug.
+// Add entries here for Discord users who interact with the bot.
+// Example: "discorduser#1234": "stephen"
+const DISCORD_USER_MAP: Record<string, string> = {
+  // Fill in Discord usernames → person slugs here
+};
+
 async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
   const { data, error } = await supabase.rpc("validate_api_key", {
     p_api_key: apiKey,
   });
   if (error || !data) return null;
   return data as PersonInfo;
+}
+
+function resolvePersonSlug(person: PersonInfo, discordUser?: string): string {
+  if (discordUser && DISCORD_USER_MAP[discordUser]) {
+    return DISCORD_USER_MAP[discordUser];
+  }
+  return person.slug;
 }
 
 const corsHeaders = {
@@ -57,6 +71,7 @@ Deno.serve(async (req: Request) => {
   let note = "";
   let beforeDate = "";
   let filter = "active";
+  let discordUser = "";
 
   if (req.method === "POST") {
     try {
@@ -69,6 +84,7 @@ Deno.serve(async (req: Request) => {
       note = body.note || "";
       beforeDate = body.before_date || "";
       filter = body.filter || "active";
+      discordUser = body.discord_user || "";
     } catch {
       return jsonResponse({ error: "Invalid JSON body" }, 400);
     }
@@ -77,6 +93,7 @@ Deno.serve(async (req: Request) => {
     apiKey = apiKey || reqUrl.searchParams.get("api_key") || "";
     action = reqUrl.searchParams.get("action") || "list";
     filter = reqUrl.searchParams.get("filter") || "active";
+    discordUser = reqUrl.searchParams.get("discord_user") || "";
   }
 
   if (!apiKey) {
@@ -90,6 +107,8 @@ Deno.serve(async (req: Request) => {
   if (!person) {
     return jsonResponse({ error: "Invalid API key" }, 401);
   }
+
+  const personSlug = resolvePersonSlug(person, discordUser || undefined);
 
   if (action === "submit") {
     // Accept either a URL or a short_id (for voting on existing items)
@@ -128,7 +147,7 @@ Deno.serve(async (req: Request) => {
           .from("aifs_submissions")
           .insert({
             url: normUrl,
-            submitted_by: person.slug,
+            submitted_by: personSlug,
             short_id: shortId,
           })
           .select("id, url, short_id")
@@ -142,7 +161,7 @@ Deno.serve(async (req: Request) => {
         // Add the submitter's vote
         await supabase.from("aifs_votes").insert({
           submission_id: newSubmission.id,
-          person_ref: person.slug,
+          person_ref: personSlug,
           comment: comment || null,
         });
 
@@ -162,7 +181,7 @@ Deno.serve(async (req: Request) => {
       .from("aifs_votes")
       .select("id")
       .eq("submission_id", existingSubmission.id)
-      .eq("person_ref", person.slug)
+      .eq("person_ref", personSlug)
       .eq("type", "vote")
       .maybeSingle();
 
@@ -171,7 +190,7 @@ Deno.serve(async (req: Request) => {
       if (comment) {
         await supabase.from("aifs_votes").insert({
           submission_id: existingSubmission.id,
-          person_ref: person.slug,
+          person_ref: personSlug,
           comment,
           type: "comment",
         });
@@ -194,7 +213,7 @@ Deno.serve(async (req: Request) => {
 
     await supabase.from("aifs_votes").insert({
       submission_id: existingSubmission.id,
-      person_ref: person.slug,
+      person_ref: personSlug,
       comment: comment || null,
       type: "vote",
     });
