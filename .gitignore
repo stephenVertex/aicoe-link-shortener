@@ -25,12 +25,5 @@ scripts/demo-results.json
 .dolt/
 *.db
 
-# Gas Town (added by gt)
-.runtime/
-.claude/
-.logs/
-__pycache__/
-state.json
+# Beads
 .beads/
-.opencode/
-CLAUDE.md
