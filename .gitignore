@@ -27,3 +27,6 @@ scripts/demo-results.json
 
 # Beads
 .beads/
+
+# MCP config
+.mcp.json
