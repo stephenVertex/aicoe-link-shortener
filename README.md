@@ -45,7 +45,7 @@ Every link gets per-person tracking variants with UTM parameters so you can see 
 |-----------|------|---------|
 | **Redirect proxy** | Cloudflare Worker on `aicoe.fit` | Intercepts short link requests, proxies to Supabase edge function |
 | **Redirect logic** | Supabase Edge Function (`redirect`) | Resolves slug/suffix, appends UTM params, logs clicks, returns 302 |
-| **Substack sync** | Supabase Edge Function (`sync-substack`) | Crawls Substack sitemap for new articles, creates links + variants (runs every 6h via pg_cron) |
+| **Content sync** | Supabase Edge Function (`content-sync`) | Runs Substack/YouTube ingestion actions and scheduled content processing |
 | **Admin dashboard** | Static HTML on AWS Amplify (`admin.aicoe.fit`) | Google sign-in, view links/clicks, copy tracking URLs |
 | **CLI** | Python (typer/click, uv) | Create links, manage people, import articles, view stats |
 | **Database** | Supabase PostgreSQL | links, tracking_variants, click_log, people tables with RLS |
@@ -114,7 +114,7 @@ All `aicoe.fit` links are clean — the URL you copy and share contains no track
 Deterministic 4-char hash of `utm_source|utm_medium|utm_campaign|utm_content|utm_term|ref` using SHA-256 -> first 8 hex chars -> base36 -> first 4 chars. Same inputs always produce the same suffix.
 
 ### Substack sync
-A pg_cron job runs every 6 hours, calling the `sync-substack` edge function. It fetches the Substack sitemap, finds new articles, creates links with `published_at` dates, and generates tracking variants for all people.
+A pg_cron job runs every 6 hours, calling the `content-sync` edge function with the `substack` action. It fetches the Substack sitemap, finds new articles, creates links with `published_at` dates, and generates tracking variants for all people.
 
 ### Admin dashboard
 - Google sign-in via Supabase Auth
@@ -222,23 +222,21 @@ als last 5
 
 ### Admin CLI
 ```bash
-cd cli
+cd user-cli
 cp .env.example .env  # fill in Supabase URL and keys
 uv sync
-uv run links --help
+uv run python als.py --help
 ```
 
-### CLI Commands
+### Admin CLI Commands
 ```bash
-uv run links list-links          # List all short links
-uv run links list-people         # List team members
-uv run links click-stats         # View click statistics
-uv run links create-link         # Create a new short link
-uv run links create-variant      # Create a tracking variant
-uv run links generate-all        # Generate variants for all people
-uv run links add-person          # Add a team member
-uv run links import-substack     # Import articles from Substack
-uv run links sync-substack       # Trigger Substack sync
+cd user-cli
+uv run python als.py shorten <url>     # Create a new short link
+uv run python als.py whoami            # Show current API-key identity
+uv run python als.py analytics <stub>  # View per-link analytics
+uv run python als.py authors           # List authors
+uv run python als.py stats             # Show database statistics
+uv run python als.py sync-substack     # Trigger Substack sync
 ```
 
 ### Cloudflare Worker
@@ -281,8 +279,10 @@ The previous manual deploy script is archived at `scripts/deploy-admin.sh.archiv
 | Function | Purpose | JWT |
 |----------|---------|-----|
 | `redirect` | Slug lookup + click logging + 302 redirect | No |
-| `sync-substack` | Crawl sitemap, create links + variants | No |
-| `admin` | (Legacy, replaced by Amplify) | No |
+| `content-sync` | Substack/YouTube ingestion via action parameter | No |
+| `analytics` | Article stats, custom-link queries, per-link analytics | Mixed by action |
+| `manage-content` | Authors, stats, tags, transcript updates | Mixed by action |
+| `search-articles` | Semantic article/video search | No |
 
 ## Stats
 - **124** articles imported from Substack
