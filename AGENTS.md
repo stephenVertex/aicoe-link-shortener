@@ -2,138 +2,6 @@
 
 This file provides persistent context for AI agents working on this repository.
 
-## Project Overview
-
-<!-- Describe your project here. What does it do? What problem does it solve? -->
-
-## Technology Stack
-
-<!-- List your technologies: languages, frameworks, databases, etc. -->
-
-- Language: <!-- e.g., Python 3.11, TypeScript 5.0 -->
-- Framework: <!-- e.g., FastAPI, React, Next.js -->
-- Database: <!-- e.g., PostgreSQL, SQLite -->
-- Testing: <!-- e.g., pytest, vitest -->
-
-## Coding Standards
-
-### General
-
-- Keep functions small and focused
-- Write self-documenting code with clear names
-- Add comments only for "why", not "what"
-- Follow existing patterns in the codebase
-
-### Formatting
-
-<!-- Add your formatting commands -->
-
-- Format command: `<!-- e.g., make format, npm run format -->`
-- Lint command: `<!-- e.g., make lint, npm run lint -->`
-- Type check: `<!-- e.g., make typecheck, npm run typecheck -->`
-
-### Testing
-
-<!-- Add your testing requirements -->
-
-- Test command: `<!-- e.g., make test, npm test -->`
-- Coverage requirement: <!-- e.g., 80%, 100% for critical paths -->
-- Test location: `<!-- e.g., tests/, __tests__/ -->`
-
-## Project Structure
-
-```
-<!-- Customize this structure for your project -->
-.
-├── src/                    # Source code
-├── tests/                  # Test files
-├── docs/                   # Documentation
-├── configs/                # Configuration files
-├── scripts/                # Utility scripts
-├── AGENTS.md               # This file
-└── README.md               # Project readme
-```
-
-## Key Directories
-
-<!-- Document important directories -->
-
-- `src/` - <!-- Main source code -->
-- `tests/` - <!-- Test files -->
-- `docs/` - <!-- Documentation -->
-
-## Dependencies
-
-### Runtime
-
-<!-- List key runtime dependencies -->
-
-### Development
-
-<!-- List key dev dependencies -->
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `EXAMPLE_VAR` | <!-- Description --> | Yes/No |
-
-## Local Development Setup
-
-<!-- Steps to set up local development -->
-
-```bash
-# Example setup steps
-# 1. Install dependencies
-# 2. Configure environment
-# 3. Run tests
-```
-
-## PR Requirements
-
-Before submitting a PR:
-
-1. All tests pass
-2. Code is formatted
-3. Lint checks pass
-4. New code has tests
-5. Documentation updated if needed
-
-## Architecture Decisions
-
-<!-- Document key architecture decisions -->
-
-### Decision 1
-
-- **Context**: <!-- Why this decision was needed -->
-- **Decision**: <!-- What was decided -->
-- **Consequences**: <!-- Impact and trade-offs -->
-
-## Known Issues / Gotchas
-
-<!-- Document any quirks or known issues -->
-
-## References
-
-<!-- Links to relevant external documentation -->
-
-- [Framework Docs](https://example.com)
-- [API Reference](https://example.com/api)
-
-# Agent Instructions
-
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
-
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
@@ -158,44 +26,18 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
-<!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)
 
 **IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
 
-### Why bd?
-
-- Dependency-aware: Track blockers and relationships between issues
-- Version-controlled: Built on Dolt with cell-level merge
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
-
 ### Quick Start
 
-**Check for ready work:**
-
 ```bash
-bd ready --json
-```
-
-**Create new issues:**
-
-```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
-```
-
-**Claim and update:**
-
-```bash
-bd update <id> --claim --json
-bd update bd-42 --priority 1 --json
-```
-
-**Complete work:**
-
-```bash
-bd close bd-42 --reason "Completed" --json
+bd ready --json               # Find available work
+bd show <id> --json           # View issue details
+bd update <id> --claim --json # Claim work atomically
+bd close <id> --reason "..." --json  # Complete work
+bd dolt push                  # Push beads data to remote
 ```
 
 ### Issue Types
@@ -220,16 +62,8 @@ bd close bd-42 --reason "Completed" --json
 2. **Claim your task atomically**: `bd update <id> --claim`
 3. **Work on it**: Implement, test, document
 4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
+   - `bd create "Found bug" --description="Details" -p 1 --deps discovered-from:<parent-id>`
 5. **Complete**: `bd close <id> --reason "Done"`
-
-### Auto-Sync
-
-bd automatically syncs with git:
-
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
 
 ### Important Rules
 
@@ -246,8 +80,6 @@ For more details, see README.md and docs/QUICKSTART.md.
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
@@ -267,8 +99,6 @@ For more details, see README.md and docs/QUICKSTART.md.
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
-
-<!-- END BEADS INTEGRATION -->
 
 ## CLI Architecture — API Key Only
 
@@ -306,8 +136,6 @@ Deno.serve(async (req) => {
 
 Deploy: commit and push to main — CI auto-deploys via `.github/workflows/deploy-edge-functions.yml`.
 
----
-
 ## Supabase MCP Access
 
 This project uses the `supabase_aicoe` MCP server for direct database operations (queries, migrations, edge function deployment).
@@ -343,7 +171,7 @@ The install script and `als upgrade` always pull from `releases/latest/download/
 
 ### Edge Function Deployment Protocol
 
-Edge functions are **auto-deployed by CI** when changes land on `main`. Polecats do NOT deploy via MCP — they commit and push; CI handles the rest.
+Edge functions are **auto-deployed by CI** when changes land on `main`. Do NOT deploy via MCP for routine changes — CI handles the rest.
 
 **How it works:**
 - `.github/workflows/deploy-edge-functions.yml` triggers on push to `main` when `supabase/functions/**` changes
@@ -366,8 +194,6 @@ Edge functions are **auto-deployed by CI** when changes land on `main`. Polecats
 - `AICOE_API_KEY` — API key for post-deploy smoke tests
 
 **Do NOT use `supabase_aicoe` MCP `deploy_edge_function` for routine deploys.** MCP deploy is reserved for emergency hotfixes that can't wait for CI. If you must use it, document why in the bead notes.
-
-The project uses Supabase Edge Functions for various operations. Functions are consolidated to reduce cold-start surface.
 
 ### Consolidated Functions
 
