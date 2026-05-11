@@ -26,56 +26,12 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
-## Issue Tracking with bd (beads)
+## Issue Tracking
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+- **Internal**: `yesod` — personal local registry for tools, processes, and workflow knowledge
+- **External**: GitHub Issues — for bugs, features, and tasks visible to the public
 
-### Quick Start
-
-```bash
-bd ready --json               # Find available work
-bd show <id> --json           # View issue details
-bd update <id> --claim --json # Claim work atomically
-bd close <id> --reason "..." --json  # Complete work
-bd dolt push                  # Push beads data to remote
-```
-
-### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task atomically**: `bd update <id> --claim`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-
-### Important Rules
-
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
-
-For more details, see README.md and docs/QUICKSTART.md.
+Use the right tracker for the audience. Internal workflow tweaks go to yesod; user-facing bugs and feature requests go to GitHub Issues.
 
 ## Landing the Plane (Session Completion)
 
@@ -116,7 +72,7 @@ The `als` CLI is a multi-tenant user tool. Users have API keys, not service-role
 
 ### If you see `_get_supabase()` or `SUPABASE_SERVICE_ROLE_KEY` in CLI code
 
-That is a bug. File a bead (`bd create "fix: move <command> off service-role to API" -t bug -p 1`) and refactor it to use an edge function before shipping.
+That is a bug. Create a GitHub issue (`fix: move <command> off service-role to API`) and refactor it to use an edge function before shipping.
 
 ### Edge function pattern
 
@@ -179,7 +135,7 @@ Edge functions are **auto-deployed by CI** when changes land on `main`. Do NOT d
 - If `supabase/functions/_shared/` changes, ALL functions are redeployed
 - Smoke tests run automatically after deployment
 
-**When your bead involves edge function changes:**
+**When your issue involves edge function changes:**
 
 1. **Edit the edge function code** in `supabase/functions/<name>/index.ts`
 2. **Commit and push** — CI will auto-deploy when your branch merges to main
@@ -193,7 +149,7 @@ Edge functions are **auto-deployed by CI** when changes land on `main`. Do NOT d
 - `SUPABASE_ACCESS_TOKEN` — Supabase Management API access token
 - `AICOE_API_KEY` — API key for post-deploy smoke tests
 
-**Do NOT use `supabase_aicoe` MCP `deploy_edge_function` for routine deploys.** MCP deploy is reserved for emergency hotfixes that can't wait for CI. If you must use it, document why in the bead notes.
+**Do NOT use `supabase_aicoe` MCP `deploy_edge_function` for routine deploys.** MCP deploy is reserved for emergency hotfixes that can't wait for CI. If you must use it, document why in the issue notes.
 
 ### Consolidated Functions
 
