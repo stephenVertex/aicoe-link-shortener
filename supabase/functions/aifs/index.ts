@@ -13,11 +13,11 @@ interface PersonInfo {
   email: string;
 }
 
-// Static mapping: Discord username → person slug.
+// Static mapping: Discord user ID → person slug.
 // Add entries here for Discord users who interact with the bot.
-// Example: "discorduser#1234": "stephen"
 const DISCORD_USER_MAP: Record<string, string> = {
-  // Fill in Discord usernames → person slugs here
+  "442587729172234252": "stephen",
+  "1408298636517048456": "leo",
 };
 
 async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
