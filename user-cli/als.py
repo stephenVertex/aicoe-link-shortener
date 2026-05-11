@@ -239,32 +239,47 @@ def help_cmd():
             ],
         ),
         (
-            "3. Pin your permanent destinations (LinkedIn, Substack, Discord, etc.)",
-            "Pinned links are permanent destinations you want to track everywhere — "
-            "your LinkedIn profile, your Substack, Discord invite, etc. Pin them "
-            "once, then they appear in every context you generate.\n\n  "
-            "Also useful when you have a recent article or AIFS episode and are "
-            "generating many social media posts sharing links to it. Pin the "
-            "article, then each context generate --pinned automatically includes it "
-            "alongside your other pinned destinations.",
+            "3. Pin your permanent destinations (your 'business card')",
+            "Permanent destinations you want in every context: your LinkedIn profile, "
+            "Twitter/X, Substack, Discord invite, etc. Think of these as your business card. "
+            "Pin them once — they stay in every context generate until you remove them.",
             [
                 "# Pin a permanent destination (one-time setup)",
                 "als shorten https://linkedin.com/in/yourname --slug linkedinSJB  # creates slug linkedinSJB",
                 "als links pin linkedinSJB                                        # use the slug from above",
                 "",
-                "# Pin a recent article for a social media campaign:",
-                "als last 3 --summary                # → article slug (e.g. my-new-article)",
-                "als links pin my-new-article        # pin the existing article by its ingest slug",
-                "",
                 "# List your pinned links",
                 "als links list --pinned",
                 "",
-                "# Generate a batch of social links (includes all pinned destinations + the article):",
-                'als context generate ctx-xxx --pinned --note "twitter thread about my new article"',
+                "# Generate a context with all your pinned destinations:",
+                'als context generate ctx-xxx --pinned --note "conference bio page"',
             ],
         ),
         (
-            "4. Check how an article is performing",
+            "4. Run a social media campaign for a new article",
+            "You published a new article and want to create a bunch of social posts "
+            "(YouTube Shorts, tweets, LinkedIn posts) that all link to it. Pin the "
+            "article, generate tracking links for each post, then unpin it when done.",
+            [
+                "# Find the article slug (already created by sync-substack ingest)",
+                "als last 3 --summary                # → article slug (e.g. my-new-article)",
+                "",
+                "# Pin it for the campaign",
+                "als links pin my-new-article        # now included in every context generate",
+                "",
+                "# Create a context per post (each gets the article + your business-card links)",
+                'als context create "YouTube Short about agents" --expires 30d  # → ctx-1',
+                'als context generate ctx-1 --pinned --note "YouTube Short linking to my article"',
+                "",
+                'als context create "Twitter thread" --expires 14d  # → ctx-2',
+                'als context generate ctx-2 --pinned --note "Twitter thread about my article"',
+                "",
+                "# Campaign over — unpin the article (your business-card links stay pinned)",
+                "als links unpin my-new-article",
+            ],
+        ),
+        (
+            "5. Check how an article is performing",
             "See total clicks, per-channel breakdown, or per-person breakdown. "
             "Get the article slug from als last or als search.",
             [
@@ -275,7 +290,7 @@ def help_cmd():
             ],
         ),
         (
-            "5. See the latest articles",
+            "6. See the latest articles",
             "Quick scan of what has been published recently and get your tracking links.",
             [
                 "als last 5                            # last 5 articles (fast)",
@@ -286,7 +301,7 @@ def help_cmd():
             ],
         ),
         (
-            "6. Submit a link for the AI First Show",
+            "7. Submit a link for the AI First Show",
             "You found something interesting and want to nominate it for the next episode.",
             [
                 'als aifs "https://arxiv.org/abs/..." --comment "Strong reasoning paper"  # → aifs-xxx (submission ID)',
@@ -295,7 +310,7 @@ def help_cmd():
             ],
         ),
         (
-            "7. Create a permanent personal short link",
+            "8. Create a permanent personal short link",
             "You want a clean short URL for your LinkedIn profile, GitHub, etc.",
             [
                 'als shorten "https://linkedin.com/in/yourname" --slug linkedinSJB',
@@ -303,7 +318,7 @@ def help_cmd():
             ],
         ),
         (
-            "8. Find content by topic (semantic search)",
+            "9. Find content by topic (semantic search)",
             "You remember a video or article covered a topic but can't recall the title.",
             [
                 'als search "late interaction retrieval"     # → lnk-xxx (short ID)',
@@ -312,7 +327,7 @@ def help_cmd():
             ],
         ),
         (
-            "9. Manage your tracking channels",
+            "10. Manage your tracking channels",
             "See or customise what channels (Discord, LinkedIn, X, etc.) get variants "
             "when you run als get.",
             [
