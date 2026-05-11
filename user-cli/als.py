@@ -307,6 +307,8 @@ def help_cmd():
                 'als aifs "https://arxiv.org/abs/..." --comment "Strong reasoning paper"  # → aifs-xxx (submission ID)',
                 "als aifs list                          # → aifs-xxx IDs; see all nominations",
                 'als aifs --item aifs-xxx --comment "Great follow-up"  # vote by ID from the list',
+                "als aifs archive aifs-xxx --note 'Covered in episode 42'  # archive after coverage",
+                "als aifs https://... --as 442587729172234252  # submit on behalf of a Discord user",
             ],
         ),
         (
@@ -2829,17 +2831,50 @@ def aifs(
     vote on existing submissions, and view current rankings.
 
     \b
-    Examples:
-      als aifs https://example.com/article            # submit/vote
-      als aifs https://example.com --comment '...'    # with comment
-      als aifs --item aifs-c6u --comment '...'        # vote by short ID
-      als aifs list                                   # show active candidates
-      als aifs list --archived                        # show archived only
-      als aifs list --all                             # show all
-      als aifs archive aifs-c6u aifs-j0p --note '...' # archive specific
-      als aifs archive --before 2026-03-31 --note '...' # archive by date
-      als aifs archive --archive-all --note '...'     # archive all active
-      als aifs unarchive aifs-c6u                     # unarchive
+    Use Cases:
+
+      1. Submit a new article for consideration
+         Submit a URL you found interesting. It gets a short ID (aifs-xxx)
+         and your vote is automatically counted.
+
+         als aifs https://arxiv.org/abs/2501.12345
+         als aifs https://example.com --comment "Great overview of RAG"
+
+      2. Vote on an existing submission
+         Add your vote (and optionally a comment) to something already
+         submitted. Use the short ID from als aifs list.
+
+         als aifs --item aifs-c6u --comment "Strong reasoning results"
+
+      3. See all nominations and rankings
+         View submissions sorted by vote count. See who submitted and
+         voted for each, plus any comments.
+
+         als aifs list              # active submissions (default)
+         als aifs list --archived   # archived only
+         als aifs list --all        # everything
+
+      4. Archive old or covered submissions
+         Move submissions to archived status when they've been covered
+         in an episode or are no longer relevant.
+
+         als aifs archive aifs-c6u --note "Covered in episode 42"
+         als aifs archive aifs-c6u aifs-j0p --note "Batch archive"
+         als aifs archive --before 2026-03-31 --note "Stale nominations"
+         als aifs archive --archive-all --note "Starting fresh"
+
+      5. Unarchive a submission
+         Bring a previously archived submission back into active status.
+
+         als aifs unarchive aifs-c6u
+
+      6. Submit or vote on behalf of a Discord user
+         When an agent or bot is acting for someone else, use --as with
+         their Discord user ID. The action is attributed to the mapped
+         person (configured server-side).
+
+         als aifs https://example.com --as 442587729172234252
+         als aifs list --as 442587729172234252
     """
     if item:
         _aifs_submit(item, comment, discord_user)
