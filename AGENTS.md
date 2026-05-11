@@ -33,6 +33,46 @@ cp -rf source dest          # NOT: cp -r source dest
 
 Use the right tracker for the audience. Internal workflow tweaks go to yesod; user-facing bugs and feature requests go to GitHub Issues.
 
+### yesod
+
+yesod is a local knowledge registry. Use it to capture tool preferences, workflow tips, and process knowledge that agents should reuse across sessions.
+
+**Example — the `als` CLI tool:**
+
+```bash
+# Record a workflow tip
+yesod tool als usage-note "Use --dry-run to preview changes before running"
+
+# Log a bug you hit
+yesod tool als bug-report "als analytics fails when stub has no clicks"
+
+# Request a feature
+yesod tool als feature-request "Add --output json flag to all commands"
+
+# See all notes for this tool
+yesod tool als notes
+
+# Edit an existing note
+yesod tool als note-edit <note-id>
+
+# Replace an outdated note with a newer one (preserves history)
+yesod tool als supersede <old-note-id> "Updated workflow: ..."
+
+# Get an LLM-distilled summary of current tool state
+yesod tool als distill
+```
+
+**Key yesod commands:**
+- `feature-request` — Record a feature request
+- `usage-note` — Record tips, gotchas, how you use it
+- `bug-report` — Record a bug
+- `notes` — List all notes for the tool
+- `note-edit` — Edit an existing note
+- `supersede` — Create a new note that replaces an old one (history preserved)
+- `distill` — LLM-distilled summary of the tool's current notes
+
+Query your catalog anytime: `yesod search <query>` or `yesod what <question>`.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
