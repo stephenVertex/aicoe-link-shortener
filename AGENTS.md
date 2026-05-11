@@ -144,6 +144,23 @@ This project uses the `supabase_aicoe` MCP server for direct database operations
 
 The human can fix this in seconds. Chasing it yourself wastes time and context.
 
+## Upgrading als
+
+The `als` CLI has a built-in self-upgrade command that pulls the latest release wheel from GitHub:
+
+```bash
+als upgrade
+```
+
+This downloads and installs the latest `als-py3-none-any.whl` from `releases/latest/download/`.
+
+For developers working on the CLI locally, reinstall from the repo instead:
+
+```bash
+cd user-cli
+uv tool install --reinstall .
+```
+
 ## Releasing a New Version
 
 To release a new version of the `als` CLI:
