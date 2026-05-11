@@ -212,15 +212,18 @@ def help_cmd():
 
     sections = [
         (
-            "1. Share a specific article on social media",
-            "You wrote or found an article and want to share it on Twitter/LinkedIn "
-            "with a link that tracks this specific share.",
+            "1. Share an article in an online discussion (with tracking)",
+            "You are in a Twitter thread, LinkedIn comment, or forum discussion "
+            "and want to drop a link to an article. You want that specific share "
+            "to be tracked separately, so you create a one-off variant with a --note "
+            "describing the context. AI infers UTM source/medium from your note.",
             [
-                'als search "your article topic"       # find it by topic',
-                "als get lnk-xxx                       # see full details + all your tracking links",
-                "# or, create a one-off variant with AI-inferred UTM:",
-                'als shorten lnk-xxx --note "replying to @mike on twitter"',
-                "# → aicoe.fit/article-slug-a1b2c3   (auto-expires 60d)",
+                'als search "your article topic"       # → lnk-xxx (short ID)',
+                "als get lnk-xxx                       # confirm the article; shows your existing tracking links",
+                "# Create a one-off variant for this specific conversation:",
+                'als shorten lnk-xxx --note "replying to @mike on twitter about agents"',
+                "# → aicoe.fit/article-slug-a1b2c3   (auto-expires 60d, separate from your default links)",
+                "# Later: als stats article-slug --days 7  to see how that specific share performed",
             ],
         ),
         (
@@ -228,8 +231,8 @@ def help_cmd():
             "You posted a video and want tracked links to your Substack, Discord, "
             "etc. in the description. All links are clean (no visible UTM params).",
             [
-                'als context create "My Video Title (1 Apr 2026)" --expires 90d',
-                'als context generate ctx-xxx --pinned --note "youtube video description"',
+                'als context create "My Video Title (1 Apr 2026)" --expires 90d  # → ctx-xxx (context ID)',
+                'als context generate ctx-xxx --pinned --note "youtube video description"  # use the context ID from above',
                 "# → aicoe.fit/substack-e7f8a1",
                 "# → aicoe.fit/discord-b2c3d4",
                 "# Paste these into your YouTube description.",
@@ -239,28 +242,36 @@ def help_cmd():
             "3. Pin your permanent destinations (LinkedIn, Substack, Discord, etc.)",
             "Pinned links are permanent destinations you want to track everywhere — "
             "your LinkedIn profile, your Substack, Discord invite, etc. Pin them "
-            "once, then they appear in every context you generate.",
+            "once, then they appear in every context you generate.\n\n  "
+            "Also useful when you have a recent article or AIFS episode and are "
+            "generating many social media posts sharing links to it. Pin the "
+            "article, then each context generate --pinned automatically includes it "
+            "alongside your other pinned destinations.",
             [
-                "# Pin a link (one-time setup per destination)",
-                "als shorten https://linkedin.com/in/yourname --slug linkedinSJB",
-                "als shorten https://trilogyai.substack.com --slug substack",
-                "als links pin linkedinSJB",
-                "als links pin substack",
+                "# Pin a permanent destination (one-time setup)",
+                "als shorten https://linkedin.com/in/yourname --slug linkedinSJB  # creates slug linkedinSJB",
+                "als links pin linkedinSJB                                        # use the slug from above",
+                "",
+                "# Pin a recent article for a social media campaign:",
+                "als last 3 --summary                # → article slug (e.g. my-new-article)",
+                "als links pin my-new-article        # pin the existing article by its ingest slug",
                 "",
                 "# List your pinned links",
                 "als links list --pinned",
                 "",
-                "# Once pinned, any context generate --pinned will include them:",
-                'als context generate ctx-xxx --pinned --note "youtube description"',
+                "# Generate a batch of social links (includes all pinned destinations + the article):",
+                'als context generate ctx-xxx --pinned --note "twitter thread about my new article"',
             ],
         ),
         (
             "4. Check how an article is performing",
-            "See total clicks, per-channel breakdown, or per-person breakdown.",
+            "See total clicks, per-channel breakdown, or per-person breakdown. "
+            "Get the article slug from als last or als search.",
             [
-                'als stats "article-slug"              # your clicks',
-                'als stats "article-slug" --everybody  # whole team breakdown',
-                'als stats "article-slug" --days 7     # last 7 days only',
+                'als last 5                # → article slug (e.g. my-article-slug)',
+                'als stats "my-article-slug"              # use the slug from above; your clicks',
+                'als stats "my-article-slug" --everybody  # whole team breakdown',
+                'als stats "my-article-slug" --days 7     # last 7 days only',
             ],
         ),
         (
@@ -268,17 +279,19 @@ def help_cmd():
             "Quick scan of what has been published recently and get your tracking links.",
             [
                 "als last 5                            # last 5 articles (fast)",
-                "als last 10 --tracking                # with tracking links",
+                "als last 10 --summary                 # → lnk-xxx IDs; compact table view",
+                "als get lnk-xxx                       # use the ID from above; full details + tracking links",
+                "als last 10 --tracking                # with tracking links (no need to als get each one)",
                 "als last 10 --me                      # filter to articles you authored",
-                "als last 10 --summary                 # compact table view",
             ],
         ),
         (
             "6. Submit a link for the AI First Show",
             "You found something interesting and want to nominate it for the next episode.",
             [
-                'als aifs "https://arxiv.org/abs/..." --comment "Strong reasoning paper"',
-                "als aifs list                         # see all current nominations",
+                'als aifs "https://arxiv.org/abs/..." --comment "Strong reasoning paper"  # → aifs-xxx (submission ID)',
+                "als aifs list                          # → aifs-xxx IDs; see all nominations",
+                'als aifs --item aifs-xxx --comment "Great follow-up"  # vote by ID from the list',
             ],
         ),
         (
@@ -293,8 +306,9 @@ def help_cmd():
             "8. Find content by topic (semantic search)",
             "You remember a video or article covered a topic but can't recall the title.",
             [
-                'als search "late interaction retrieval"',
-                'als search "multi-agent deep research"',
+                'als search "late interaction retrieval"     # → lnk-xxx (short ID)',
+                'als get lnk-xxx                             # use the ID from above; full details + tracking links',
+                'als search "multi-agent deep research"      # → lnk-xxx (short ID)',
             ],
         ),
         (
