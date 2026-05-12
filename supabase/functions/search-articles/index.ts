@@ -14,7 +14,65 @@ interface EmbeddingResponse {
   usage: { prompt_tokens: number; total_tokens: number };
 }
 
+// ---------------------------------------------------------------------------
+// In-memory LRU cache for query embeddings
+// ---------------------------------------------------------------------------
+
+const EMBEDDING_CACHE_MAX = 500;
+const EMBEDDING_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+interface CacheEntry {
+  embedding: number[];
+  insertedAt: number;
+}
+
+class LRUCache {
+  private cache = new Map<string, CacheEntry>();
+  private maxSize: number;
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: string): number[] | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+
+    const now = Date.now();
+    if (now - entry.insertedAt > EMBEDDING_CACHE_TTL_MS) {
+      this.cache.delete(key);
+      return undefined;
+    }
+
+    // Move to end (most recently used)
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry.embedding;
+  }
+
+  set(key: string, embedding: number[]): void {
+    if (this.cache.size >= this.maxSize) {
+      // Evict least recently used (first item)
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, { embedding, insertedAt: Date.now() });
+  }
+}
+
+const embeddingCache = new LRUCache(EMBEDDING_CACHE_MAX);
+
 async function generateQueryEmbedding(query: string): Promise<number[]> {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const cached = embeddingCache.get(normalizedQuery);
+  if (cached) {
+    console.log("Embedding cache hit for query:", normalizedQuery);
+    return cached;
+  }
+
   const response = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
     headers: {
@@ -33,7 +91,9 @@ async function generateQueryEmbedding(query: string): Promise<number[]> {
   }
 
   const result: EmbeddingResponse = await response.json();
-  return result.data[0].embedding;
+  const embedding = result.data[0].embedding;
+  embeddingCache.set(normalizedQuery, embedding);
+  return embedding;
 }
 
 function dedupeChunksByText(
