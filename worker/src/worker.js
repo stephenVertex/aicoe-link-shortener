@@ -372,6 +372,10 @@ export default {
     if (env.SLUG_CACHE) {
       const cached = await env.SLUG_CACHE.get(cacheKey, { type: "json" });
       if (cached) {
+        if (cached.not_found) {
+          return new Response("Not found", { status: 404 });
+        }
+
         if (cached.expires_at && new Date(cached.expires_at) < new Date()) {
           return new Response("This link has expired", { status: 410 });
         }
@@ -399,22 +403,31 @@ export default {
       redirect: "manual",
     });
 
-    if ((response.status === 302 || response.status === 410) && env.SLUG_CACHE) {
-      const location = response.headers.get("Location");
-      const linkId = response.headers.get("X-Link-Id");
-      const variantId = response.headers.get("X-Variant-Id");
-      const expiresAt = response.headers.get("X-Expires-At");
-
-      if (location || expiresAt) {
-        const cacheData = {
-          destination: location || "",
-          link_id: linkId || null,
-          variant_id: variantId || null,
-          expires_at: expiresAt || null,
-        };
-        await env.SLUG_CACHE.put(cacheKey, JSON.stringify(cacheData), {
-          expirationTtl: 300,
+    if (
+      (response.status === 302 || response.status === 410 || response.status === 404) &&
+      env.SLUG_CACHE
+    ) {
+      if (response.status === 404) {
+        await env.SLUG_CACHE.put(cacheKey, JSON.stringify({ not_found: true }), {
+          expirationTtl: 60,
         });
+      } else {
+        const location = response.headers.get("Location");
+        const linkId = response.headers.get("X-Link-Id");
+        const variantId = response.headers.get("X-Variant-Id");
+        const expiresAt = response.headers.get("X-Expires-At");
+
+        if (location || expiresAt) {
+          const cacheData = {
+            destination: location || "",
+            link_id: linkId || null,
+            variant_id: variantId || null,
+            expires_at: expiresAt || null,
+          };
+          await env.SLUG_CACHE.put(cacheKey, JSON.stringify(cacheData), {
+            expirationTtl: 300,
+          });
+        }
       }
     }
 
