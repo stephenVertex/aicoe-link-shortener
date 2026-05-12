@@ -186,12 +186,13 @@ def cli():
       First time:  als login --api-key <key>
                     als authors              # find your name
                     als set-author-name "Your Name"
-         Search:      als search "GLM-5"
-         Get article: als get <slug>
-         My articles: als last --me 5
-         Shorten URL: als shorten <url>
-      Pre-publish: als pre-publish <slug-or-url>
-         Upgrade:     als upgrade
+       Search:      als search "GLM-5"
+       Get article: als get <slug>
+       My articles: als last --me 5
+       Shorten URL: als shorten <url>
+       AIFS:        als aifs <url>          # submit for AI First Show
+    Pre-publish: als pre-publish <slug-or-url>
+       Upgrade:     als upgrade
 
     \b
     Workflow:
