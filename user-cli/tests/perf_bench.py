@@ -21,7 +21,7 @@ THRESHOLDS = {
     "whoami": 2000,
     "search": 3000,
     "search --me": 3000,
-    "last": 3000,
+    "last": 1000,
     "get": 2000,
     "custom-links": 2000,
     "stats": 3000,
