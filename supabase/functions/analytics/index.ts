@@ -108,34 +108,46 @@ async function handleArticleStats(params: {
     return jsonResponse({ error: `No article found for: ${slug}` }, 404);
   }
 
-  const { count: totalClicks, error: clickCountError } = await supabase
-    .from("click_log")
-    .select("id", { count: "exact", head: true })
-    .eq("link_id", link.id);
-
-  if (clickCountError) throw clickCountError;
-
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  const { data: dailyClicks, error: dailyError } = await supabase.rpc(
-    "get_click_analytics",
-    {
+  // Parallelize all independent queries to minimize round-trips
+  const [
+    { count: totalClicks, error: clickCountError },
+    { data: dailyClicks, error: dailyError },
+    { data: variantClicks, error: variantClicksError },
+    { count: variantCount, error: variantCountError },
+    { data: allPeople, error: peopleError },
+  ] = await Promise.all([
+    supabase
+      .from("click_log")
+      .select("id", { count: "exact", head: true })
+      .eq("link_id", link.id),
+    supabase.rpc("get_click_analytics", {
       p_interval: "day",
       p_link_id: link.id,
       p_start_date: startDate.toISOString(),
-    },
-  );
+    }),
+    supabase
+      .from("click_log")
+      .select("variant_id")
+      .eq("link_id", link.id),
+    supabase
+      .from("tracking_variants")
+      .select("id", { count: "exact", head: true })
+      .eq("link_id", link.id),
+    everybody
+      ? supabase.from("people").select("slug, name")
+      : Promise.resolve({ data: null, error: null }),
+  ]);
 
+  if (clickCountError) throw clickCountError;
   if (dailyError) throw dailyError;
-
-  const { data: variantClicks, error: variantClicksError } = await supabase
-    .from("click_log")
-    .select("variant_id")
-    .eq("link_id", link.id);
-
   if (variantClicksError) throw variantClicksError;
+  if (variantCountError) throw variantCountError;
+  if (everybody && peopleError) throw peopleError;
 
+  // Count variants in JS (same logic as before, but now the rows were fetched in parallel)
   const variantCounts: Record<string, number> = {};
   for (const row of variantClicks || []) {
     const vid = row.variant_id || "__direct__";
@@ -185,20 +197,13 @@ async function handleArticleStats(params: {
     })
     .sort((a, b) => b.clicks - a.clicks);
 
-  const { count: variantCount, error: variantCountError } = await supabase
-    .from("tracking_variants")
-    .select("id", { count: "exact", head: true })
-    .eq("link_id", link.id);
-
-  if (variantCountError) throw variantCountError;
-
   const sourceCounts: Record<string, number> = {};
-  for (const row of variantClicks || []) {
+  for (const [vid, count] of Object.entries(variantCounts)) {
     let source = "direct";
-    if (row.variant_id && variantDetails[row.variant_id]?.utm_source) {
-      source = variantDetails[row.variant_id].utm_source;
+    if (vid !== "__direct__" && variantDetails[vid]?.utm_source) {
+      source = variantDetails[vid].utm_source;
     }
-    sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+    sourceCounts[source] = (sourceCounts[source] || 0) + count;
   }
 
   const bySource = Object.entries(sourceCounts)
@@ -206,18 +211,12 @@ async function handleArticleStats(params: {
     .sort((a, b) => b.clicks - a.clicks);
 
   let byPerson: { ref: string; name: string; clicks: number }[] = [];
-  if (everybody) {
-    const { data: allPeople, error: peopleError } = await supabase
-      .from("people")
-      .select("slug, name");
-
-    if (peopleError) throw peopleError;
-
+  if (everybody && allPeople) {
     const refClicks: Record<string, number> = {};
-    for (const row of variantClicks || []) {
-      if (row.variant_id && variantDetails[row.variant_id]?.ref) {
-        const ref = variantDetails[row.variant_id].ref;
-        refClicks[ref] = (refClicks[ref] || 0) + 1;
+    for (const [vid, count] of Object.entries(variantCounts)) {
+      if (vid !== "__direct__" && variantDetails[vid]?.ref) {
+        const ref = variantDetails[vid].ref;
+        refClicks[ref] = (refClicks[ref] || 0) + count;
       }
     }
 

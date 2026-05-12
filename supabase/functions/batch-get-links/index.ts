@@ -109,35 +109,102 @@ async function buildTrackingLinksForBatch(
     });
   }
 
+  // Build a list of all missing variants we need to create, then batch-create
+  // them in parallel instead of one sequential RPC per missing variant.
+  interface MissingVariant {
+    link: LinkInfo;
+    src: {
+      utm_source: string;
+      utm_medium: string | null;
+      utm_content: string | null;
+      utm_term: string | null;
+      label: string;
+    } | null; // null = default source (no person_sources configured)
+    existingForLink: Array<{ suffix: string; utm_source: string; utm_medium: string | null; utm_content: string | null; utm_term: string | null }>;
+  }
+
+  const missingVariants: MissingVariant[] = [];
+
+  for (const link of links) {
+    const existingForLink = variantsByLink.get(link.id) || [];
+
+    if (filteredSources.length === 0) {
+      const defaultSource = source || "linkedin";
+      const variant = existingForLink.find(
+        (v) => v.utm_source === defaultSource && v.utm_medium === "social" && !v.utm_content && !v.utm_term
+      );
+      if (!variant) {
+        missingVariants.push({ link, src: null, existingForLink });
+      }
+    } else {
+      for (const src of filteredSources) {
+        const variant = existingForLink.find(
+          (v) =>
+            v.utm_source === src.utm_source &&
+            (v.utm_medium || "social") === (src.utm_medium || "social") &&
+            (v.utm_content || "") === (src.utm_content || "") &&
+            (v.utm_term || "") === (src.utm_term || "")
+        );
+        if (!variant) {
+          missingVariants.push({ link, src, existingForLink });
+        }
+      }
+    }
+  }
+
+  // Fire all ensure_tracking_variant RPCs in parallel
+  const variantPromises = missingVariants.map(async (mv) => {
+    const { link, src } = mv;
+    if (!src) {
+      const defaultSource = source || "linkedin";
+      const { data: newVariant, error: variantError } = await supabase.rpc("ensure_tracking_variant", {
+        p_link_id: link.id,
+        p_ref: person.slug,
+        p_source: defaultSource,
+        p_medium: "social",
+      });
+      if (!variantError && newVariant) {
+        mv.existingForLink.push({
+          suffix: newVariant.suffix,
+          utm_source: defaultSource,
+          utm_medium: "social",
+          utm_content: null,
+          utm_term: null,
+        });
+      }
+    } else {
+      const { data: newVariant, error: variantError } = await supabase.rpc("ensure_tracking_variant", {
+        p_link_id: link.id,
+        p_ref: person.slug,
+        p_source: src.utm_source,
+        p_medium: src.utm_medium || "social",
+        p_content: src.utm_content || null,
+        p_term: src.utm_term || null,
+      });
+      if (!variantError && newVariant) {
+        mv.existingForLink.push({
+          suffix: newVariant.suffix,
+          utm_source: src.utm_source,
+          utm_medium: src.utm_medium || "social",
+          utm_content: src.utm_content || null,
+          utm_term: src.utm_term || null,
+        });
+      }
+    }
+  });
+
+  await Promise.all(variantPromises);
+
+  // Now build results using the (now-populated) existingForLink arrays
   for (const link of links) {
     const existingForLink = variantsByLink.get(link.id) || [];
     const trackingLinks: Array<Record<string, unknown>> = [];
 
     if (filteredSources.length === 0) {
       const defaultSource = source || "linkedin";
-      let variant = existingForLink.find(
+      const variant = existingForLink.find(
         (v) => v.utm_source === defaultSource && v.utm_medium === "social" && !v.utm_content && !v.utm_term
       );
-
-      if (!variant) {
-        const { data: newVariant, error: variantError } = await supabase.rpc("ensure_tracking_variant", {
-          p_link_id: link.id,
-          p_ref: person.slug,
-          p_source: defaultSource,
-          p_medium: "social",
-        });
-
-        if (!variantError && newVariant) {
-          variant = {
-            suffix: newVariant.suffix,
-            utm_source: defaultSource,
-            utm_medium: "social",
-            utm_content: null,
-            utm_term: null,
-          };
-        }
-      }
-
       if (variant) {
         trackingLinks.push({
           source: defaultSource,
@@ -147,35 +214,13 @@ async function buildTrackingLinksForBatch(
       }
     } else {
       for (const src of filteredSources) {
-        let variant = existingForLink.find(
+        const variant = existingForLink.find(
           (v) =>
             v.utm_source === src.utm_source &&
             (v.utm_medium || "social") === (src.utm_medium || "social") &&
             (v.utm_content || "") === (src.utm_content || "") &&
             (v.utm_term || "") === (src.utm_term || "")
         );
-
-        if (!variant) {
-          const { data: newVariant, error: variantError } = await supabase.rpc("ensure_tracking_variant", {
-            p_link_id: link.id,
-            p_ref: person.slug,
-            p_source: src.utm_source,
-            p_medium: src.utm_medium || "social",
-            p_content: src.utm_content || null,
-            p_term: src.utm_term || null,
-          });
-
-          if (!variantError && newVariant) {
-            variant = {
-              suffix: newVariant.suffix,
-              utm_source: src.utm_source,
-              utm_medium: src.utm_medium || "social",
-              utm_content: src.utm_content || null,
-              utm_term: src.utm_term || null,
-            };
-          }
-        }
-
         if (variant) {
           trackingLinks.push({
             source: src.utm_source,
