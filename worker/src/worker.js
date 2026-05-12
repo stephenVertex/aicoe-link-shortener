@@ -373,6 +373,7 @@ export default {
       const cached = await env.SLUG_CACHE.get(cacheKey, { type: "json" });
       if (cached) {
         if (cached.not_found) {
+          // ys-als-yr51: cache 404s for 60s to stop bot scans hitting Supabase
           return new Response("Not found", { status: 404 });
         }
 
