@@ -123,6 +123,23 @@ async function handleSyncSubstack(force: boolean): Promise<Response> {
     title: string;
     canonical_url?: string;
     publishedBylines?: Array<{ name?: string }>;
+    body_html?: string;
+  }
+
+  function stripHtml(html: string): string {
+    // Remove HTML tags and decode common entities
+    return html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   async function fetchSitemapEntries(): Promise<SitemapEntry[]> {
@@ -208,6 +225,8 @@ async function handleSyncSubstack(force: boolean): Promise<Response> {
     const urlNorm = newDestUrl.replace(/\/+$/, "");
     const existingByUrlMatch = !existing ? existingByUrl.get(urlNorm) : null;
 
+    const bodyText = meta?.body_html ? stripHtml(meta.body_html) : null;
+
     if (!existing && !existingByUrlMatch) {
       const insertData: Record<string, unknown> = {
         slug,
@@ -217,6 +236,7 @@ async function handleSyncSubstack(force: boolean): Promise<Response> {
         last_synced_at: now,
       };
       if (newPublishedAt) insertData.published_at = newPublishedAt;
+      if (bodyText) insertData.body_text = bodyText;
 
       const { data: linkData, error: linkError } = await supabase
         .from("links")
@@ -291,6 +311,7 @@ async function handleSyncSubstack(force: boolean): Promise<Response> {
       if (newPublishedAt && existing.published_at !== newPublishedAt) {
         changes.published_at = newPublishedAt;
       }
+      if (bodyText && existing.body_text !== bodyText) changes.body_text = bodyText;
 
       changes.last_synced_at = now;
 
@@ -513,7 +534,7 @@ async function handleEmbedArticles(force: boolean): Promise<Response> {
 
   let query = supabase
     .from("links")
-    .select("id, slug, title, author, description, transcript")
+    .select("id, slug, title, author, description, transcript, body_text")
     .order("published_at", { ascending: false, nullsFirst: false });
 
   if (!force) {
@@ -873,12 +894,17 @@ function buildEmbeddingText(article: {
   author: string | null;
   description: string | null;
   transcript: string | null;
+  body_text: string | null;
 }): string {
   const parts: string[] = [];
   if (article.title) parts.push(article.title);
   if (article.author) parts.push(`by ${article.author}`);
   parts.push(article.slug.replace(/-/g, " "));
   if (article.description) parts.push(article.description);
+  if (article.body_text) {
+    const truncated = article.body_text.slice(0, 20000);
+    parts.push(truncated);
+  }
   if (article.transcript) {
     const plainText = article.transcript
       .replace(/^\d+\s*$/gm, "")

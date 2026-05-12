@@ -116,22 +116,23 @@ Deno.serve(async (req) => {
 
     const queryEmbedding = await generateQueryEmbedding(query);
 
-    const rpcParams: Record<string, unknown> = {
+    const hybridRpcParams: Record<string, unknown> = {
       query_embedding: JSON.stringify(queryEmbedding),
+      query_text: query,
       match_threshold: matchThreshold,
       match_count: matchCount,
     };
     if (contentType) {
-      rpcParams.content_type_filter = contentType;
+      hybridRpcParams.content_type_filter = contentType;
     }
     if (authorFilter) {
-      rpcParams.author_filter = authorFilter;
+      hybridRpcParams.author_filter = authorFilter;
     }
 
     const shouldSearchChunks = !contentType || contentType === "video";
 
     const [articlesResult, chunksResult] = await Promise.all([
-      supabase.rpc("match_articles", rpcParams),
+      supabase.rpc("hybrid_match_articles", hybridRpcParams),
       shouldSearchChunks
         ? supabase.rpc("search_video_chunks", {
             query_embedding: JSON.stringify(queryEmbedding),
@@ -191,7 +192,7 @@ Deno.serve(async (req) => {
       });
 
       merged = [...nonVideoArticles, ...chunkResults].sort(
-        (a, b) => (b.similarity as number) - (a.similarity as number),
+        (a, b) => (b.hybrid_score as number ?? b.similarity as number) - (a.hybrid_score as number ?? a.similarity as number),
       );
     } else {
       merged = articles.map((a) => {
