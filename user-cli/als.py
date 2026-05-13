@@ -221,11 +221,16 @@ def help_cmd():
             "describing the context. AI infers UTM source/medium from your note.",
             [
                 'als search "your article topic"       # → lnk-xxx (short ID)',
-                "als get lnk-xxx                       # confirm the article; shows your existing tracking links",
+                "",
+                "# Optional: confirm the article and see your existing tracking links",
+                "als get lnk-xxx --tracking            # shows slug, title, and current links",
+                "",
                 "# Create a one-off variant for this specific conversation:",
                 'als shorten lnk-xxx --note "replying to @mike on twitter about agents"',
                 "# → aicoe.fit/article-slug-a1b2c3   (auto-expires 60d, separate from your default links)",
-                "# Later: als stats article-slug --days 7  to see how that specific share performed",
+                "",
+                "# Later: see how that specific share performed",
+                "als stats article-slug --days 7       # use the slug from als get; per-variant breakdown",
             ],
         ),
         (
