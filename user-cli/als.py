@@ -289,6 +289,7 @@ def help_cmd():
                 'als stats "my-article-slug"              # use the slug from above; your clicks',
                 'als stats "my-article-slug" --everybody  # whole team breakdown',
                 'als stats "my-article-slug" --days 7     # last 7 days only',
+                'als stats "my-article-slug" --json       # raw numbers for exporting/analysis',
             ],
         ),
         (
@@ -300,6 +301,7 @@ def help_cmd():
                 "als get lnk-xxx                       # use the ID from above; full details + tracking links",
                 "als last 10 --tracking                # with tracking links (no need to als get each one)",
                 "als last 10 --me                      # filter to articles you authored",
+                "als last 5 --json                     # machine-readable output for scripts/agents",
             ],
         ),
         (
@@ -328,6 +330,7 @@ def help_cmd():
                 'als search "late interaction retrieval"     # → lnk-xxx (short ID)',
                 'als get lnk-xxx                             # use the ID from above; full details + tracking links',
                 'als search "multi-agent deep research"      # → lnk-xxx (short ID)',
+                'als search "AI agents" --json --tracking  # structured output with all links',
             ],
         ),
         (
@@ -337,6 +340,20 @@ def help_cmd():
             [
                 "als tracking-variants list",
                 'als tracking-variants add --label "Newsletter" --source newsletter --medium email',
+            ],
+        ),
+        (
+            "11. Automation and agent workflows (use --json)",
+            "Every read and write command supports --json for machine-parseable output. "
+            "Pipe to jq, python, or use directly in scripts and CI pipelines.",
+            [
+                "als last 5 --json | jq '.[0].short_id'          # get top article ID",
+                'als search "topic" --json --tracking | jq ".[].tracking_links"  # extract all links',
+                "als stats my-slug --json | jq '.total_clicks'   # raw click count",
+                "als sync-substack --json | jq '.created[]'      # trigger downstream jobs",
+                "als context create 'Campaign' --json | jq '.context.id'  # capture ctx_id",
+                'als shorten lnk-abc --note "twitter" --json | jq ".variant.short_url"  # capture link',
+                "als aifs https://... --json | jq '.short_id'    # capture submission ID",
             ],
         ),
     ]
