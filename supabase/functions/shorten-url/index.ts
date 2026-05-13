@@ -27,6 +27,23 @@ async function validateApiKey(apiKey: string): Promise<PersonInfo | null> {
 }
 
 /**
+ * Extract a human-readable slug from known publishing URLs.
+ * Returns null if no slug can be extracted.
+ */
+function extractUrlSlug(url: string): string | null {
+  // Substack: https://*.substack.com/p/<slug>
+  const substackMatch = url.match(/\/p\/([a-z0-9-]+)/);
+  if (substackMatch) {
+    const slug = substackMatch[1];
+    // Sanity check: reasonable length, not just numbers
+    if (slug.length >= 3 && slug.length <= 120 && !/^\d+$/.test(slug)) {
+      return slug;
+    }
+  }
+  return null;
+}
+
+/**
  * Generate a random short slug (base36, 6 chars).
  */
 function randomSlug(length = 6): string {
@@ -99,20 +116,35 @@ async function findOrCreateLink(url: string, customSlug?: string): Promise<{
     }
     slug = validSlug;
   } else {
-    // Generate a random slug
-    let attempts = 0;
-    while (attempts < 10) {
-      const candidate = randomSlug(6);
+    // Try to extract a human-readable slug from the URL (e.g. Substack /p/<slug>)
+    const urlSlug = extractUrlSlug(url);
+    if (urlSlug) {
       const { data: conflict } = await supabase
         .from("links")
         .select("id")
-        .eq("slug", candidate)
+        .eq("slug", urlSlug)
         .maybeSingle();
       if (!conflict) {
-        slug = candidate;
-        break;
+        slug = urlSlug;
       }
-      attempts++;
+    }
+
+    // Fall back to random slug if extraction didn't work or slug is taken
+    if (!slug) {
+      let attempts = 0;
+      while (attempts < 10) {
+        const candidate = randomSlug(6);
+        const { data: conflict } = await supabase
+          .from("links")
+          .select("id")
+          .eq("slug", candidate)
+          .maybeSingle();
+        if (!conflict) {
+          slug = candidate;
+          break;
+        }
+        attempts++;
+      }
     }
   }
 
