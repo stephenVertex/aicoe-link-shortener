@@ -1536,7 +1536,14 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
     default=False,
     help="Include tracking links for each article (makes a batch API call).",
 )
-def last(n: int, author: str | None, filter_me: bool, summary: bool, tracking: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text (useful for agents).",
+)
+def last(n: int, author: str | None, filter_me: bool, summary: bool, tracking: bool, output_json: bool):
     """Show the last N articles, optionally with tracking links.
 
     N defaults to 10. Shows the most recently published articles in the
@@ -1555,6 +1562,11 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool, tracking: b
     Use --tracking to include tracking links:
 
         als last 10 --tracking
+
+    Use --json for machine-readable output (great for agents):
+
+        als last 5 --json
+        als last 5 --json --tracking
     """
     api_key = _get_api_key() if tracking or filter_me else ""
 
@@ -1592,12 +1604,54 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool, tracking: b
     results = last_data.get("results", [])
 
     if not results:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         if filter_me:
             click.echo(f"No articles found for you ({author}).")
         elif author:
             click.echo(f"No articles found for author: {author}")
         else:
             click.echo("No articles found.")
+        return
+
+    if output_json:
+        ids = [r.get("id", "") for r in results if r.get("id")]
+        short_id_map = _compute_short_ids(ids)
+
+        # Optionally enrich with tracking data
+        tracking_data: dict[str, dict] = {}
+        if tracking:
+            slugs = [r.get("slug", "") for r in results if r.get("slug")]
+            if slugs:
+                batch_resp = _api_request(
+                    "batch-get-links",
+                    api_key=api_key,
+                    json_body={"slugs": slugs},
+                )
+                if batch_resp.status_code == 200:
+                    tracking_data = batch_resp.json().get("results", {})
+
+        out = []
+        for result in results:
+            slug = result.get("slug", "")
+            full_id = result.get("id", "")
+            short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
+            item = {
+                "id": full_id,
+                "short_id": short_id,
+                "slug": slug,
+                "title": result.get("title") or slug,
+                "author": result.get("author") or None,
+                "url": result.get("url", ""),
+                "published_at": result.get("published_at") or None,
+                "created_at": result.get("created_at") or None,
+            }
+            if tracking and slug in tracking_data:
+                item["tracking_links"] = tracking_data[slug].get("links", [])
+            out.append(item)
+
+        click.echo(json.dumps(out, indent=2))
         return
 
     if summary:
