@@ -562,9 +562,14 @@
       const step = getLoadingStepIndex('Loading articles & variants...');
       if (step >= 0) updateLoadingStep(step, 'active');
 
+      // Only fetch columns the dashboard actually renders.  Avoid pulling
+      // transcript, body_text, embedding, description — they can be huge
+      // and are never shown on the dashboard landing page.
       const [linksResult, variantsResult] = await Promise.all([
-        sb.from('links').select('*').order('published_at', { ascending: false, nullsFirst: false }),
-        fetchAllRows('tracking_variants', '*', 'created_at'),
+        sb.from('links')
+          .select('id, slug, title, author, published_at, destination_url, content_type, created_at')
+          .order('published_at', { ascending: false, nullsFirst: false }),
+        fetchAllRows('tracking_variants', 'id, link_id, ref, suffix, created_at', 'created_at'),
       ]);
 
       if (linksResult.error) throw linksResult.error;
