@@ -195,7 +195,7 @@
     </header>
 
     <h2>Changelog</h2>
-    <p style="color:var(--text-muted); margin-bottom: 24px;">All notable performance improvements, bug fixes, and feature requests. Tracked via <a href="https://github.com/yesod/yesod" target="_blank">yesod</a> under tool <code>als</code>.</p>
+    <p style="color:var(--text-muted); margin-bottom: 24px;">All notable performance improvements, bug fixes, and feature requests. Tracked via <a href="https://github.com/yesod/yesod" target="_blank">yesod</a> under tool <code>als</code>. <a href="https://github.com/stephenVertex/aicoe-link-shortener/actions" target="_blank" rel="noopener">View CI runs &rarr;</a></p>
 
     <h2>2026-05-12 — Performance Sprint</h2>
     <p>A focused performance and reliability sprint that eliminated all known bottlenecks and resolved every open bug report and feature request.</p>
@@ -206,7 +206,7 @@
       <h4>batch-get-links sequential RPC storm <span class="badge badge-bug">bug</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-xewx</code></span>
-        <span><strong>Commit:</strong> <code>c194d18</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/c194d18" target="_blank" rel="noopener"><code>c194d18</code></a></span>
       </div>
       <p><strong>Problem:</strong> <code>batch-get-links</code> called <code>ensure_tracking_variant</code> RPC once per link per source in a nested loop, causing 30+ sequential round-trips for typical batches (10 links x 3 sources). Average latency: <strong>979ms</strong>.</p>
       <p><strong>Fix:</strong> Gather all missing variants first, then create them all in parallel via <code>Promise.all</code>.</p>
@@ -217,7 +217,7 @@
       <h4>analytics sequential DB round-trips <span class="badge badge-bug">bug</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-b0tq</code></span>
-        <span><strong>Commit:</strong> <code>c194d18</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/c194d18" target="_blank" rel="noopener"><code>c194d18</code></a></span>
       </div>
       <p><strong>Problem:</strong> <code>analytics</code> (article-stats) fired 5-7 sequential DB round-trips per request and transferred an ever-larger <code>variant_id</code> result set as <code>click_log</code> grew. Average latency: <strong>630ms</strong>.</p>
       <p><strong>Fix:</strong> Parallelized all independent queries with <code>Promise.all</code>.</p>
@@ -228,7 +228,7 @@
       <h4>search-articles OpenAI embedding latency <span class="badge badge-bug">bug</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-lt5q</code></span>
-        <span><strong>Commit:</strong> <code>4a9c50d</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/4a9c50d" target="_blank" rel="noopener"><code>4a9c50d</code></a></span>
       </div>
       <p><strong>Problem:</strong> <code>search-articles</code> edge function averaged <strong>1,100-1,800ms</strong> per request. OpenAI embedding API alone cost 300-500ms, plus subsequent <code>hybrid_match_articles</code> + <code>search_video_chunks</code> RPCs.</p>
       <p><strong>Fix:</strong> Added an in-memory LRU cache (500 entries, 1-hour TTL) for query embeddings.</p>
@@ -239,7 +239,7 @@
       <h4>last-articles full-table scan <span class="badge badge-bug">bug</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-8f45</code></span>
-        <span><strong>Commit:</strong> <code>eb4c410</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/eb4c410" target="_blank" rel="noopener"><code>eb4c410</code></a></span>
       </div>
       <p><strong>Problem:</strong> <code>last-articles</code> edge function did a full-table scan with <code>ORDER BY published_at DESC NULLS LAST LIMIT ... OFFSET ...</code> on the <code>links</code> table. With only 309 rows it still averaged <strong>193ms</strong> per call.</p>
       <p><strong>Fix:</strong> Added composite index <code>links(published_at DESC NULLS LAST, id)</code>.</p>
@@ -250,7 +250,7 @@
       <h4>tracking_variants unfiltered OFFSET pagination <span class="badge badge-bug">bug</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-kjse</code></span>
-        <span><strong>Commit:</strong> <code>aa781da</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/aa781da" target="_blank" rel="noopener"><code>aa781da</code></a></span>
       </div>
       <p><strong>Problem:</strong> <code>SELECT * FROM tracking_variants ORDER BY created_at ASC, id ASC LIMIT OFFSET</code> averaged <strong>207ms</strong> per call and consumed <strong>212 seconds</strong> of total execution time over 1,026 calls — the #1 DB performance killer.</p>
       <p><strong>Fix:</strong> Added composite index <code>tracking_variants(created_at, id)</code>.</p>
@@ -261,7 +261,7 @@
       <h4>als --help missing aifs subcommand <span class="badge badge-bug">bug</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-vkay</code></span>
-        <span><strong>Commit:</strong> <code>640130f</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/640130f" target="_blank" rel="noopener"><code>640130f</code></a></span>
       </div>
       <p><strong>Problem:</strong> Top-level <code>als help</code> showed no reference to <code>submit</code>, <code>vote</code>, <code>list</code>, <code>archive</code>, <code>unarchive</code>, or Discord delegation features.</p>
       <p><strong>Fix:</strong> Added <code>aifs</code> to the Usage section with all subcommands documented.</p>
@@ -271,7 +271,7 @@
       <h4>Cloudflare Worker 404 cache gap <span class="badge badge-bug">bug</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-yr51</code></span>
-        <span><strong>Commit:</strong> <code>5b59b8d</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/5b59b8d" target="_blank" rel="noopener"><code>5b59b8d</code></a></span>
       </div>
       <p><strong>Problem:</strong> Cloudflare Worker did not cache 404 responses, so every bot scan (<code>/.env</code>, <code>/.git/config</code>, <code>/wp-admin/install.php</code>, etc.) hit the redirect edge function directly. These requests took <strong>700-1,400ms</strong> and consumed 42% of total edge function time.</p>
       <p><strong>Fix:</strong> Worker now caches 404s for 60 seconds in <code>SLUG_CACHE</code>.</p>
@@ -284,7 +284,7 @@
       <h4>Precomputed all-time counters (link_stats) <span class="badge badge-feature">feature</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-wz6q</code></span>
-        <span><strong>Commit:</strong> <code>b1d755a</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/b1d755a" target="_blank" rel="noopener"><code>b1d755a</code></a></span>
       </div>
       <p><strong>Request:</strong> Real-time analytics that stay fast as <code>click_log</code> grows past 10k+ rows.</p>
       <p><strong>Implementation:</strong> Created <code>link_stats</code> table with a trigger on <code>click_log</code> insert that rebuilds all counters (total_clicks, by_variant, by_source, by_referrer, by_country, by_person) for the affected link. The <code>link_analytics</code> action reads from <code>link_stats</code> single row instead of aggregating the full <code>click_log</code> table.</p>
@@ -294,7 +294,7 @@
       <h4>Precomputed daily time-series (link_daily_clicks) <span class="badge badge-feature">feature</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-b8dh</code></span>
-        <span><strong>Commit:</strong> <code>6d7295f</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/6d7295f" target="_blank" rel="noopener"><code>6d7295f</code></a></span>
       </div>
       <p><strong>Request:</strong> Click-over-time graphs that don't scan the full <code>click_log</code> table.</p>
       <p><strong>Implementation:</strong> Created <code>link_daily_clicks(link_id, date, clicks, by_variant, by_source)</code> table with PK <code>(link_id, date)</code> and index for range scans. A consolidated trigger refreshes both <code>link_stats</code> (all-time) and <code>link_daily_clicks</code> (affected date) on every <code>click_log</code> insert. Weekly rollups are computed in JS from daily rows.</p>
@@ -304,7 +304,7 @@
       <h4>top-links cache prewarming <span class="badge badge-feature">feature</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-c35v</code></span>
-        <span><strong>Commit:</strong> <code>bf1b756</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/bf1b756" target="_blank" rel="noopener"><code>bf1b756</code></a></span>
       </div>
       <p><strong>Request:</strong> Pre-warm the Cloudflare Worker <code>SLUG_CACHE</code> with the top 50 most-clicked links so the first request after a cold start doesn't hit the edge function.</p>
       <p><strong>Implementation:</strong> Added <code>top-links</code> action to <code>analytics</code> edge function. Worker <code>scheduled</code> trigger runs every 5 minutes, calls <code>analytics?action=top-links&count=50</code>, and writes top 50 slugs into <code>SLUG_CACHE</code> with 5-minute TTL.</p>
@@ -314,7 +314,7 @@
       <h4>last-articles cache headers <span class="badge badge-feature">feature</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-n8xn</code></span>
-        <span><strong>Commit:</strong> <code>bf1b756</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/bf1b756" target="_blank" rel="noopener"><code>bf1b756</code></a></span>
       </div>
       <p><strong>Request:</strong> Add <code>Cache-Control</code> headers to the <code>last-articles</code> edge function so Cloudflare can cache the article list.</p>
       <p><strong>Implementation:</strong> Returns <code>Cache-Control: public, max-age=60</code>. Article list changes slowly (new articles are synced on a schedule), so a 60-second cache is safe.</p>
@@ -324,7 +324,7 @@
       <h4>Composite/covering database indexes <span class="badge badge-feature">feature</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-wkln</code></span>
-        <span><strong>Commit:</strong> <code>956d1b4</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/956d1b4" target="_blank" rel="noopener"><code>956d1b4</code></a></span>
       </div>
       <p><strong>Request:</strong> Add composite DB indexes to eliminate full-table scans.</p>
       <p><strong>Implementation:</strong></p>
@@ -339,7 +339,7 @@
       <h4>Admin dashboard loading UI <span class="badge badge-feature">feature</span></h4>
       <div class="meta">
         <span><strong>ID:</strong> <code>ys-als-zjxj</code></span>
-        <span><strong>Commit:</strong> <code>bf1b756</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/bf1b756" target="_blank" rel="noopener"><code>bf1b756</code></a></span>
       </div>
       <p><strong>Request:</strong> Show what is actively loading with descriptive labels and fast-moving progress bars instead of a static spinner.</p>
       <p><strong>Implementation:</strong> Replaced static "Loading dashboard..." with animated hacker-style progress bars showing 5 steps: Authenticating &rarr; Sources &rarr; Articles & Variants &rarr; Click Data &rarr; Rendering.</p>
@@ -349,7 +349,7 @@
 
     <div class="card">
       <h4>wrangler v4 upgrade <span class="badge badge-infra">infra</span></h4>
-      <div class="meta"><span><strong>Commit:</strong> <code>a9a07c5</code></span></div>
+      <div class="meta"><span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/a9a07c5" target="_blank" rel="noopener"><code>a9a07c5</code></a></span></div>
       <p>Updated Cloudflare Worker tooling from wrangler v3 to v4.</p>
     </div>
 
@@ -360,7 +360,7 @@
 
     <div class="card">
       <h4>Admin dashboard column selection <span class="badge badge-infra">infra</span></h4>
-      <div class="meta"><span><strong>Commit:</strong> <code>ffa7241</code></span></div>
+      <div class="meta"><span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/ffa7241" target="_blank" rel="noopener"><code>ffa7241</code></a></span></div>
       <p><code>refreshDashboardData</code> now fetches only needed columns (8 for links, 5 for variants) instead of <code>select('*')</code>, eliminating pulling massive unused columns (<code>transcript</code>, <code>body_text</code>, <code>embedding</code>, <code>description</code>) which can be 50KB+ per row.</p>
     </div>
 
@@ -387,7 +387,7 @@
     <h3>Sync Bug Fix (2026-05-12)</h3>
     <div class="card">
       <h4>Substack sync silently skipping articles <span class="badge badge-bug">bug</span></h4>
-      <div class="meta"><span><strong>Commit:</strong> <code>411affa</code></span></div>
+      <div class="meta"><span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/411affa" target="_blank" rel="noopener"><code>411affa</code></a></span></div>
       <p><strong>Problem:</strong> <code>content-sync</code> edge function was silently skipping articles where the Substack API returned short random slugs (e.g. <code>ktrdc8</code>) differing from sitemap URLs (e.g. <code>how-the-machines-finally-learned</code>).</p>
       <p><strong>Fix:</strong> Matching now tries <code>canonical_url</code> first, then falls back to slug. Also fixed <code>sync_operations</code> logging to properly <code>await</code> the insert instead of fire-and-forget <code>.then()</code>.</p>
       <p><strong>Article renames:</strong> 11 articles updated from unreadable 6-char random IDs to readable Substack slugs, preserving all clicks.</p>
