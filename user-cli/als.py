@@ -496,7 +496,14 @@ def upgrade(force: bool):
 
 
 @cli.command()
-def whoami():
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def whoami(output_json: bool):
     """Show the current authenticated user."""
     api_key = _get_api_key()
 
@@ -506,6 +513,10 @@ def whoami():
         sys.exit(1)
 
     person = resp.json()
+    if output_json:
+        click.echo(json.dumps(person, indent=2))
+        return
+
     click.echo(f"Logged in as: {person.get('name', '?')} ({person.get('slug', '?')})")
     click.echo(f"Credentials: {CREDENTIALS_FILE}")
 
@@ -827,12 +838,20 @@ def links_group():
     default=False,
     help="Show only pinned links.",
 )
-def links_list(pinned: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def links_list(pinned: bool, output_json: bool):
     """List links, optionally filtered to pinned only.
 
     \b
     Examples:
       als links list --pinned
+      als links list --json
     """
     params = {}
     if pinned:
@@ -844,10 +863,17 @@ def links_list(pinned: bool):
 
     links = resp.json().get("links", [])
     if not links:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         if pinned:
             click.echo("No pinned links. Use 'als links pin <slug>' to pin one.")
         else:
             click.echo("No links found.")
+        return
+
+    if output_json:
+        click.echo(json.dumps(links, indent=2))
         return
 
     label = "Pinned links" if pinned else "Links"
@@ -1055,18 +1081,30 @@ def context_generate(ctx_id: str, pinned: bool, note: str):
 
 @context_group.command("show")
 @click.argument("ctx_id")
-def context_show(ctx_id: str):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def context_show(ctx_id: str, output_json: bool):
     """Show details of a context including its variants and click counts.
 
     \b
     Examples:
       als context show ctx-abc
+      als context show ctx-abc --json
     """
     resp = _api_request("manage-contexts", method="GET", params={"id": ctx_id})
     data = resp.json()
     if resp.status_code != 200:
         click.echo(f"Error: {data.get('error', resp.text)}", err=True)
         sys.exit(1)
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
 
     ctx = data.get("context", {})
     variants = data.get("variants", [])
@@ -1102,7 +1140,14 @@ def context_show(ctx_id: str):
     default=False,
     help="Show expired/archived contexts.",
 )
-def context_list(expired: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def context_list(expired: bool, output_json: bool):
     """List link contexts.
 
     By default shows active contexts (not archived). Use --expired to
@@ -1112,6 +1157,7 @@ def context_list(expired: bool):
     Examples:
       als context list
       als context list --expired
+      als context list --json
     """
     params: dict[str, str] = {"list": "true"}
     if expired:
@@ -1125,8 +1171,15 @@ def context_list(expired: bool):
     contexts = resp.json().get("contexts", [])
 
     if not contexts:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         label = "expired/archived" if expired else "active"
         click.echo(f"No {label} contexts found.")
+        return
+
+    if output_json:
+        click.echo(json.dumps(contexts, indent=2))
         return
 
     label = "Expired/archived" if expired else "Active"
@@ -1184,7 +1237,14 @@ def context_archive(ctx_id: str):
     default=True,
     help="Include personalised tracking links (default: on). Use --no-tracking for fast metadata-only lookup.",
 )
-def get(slug_or_url: str, tracking: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def get(slug_or_url: str, tracking: bool, output_json: bool):
     """Get full details and tracking links for a single article.
 
     Fetches the article by slug, URL, or short ID and displays its details
@@ -1196,6 +1256,7 @@ def get(slug_or_url: str, tracking: bool):
       als get https://trilogyai.substack.com/p/your-agent-my-agent
       als get lnk-edk
       als get lnk-edk --no-tracking
+      als get lnk-edk --json
     """
     api_key = _get_api_key() if tracking else ""
 
@@ -1227,6 +1288,11 @@ def get(slug_or_url: str, tracking: bool):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
     article = data.get("article", {})
 
     if not tracking:
@@ -1368,7 +1434,14 @@ def _resolve_short_id(short_id: str, core_only: bool = False) -> str | None:
     default=False,
     help="Include tracking links for each result (makes one batch API call).",
 )
-def search(query: str, count: int, source: str, filter_me: bool, tracking: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def search(query: str, count: int, source: str, filter_me: bool, tracking: bool, output_json: bool):
     """Search articles by semantic similarity.
 
     Returns a compact table of matching articles ranked by relevance.
@@ -1386,6 +1459,10 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
     Use --tracking to include your tracking links (one batch call, no N+1):
 
         als search "AI agents" --tracking
+
+    Use --json for machine-readable output:
+
+        als search "AI agents" --json --tracking
     """
     api_key = _get_api_key() if tracking or filter_me else ""
 
@@ -1424,6 +1501,9 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
     results = search_data.get("results", [])
 
     if not results:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         if filter_me:
             click.echo(f"No matching articles found for you ({author_filter}).")
         else:
@@ -1444,6 +1524,32 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool)
             )
             if batch_resp.status_code == 200:
                 tracking_data = batch_resp.json().get("results", {})
+
+    if output_json:
+        out = []
+        for result in results:
+            slug = result.get("slug", "")
+            full_id = result.get("id", "")
+            short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
+            item = {
+                "id": full_id,
+                "short_id": short_id,
+                "slug": slug,
+                "title": result.get("title") or slug,
+                "author": result.get("author") or None,
+                "url": result.get("url", ""),
+                "published_at": result.get("published_at") or None,
+                "created_at": result.get("created_at") or None,
+                "similarity": result.get("similarity", 0),
+                "match_type": result.get("match_type", ""),
+                "start_time": result.get("start_time"),
+                "snippet": result.get("text", ""),
+            }
+            if tracking and slug in tracking_data:
+                item["tracking_links"] = tracking_data[slug].get("links", [])
+            out.append(item)
+        click.echo(json.dumps(out, indent=2))
+        return
 
     click.echo(f"\nSearch results for: {click.style(query, bold=True)}\n")
 
@@ -1797,12 +1903,21 @@ def _print_bar_rows(
     show_default=True,
     help="Number of days to include in the analytics window.",
 )
-def analytics(stub: str, days: int):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def analytics(stub: str, days: int, output_json: bool):
     """Show per-link analytics for a shortened link stub.
 
     Surfaces the same core information as the per-link web analytics page:
     metadata, daily and weekly click counts, referrer breakdown, and a list
     of other shortened links for comparison.
+
+    Use --json for machine-readable output.
     """
     resp = _api_request(
         "analytics",
@@ -1817,6 +1932,11 @@ def analytics(stub: str, days: int):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
     link = data.get("link", {})
     daily = data.get("daily_clicks", [])
     weekly = data.get("weekly_clicks", [])
@@ -1864,7 +1984,14 @@ def analytics(stub: str, days: int):
 
 
 @cli.command()
-def authors():
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def authors(output_json: bool):
     """List all authors in the database.
 
     Shows each distinct author and how many articles they have.
@@ -1880,7 +2007,14 @@ def authors():
     author_list = data.get("authors", [])
 
     if not author_list:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         click.echo("No authors found.")
+        return
+
+    if output_json:
+        click.echo(json.dumps(author_list, indent=2))
         return
 
     click.echo(f"\nAuthors ({len(author_list)} total):\n")
@@ -1967,7 +2101,14 @@ def bug_report(title: str, description: str, yesod_note_id: str, commit_hash: st
     default=False,
     help="Show per-person click breakdown (all team members).",
 )
-def stats(article: str, days: int, everybody: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def stats(article: str, days: int, everybody: bool, output_json: bool):
     """Show statistics for a specific article, or overall database stats.
 
     \b
@@ -1984,6 +2125,7 @@ def stats(article: str, days: int, everybody: bool):
       als stats cursor-mar26 --days 7  # last 7 days only
       als stats cursor-mar26 --everybody  # show per-person breakdown
       als stats https://aicoe.link/abc  # article stats by short URL
+      als stats cursor-mar26 --json
     """
     if not article:
         # Database-level stats (original behaviour)
@@ -1995,6 +2137,10 @@ def stats(article: str, days: int, everybody: bool):
             sys.exit(1)
 
         data = resp.json()
+
+        if output_json:
+            click.echo(json.dumps(data, indent=2))
+            return
 
         click.echo("\nDatabase statistics:\n")
         click.echo(f"  Articles:          {data.get('articles', 0)}")
@@ -2030,6 +2176,11 @@ def stats(article: str, days: int, everybody: bool):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
     art = data.get("article", {})
     total = data.get("total_clicks", 0)
     variants = data.get("tracking_variants", 0)
@@ -2123,7 +2274,14 @@ def stats(article: str, days: int, everybody: bool):
 @click.option(
     "--all", "show_all", is_flag=True, help="Show all custom links (ignores --count)."
 )
-def custom_links(count: int, show_all: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def custom_links(count: int, show_all: bool, output_json: bool):
     """List your custom short links created via 'als shorten'.
 
     Shows only manually-created links (not auto-imported Substack articles),
@@ -2135,6 +2293,7 @@ def custom_links(count: int, show_all: bool):
         als custom-links           # last 10 custom links
         als custom-links --count 5 # last 5 custom links
         als custom-links --all     # all custom links
+        als custom-links --json
     """
     body: dict = {"action": "list-custom-links", "count": count}
     if show_all:
@@ -2154,7 +2313,29 @@ def custom_links(count: int, show_all: bool):
     person = data.get("person", {})
 
     if not results:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         click.echo("No custom links found. Use 'als shorten <url>' to create one.")
+        return
+
+    if output_json:
+        ids = [r.get("id", "") for r in results if r.get("id")]
+        short_id_map = _compute_short_ids(ids)
+        out = []
+        for result in results:
+            full_id = result.get("id", "")
+            short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
+            item = {
+                "id": full_id,
+                "short_id": short_id,
+                "slug": result.get("slug", ""),
+                "url": result.get("url", ""),
+                "created_at": result.get("created_at") or None,
+                "links": result.get("links", []),
+            }
+            out.append(item)
+        click.echo(json.dumps(out, indent=2))
         return
 
     ids = [r.get("id", "") for r in results if r.get("id")]
@@ -2458,7 +2639,14 @@ def tags():
     default="",
     help="Filter to tags on a specific article (by slug).",
 )
-def tags_list(article: str):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def tags_list(article: str, output_json: bool):
     """List all tags, or list tags on a specific article.
 
     Without --article, shows all tags with article counts.
@@ -2468,6 +2656,7 @@ def tags_list(article: str):
 
         als tags list
         als tags list --article my-article-slug
+        als tags list --json
     """
     body: dict = {"action": "list-tags"}
     if article:
@@ -2487,6 +2676,14 @@ def tags_list(article: str):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        if article:
+            click.echo(json.dumps(data, indent=2))
+        else:
+            tag_list = data.get("tags", [])
+            click.echo(json.dumps(tag_list, indent=2))
+        return
 
     if article:
         art = data.get("article", {})
@@ -2676,7 +2873,14 @@ def tracking_variants():
 
 
 @tracking_variants.command("list")
-def tracking_variants_list():
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def tracking_variants_list(output_json: bool):
     """List all your tracking variant channels.
 
     Shows each channel with its label, UTM source, and whether it is a
@@ -2685,6 +2889,7 @@ def tracking_variants_list():
     Example:
 
         als tracking-variants list
+        als tracking-variants list --json
     """
     resp = _api_request("manage-tracking-variants", json_body={"action": "list"})
 
@@ -2700,7 +2905,14 @@ def tracking_variants_list():
     person = data.get("person", {})
 
     if not variants:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         click.echo("No tracking variants found.")
+        return
+
+    if output_json:
+        click.echo(json.dumps(variants, indent=2))
         return
 
     click.echo(
@@ -2942,6 +3154,13 @@ def tracking_variants_delete(label: str, source: str):
     default="",
     help="Act as a Discord user (maps to a person via static config).",
 )
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text (for list action).",
+)
 def aifs(
     url_or_action: str | None,
     ids: tuple[str, ...],
@@ -2953,6 +3172,7 @@ def aifs(
     before_date: str,
     archive_all: bool,
     discord_user: str,
+    output_json: bool,
 ):
     """AI First Show episode candidate submission and voting.
 
@@ -3015,7 +3235,7 @@ def aifs(
 
     if url_or_action == "list":
         filter_val = "all" if show_all else ("archived" if archived else "active")
-        _aifs_list(filter_val, discord_user)
+        _aifs_list(filter_val, discord_user, output_json)
         return
 
     if url_or_action == "archive":
@@ -3085,7 +3305,7 @@ def _aifs_submit(url: str, comment: str, discord_user: str = ""):
     click.echo()
 
 
-def _aifs_list(filter_val: str = "active", discord_user: str = ""):
+def _aifs_list(filter_val: str = "active", discord_user: str = "", output_json: bool = False):
     """Show current AI First Show candidates sorted by vote count.
 
     Displays all submitted URLs with their vote counts, the submitter,
@@ -3096,6 +3316,7 @@ def _aifs_list(filter_val: str = "active", discord_user: str = ""):
       als aifs list              # active only (default)
       als aifs list --archived   # archived only
       als aifs list --all        # everything
+      als aifs list --json
     """
     body: dict = {"action": "list", "filter": filter_val}
     if discord_user:
@@ -3113,9 +3334,16 @@ def _aifs_list(filter_val: str = "active", discord_user: str = ""):
     submissions = data.get("submissions", [])
 
     if not submissions:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
         click.echo("\nNo submissions yet.")
         click.echo("Submit one with: als aifs <url>")
         click.echo()
+        return
+
+    if output_json:
+        click.echo(json.dumps(submissions, indent=2))
         return
 
     total = data.get("total", len(submissions))
