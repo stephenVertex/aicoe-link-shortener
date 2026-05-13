@@ -180,6 +180,12 @@ GitHub Actions will automatically:
 
 The install script and `als upgrade` always pull from `releases/latest/download/` so no URL updates are needed.
 
+After a tagged release has been built and published, update your local install:
+
+```bash
+als upgrade
+```
+
 ## Supabase Edge Functions
 
 ### Edge Function Deployment Protocol
