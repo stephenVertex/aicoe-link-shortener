@@ -42,12 +42,16 @@ Deno.serve(async (req) => {
   }
 
   let syncLogId: string | null = null;
-  supabase
-    .from("sync_operations")
-    .insert({ source: action, status: "running", force })
-    .select("id")
-    .single()
-    .then(({ data }) => { if (data?.id) syncLogId = data.id; }, () => {});
+  try {
+    const { data: logData } = await supabase
+      .from("sync_operations")
+      .insert({ source: action, status: "running", force })
+      .select("id")
+      .single();
+    if (logData?.id) syncLogId = logData.id;
+  } catch {
+    // Non-fatal: logging failure should not block the sync
+  }
 
   try {
     let result: Response;
@@ -72,8 +76,9 @@ Deno.serve(async (req) => {
     }
 
     if (syncLogId) {
-      result.clone().json().then((body) => {
-        supabase
+      try {
+        const body = await result.clone().json();
+        await supabase
           .from("sync_operations")
           .update({
             status: "success",
@@ -83,24 +88,28 @@ Deno.serve(async (req) => {
             items_updated: body.updated?.length ?? null,
             details: body,
           })
-          .eq("id", syncLogId)
-          .then(() => {}, () => {});
-      }).catch(() => {});
+          .eq("id", syncLogId);
+      } catch {
+        // Best-effort log update
+      }
     }
 
     return result;
   } catch (error) {
     if (syncLogId) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      supabase
-        .from("sync_operations")
-        .update({
-          status: "error",
-          completed_at: new Date().toISOString(),
-          error_message: errorMessage,
-        })
-        .eq("id", syncLogId)
-        .then(() => {}, () => {});
+      try {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await supabase
+          .from("sync_operations")
+          .update({
+            status: "error",
+            completed_at: new Date().toISOString(),
+            error_message: errorMessage,
+          })
+          .eq("id", syncLogId);
+      } catch {
+        // Best-effort log update
+      }
     }
     console.error(`Content-sync error (${action}):`, error);
     return new Response(JSON.stringify({ error: String(error) }), {
@@ -183,6 +192,15 @@ async function handleSyncSubstack(force: boolean): Promise<Response> {
     fetchAllPostMeta(),
   ]);
 
+  // Build lookup by canonical_url in addition to slug — Substack API
+  // sometimes returns short random slugs that differ from sitemap URLs.
+  const postMetaByUrl = new Map<string, ApiPost>();
+  for (const post of postMeta.values()) {
+    if (post.canonical_url) {
+      postMetaByUrl.set(post.canonical_url.replace(/\/+$/, ""), post);
+    }
+  }
+
   const { data: existingLinks } = await supabase
     .from("links")
     .select("id, slug, title, author, published_at, destination_url, last_synced_at");
@@ -209,20 +227,26 @@ async function handleSyncSubstack(force: boolean): Promise<Response> {
 
   for (const entry of sitemapEntries) {
     const slug = entry.url.split("/p/").pop()?.replace(/\/$/, "") || "";
+    const urlNorm = entry.url.replace(/\/+$/, "");
 
-    if (!postMeta.has(slug)) {
+    // Try to match API metadata by URL first, then by slug.
+    // Substack's API can return a different slug than the sitemap URL.
+    let meta = postMetaByUrl.get(urlNorm);
+    if (!meta) {
+      meta = postMeta.get(slug);
+    }
+
+    if (!meta) {
       skipped.push(slug);
       continue;
     }
 
-    const meta = postMeta.get(slug);
-    const newTitle = meta?.title || slug;
-    const newAuthor = meta?.publishedBylines?.[0]?.name || null;
+    const newTitle = meta.title || slug;
+    const newAuthor = meta.publishedBylines?.[0]?.name || null;
     const newPublishedAt = entry.lastmod || null;
-    const newDestUrl = meta?.canonical_url || entry.url;
+    const newDestUrl = meta.canonical_url || entry.url;
 
     const existing = existingBySlug.get(slug);
-    const urlNorm = newDestUrl.replace(/\/+$/, "");
     const existingByUrlMatch = !existing ? existingByUrl.get(urlNorm) : null;
 
     const bodyText = meta?.body_html ? stripHtml(meta.body_html) : null;
