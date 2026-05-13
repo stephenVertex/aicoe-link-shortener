@@ -335,6 +335,35 @@ async function handleListCustomLinks(params: {
   });
 }
 
+async function handleTopLinks(params: {
+  count?: number;
+}): Promise<Response> {
+  const { count = 50 } = params;
+
+  const { data, error } = await supabase
+    .from("link_stats")
+    .select("total_clicks, links(id, slug, destination_url)")
+    .order("total_clicks", { ascending: false })
+    .limit(count);
+
+  if (error) {
+    console.error("Error fetching top links:", error);
+    return jsonResponse({ error: "Failed to fetch top links" }, 500);
+  }
+
+  const results = (data || []).map((row: {
+    total_clicks: number;
+    links: { id: string; slug: string; destination_url: string } | null;
+  }) => ({
+    slug: row.links?.slug || "",
+    link_id: row.links?.id || "",
+    destination_url: row.links?.destination_url || "",
+    total_clicks: row.total_clicks,
+  })).filter((r: { slug: string }) => r.slug);
+
+  return jsonResponse({ results, count: results.length });
+}
+
 async function handleLinkAnalytics(params: {
   slug: string;
   days?: number;
@@ -485,9 +514,11 @@ Deno.serve(async (req) => {
       return await handleLinkAnalytics({ slug, days });
     } else if (action === "list-custom-links") {
       return await handleListCustomLinks({ apiKey, count, all });
+    } else if (action === "top-links") {
+      return await handleTopLinks({ count });
     } else {
       return jsonResponse(
-        { error: `Unknown action '${action}'. Valid actions: article-stats, link-analytics, list-custom-links` },
+        { error: `Unknown action '${action}'. Valid actions: article-stats, link-analytics, list-custom-links, top-links` },
         400,
       );
     }

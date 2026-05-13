@@ -330,8 +330,42 @@ main() {
 main "$@"
 `;
 
+async function warmSlugCache(env) {
+  if (!env.SLUG_CACHE) return;
+
+  try {
+    const url = `${env.SUPABASE_BASE_URL}/functions/v1/analytics?action=top-links&count=50`;
+    const response = await fetch(url, { method: "GET" });
+    if (!response.ok) {
+      console.error("Warm cache failed:", response.status, await response.text());
+      return;
+    }
+
+    const { results } = await response.json();
+    if (!Array.isArray(results)) return;
+
+    for (const link of results) {
+      if (!link.slug || !link.destination_url) continue;
+      const cacheKey = `slug:${link.slug}`;
+      const cacheData = {
+        destination: link.destination_url,
+        link_id: link.link_id || null,
+        variant_id: null,
+        expires_at: null,
+      };
+      await env.SLUG_CACHE.put(cacheKey, JSON.stringify(cacheData), {
+        expirationTtl: 300,
+      });
+    }
+
+    console.log(`Warmed ${results.length} slugs into SLUG_CACHE`);
+  } catch (err) {
+    console.error("Warm cache error:", err);
+  }
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -441,6 +475,10 @@ export default {
       status: response.status,
       headers,
     });
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(warmSlugCache(env));
   },
 };
 

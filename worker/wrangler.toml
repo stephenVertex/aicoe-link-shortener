@@ -14,3 +14,6 @@ ADMIN_URL = "https://admin.aicoe.fit"
 [[kv_namespaces]]
 binding = "SLUG_CACHE"
 id = "f7cec547e95e4d0b8b1d6539c0080678"
+
+[triggers]
+crons = ["*/5 * * * *"]

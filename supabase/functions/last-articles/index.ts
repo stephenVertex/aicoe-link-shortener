@@ -73,7 +73,11 @@ Deno.serve(async (req) => {
         count: (articles || []).length,
       }),
       {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=60",
+          ...corsHeaders,
+        },
       },
     );
   } catch (error) {
