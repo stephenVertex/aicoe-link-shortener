@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>aicoe.fit - Sync Operations</title>
+  <title>aicoe.fit - File a Bug Report</title>
   <script src="./supabase.min.js"></script>
   <style>
     :root {
@@ -33,6 +33,8 @@
       --warn-border: #fde68a;
       --warn-text: #92400e;
       --stat-num: #2563eb;
+      --input-bg: white;
+      --input-border: #d1d5db;
     }
     html[data-theme="synthwave-dark"] {
       --bg: #1a1a2e;
@@ -61,6 +63,8 @@
       --warn-border: #6a5a2a;
       --warn-text: #fbbf24;
       --stat-num: #ff6ec7;
+      --input-bg: #1a1a3e;
+      --input-border: #3a3a5a;
     }
     html[data-theme="solarized-dark"] {
       --bg: #002b36;
@@ -89,6 +93,8 @@
       --warn-border: #6d5f3f;
       --warn-text: #b58900;
       --stat-num: #b58900;
+      --input-bg: #073642;
+      --input-border: #114b59;
     }
     html[data-theme="solarized-light"] {
       --bg: #fdf6e3;
@@ -117,10 +123,12 @@
       --warn-border: #fde68a;
       --warn-text: #92400e;
       --stat-num: #b58900;
+      --input-bg: #fffdf4;
+      --input-border: #e6dfca;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); transition: background 0.2s, color 0.2s; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
     header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
     header h1 { font-size: 1.4em; font-weight: 700; }
     header .header-left { display: flex; align-items: center; gap: 0; }
@@ -148,43 +156,67 @@
     .filter-bar select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 0.85em; }
     .empty-state { text-align: center; padding: 40px; color: var(--text-faint); }
 
-    /* Table styles */
-    .sync-table { width: 100%; border-collapse: collapse; font-size: 0.9em; background: var(--card-bg); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px var(--card-shadow); }
-    .sync-table th { padding: 10px 12px; text-align: left; font-weight: 600; color: var(--text-title); background: var(--border-faint); border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
-    .sync-table th:hover { background: var(--border-light); }
-    .sync-table th .sort-icon { font-size: 0.75em; margin-left: 4px; color: var(--text-faint); }
-    .sync-table th.sort-asc .sort-icon::after { content: ' ▲'; color: var(--accent); }
-    .sync-table th.sort-desc .sort-icon::after { content: ' ▼'; color: var(--accent); }
-    .sync-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
-    .sync-table tr:hover td { background: var(--border-faint); }
-    .sync-table tr:last-child td { border-bottom: none; }
-    .sync-table .col-source { width: 90px; }
-    .sync-table .col-status { width: 80px; }
-    .sync-table .col-time { width: 140px; }
-    .sync-table .col-duration { width: 90px; }
-    .sync-table .col-count { width: 60px; text-align: center; }
-    .sync-table .col-action { width: 50px; text-align: center; }
-    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 600; }
-    .status-running { background: var(--badge-bg); color: var(--badge-text); }
-    .status-success { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
-    .status-error { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); }
-    .force-badge { font-size: 0.7em; background: var(--warn-bg); color: var(--warn-text); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--warn-border); margin-left: 6px; }
-    .error-preview { color: var(--error-text); font-size: 0.85em; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .error-preview.expanded { white-space: normal; overflow: visible; }
-    .expand-btn { color: var(--accent); cursor: pointer; font-size: 0.85em; margin-left: 4px; }
-    .expand-btn:hover { text-decoration: underline; }
-    .source-icon { text-transform: capitalize; font-weight: 500; }
+    /* Form styles */
+    .form-card { background: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 3px var(--card-shadow); }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.9em; font-weight: 600; color: var(--text-title); margin-bottom: 6px; }
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 0.9em;
+      font-family: inherit;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+    .form-group textarea { min-height: 120px; resize: vertical; }
+    .form-row { display: flex; gap: 16px; }
+    .form-row .form-group { flex: 1; }
 
-    /* Mobile card fallback */
+    /* Table styles */
+    .bug-table { width: 100%; border-collapse: collapse; font-size: 0.9em; background: var(--card-bg); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px var(--card-shadow); }
+    .bug-table th { padding: 10px 12px; text-align: left; font-weight: 600; color: var(--text-title); background: var(--border-faint); border-bottom: 2px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+    .bug-table th:hover { background: var(--border-light); }
+    .bug-table th .sort-icon { font-size: 0.75em; margin-left: 4px; color: var(--text-faint); }
+    .bug-table th.sort-asc .sort-icon::after { content: ' ▲'; color: var(--accent); }
+    .bug-table th.sort-desc .sort-icon::after { content: ' ▼'; color: var(--accent); }
+    .bug-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+    .bug-table tr:hover td { background: var(--border-faint); }
+    .bug-table tr:last-child td { border-bottom: none; }
+    .bug-table .col-title { min-width: 200px; }
+    .bug-table .col-status { width: 100px; }
+    .bug-table .col-time { width: 140px; }
+    .bug-table .col-source { width: 110px; }
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.75em; font-weight: 600; text-transform: capitalize; }
+    .status-open { background: var(--badge-bg); color: var(--badge-text); }
+    .status-investigating { background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-border); }
+    .status-fixed { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+    .status-wontfix { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); }
+    .desc-preview { color: var(--text-muted); font-size: 0.9em; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .desc-preview.expanded { white-space: normal; overflow: visible; }
+    .expand-btn { color: var(--accent); cursor: pointer; font-size: 0.85em; }
+    .expand-btn:hover { text-decoration: underline; }
+
     @media (max-width: 720px) {
       .stats-row { flex-wrap: wrap; }
       .filter-bar { flex-wrap: wrap; }
       header { align-items: flex-start; }
       header .header-left { flex-wrap: wrap; }
-      .sync-table { font-size: 0.82em; }
-      .sync-table th, .sync-table td { padding: 6px 8px; }
-      .sync-table .col-time, .sync-table .col-duration { display: none; }
-      .error-preview { max-width: 120px; }
+      .form-row { flex-direction: column; }
+      .bug-table { font-size: 0.82em; }
+      .bug-table th, .bug-table td { padding: 6px 8px; }
+      .bug-table .col-time, .bug-table .col-source { display: none; }
+      .desc-preview { max-width: 120px; }
     }
   </style>
 </head>
@@ -241,10 +273,10 @@
       return '<div class="nav-links">' +
         '<a class="nav-link" href="./index.html">Links</a>' +
         '<a class="nav-link" href="./index.html#/analytics">Analytics</a>' +
-        '<a class="nav-link active" onclick="location.reload()">Sync</a>' +
+        '<a class="nav-link" href="./sync.html">Sync</a>' +
         '<a class="nav-link" href="./video-search.html">Video Search</a>' +
         '<a class="nav-link" href="./changelog.html">Changelog</a>' +
-        '<a class="nav-link" href="./file-bug.html">File Bug</a>' +
+        '<a class="nav-link active" href="./file-bug.html">File Bug</a>' +
         '</div>';
     }
 
@@ -267,14 +299,13 @@
 
     const app = document.getElementById('app');
     let currentPerson = null;
-    let syncOps = [];
-    let filterSource = 'all';
+    let bugReports = [];
     let filterStatus = 'all';
-    let syncRunningSource = null;  // 'substack' | 'youtube' | null
-    let syncNotice = '';
-    let sortColumn = 'started_at';
+    let sortColumn = 'created_at';
     let sortDirection = 'desc';
-    let expandedErrors = new Set();
+    let expandedDesc = new Set();
+    let filingBug = false;
+    let fileNotice = '';
 
     function formatTime(iso) {
       if (!iso) return '-';
@@ -283,16 +314,6 @@
         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
         hour12: true,
       });
-    }
-
-    function formatDuration(ms) {
-      if (!ms && ms !== 0) return '-';
-      if (ms < 1000) return ms + 'ms';
-      const s = Math.floor(ms / 1000);
-      if (s < 60) return s + 's';
-      const m = Math.floor(s / 60);
-      const remS = s % 60;
-      return m + 'm ' + remS + 's';
     }
 
     function escapeAttr(value) {
@@ -304,77 +325,69 @@
         .replace(/>/g, '&gt;');
     }
 
-    async function loadSyncOps() {
+    async function loadBugReports() {
       const { data, error } = await sb
-        .from('sync_operations')
+        .from('bug_reports')
         .select('*')
-        .order('started_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(100);
       if (error) throw error;
-      syncOps = data || [];
+      bugReports = data || [];
     }
 
-    async function triggerSync(source) {
-      if (syncRunningSource) return;
-      syncRunningSource = source;
-      syncNotice = '';
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) { syncRunningSource = null; renderPage(); return; }
-
+    async function fileBugReport(title, description, source) {
+      if (filingBug) return;
+      filingBug = true;
+      fileNotice = '';
       renderPage();
 
       try {
-        const endpoint = source === 'substack'
-          ? SUPABASE_URL + '/functions/v1/sync-substack?force=true'
-          : SUPABASE_URL + '/functions/v1/sync-youtube?force=true';
-        const resp = await fetch(endpoint, {
+        const { data: { session } } = await sb.auth.getSession();
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/manage-content', {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + session.access_token },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (session ? session.access_token : ''),
+          },
+          body: JSON.stringify({
+            action: 'file-bug-report',
+            title,
+            description,
+            source,
+          }),
         });
         const result = await resp.json();
-        if (!resp.ok) throw new Error(result.error || 'Sync failed');
+        if (!resp.ok) throw new Error(result.error || 'Failed to file bug report');
 
-        const created = (result.created || []).length;
-        const updated = (result.updated || []).length;
-        syncNotice = source + ': ' + created + ' created, ' + updated + ' updated';
+        fileNotice = 'Bug report filed: ' + result.bug_report.id;
+        document.getElementById('bugTitle').value = '';
+        document.getElementById('bugDescription').value = '';
+        await loadBugReports();
       } catch (err) {
-        syncNotice = 'Sync error: ' + err.message;
+        fileNotice = 'Error: ' + err.message;
         console.error(err);
       } finally {
-        syncRunningSource = null;
-        await loadSyncOps();
+        filingBug = false;
         renderPage();
-        setTimeout(() => { syncNotice = ''; renderPage(); }, 6000);
+        setTimeout(() => { fileNotice = ''; renderPage(); }, 6000);
       }
     }
 
-    function getSortValue(op, col) {
+    function getSortValue(br, col) {
       switch (col) {
-        case 'source': return op.source || '';
-        case 'status': return op.status || '';
-        case 'started_at': return op.started_at || '';
-        case 'duration': {
-          const started = op.started_at ? new Date(op.started_at).getTime() : 0;
-          const completed = op.completed_at ? new Date(op.completed_at).getTime() : 0;
-          return completed > started ? (completed - started) : 0;
-        }
-        case 'items_checked': return op.items_checked || 0;
-        case 'items_created': return op.items_created || 0;
-        case 'items_updated': return op.items_updated || 0;
+        case 'title': return br.title || '';
+        case 'status': return br.status || '';
+        case 'source': return br.source || '';
+        case 'created_at': return br.created_at || '';
         default: return '';
       }
     }
 
-    function sortOps(ops) {
-      return ops.slice().sort((a, b) => {
+    function sortBugs(list) {
+      return list.slice().sort((a, b) => {
         const va = getSortValue(a, sortColumn);
         const vb = getSortValue(b, sortColumn);
-        let cmp = 0;
-        if (typeof va === 'number' && typeof vb === 'number') {
-          cmp = va - vb;
-        } else {
-          cmp = String(va).localeCompare(String(vb));
-        }
+        let cmp = String(va).localeCompare(String(vb));
         return sortDirection === 'asc' ? cmp : -cmp;
       });
     }
@@ -389,11 +402,11 @@
       renderPage();
     }
 
-    function toggleError(id) {
-      if (expandedErrors.has(id)) {
-        expandedErrors.delete(id);
+    function toggleDesc(id) {
+      if (expandedDesc.has(id)) {
+        expandedDesc.delete(id);
       } else {
-        expandedErrors.add(id);
+        expandedDesc.add(id);
       }
       renderPage();
     }
@@ -411,20 +424,16 @@
         return;
       }
 
-      let filtered = syncOps;
-      if (filterSource !== 'all') {
-        filtered = filtered.filter(op => op.source === filterSource);
-      }
+      let filtered = bugReports;
       if (filterStatus !== 'all') {
-        filtered = filtered.filter(op => op.status === filterStatus);
+        filtered = filtered.filter(br => br.status === filterStatus);
       }
-      filtered = sortOps(filtered);
+      filtered = sortBugs(filtered);
 
-      const totalRuns = syncOps.length;
-      const successRuns = syncOps.filter(op => op.status === 'success').length;
-      const errorRuns = syncOps.filter(op => op.status === 'error').length;
-      const lastSuccess = syncOps.find(op => op.status === 'success');
-      const lastSuccessTime = lastSuccess ? formatTime(lastSuccess.completed_at) : 'Never';
+      const total = bugReports.length;
+      const openCount = bugReports.filter(br => br.status === 'open').length;
+      const investigatingCount = bugReports.filter(br => br.status === 'investigating').length;
+      const fixedCount = bugReports.filter(br => br.status === 'fixed').length;
 
       let h = `
         <header>
@@ -438,86 +447,89 @@
             ${renderThemeControl()}
           </div>
         </header>
-        ${syncNotice ? '<div style="background:var(--success-bg);border:1px solid var(--success-border);color:var(--success-text);padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9em;">' + escapeAttr(syncNotice) + '</div>' : ''}
+        ${fileNotice ? '<div style="background:var(--success-bg);border:1px solid var(--success-border);color:var(--success-text);padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:0.9em;">' + escapeAttr(fileNotice) + '</div>' : ''}
 
         <div class="stats-row">
           <div class="stat-card">
-            <div class="num">${totalRuns}</div>
-            <div class="label">Total Runs</div>
+            <div class="num">${total}</div>
+            <div class="label">Total</div>
           </div>
           <div class="stat-card">
-            <div class="num">${successRuns}</div>
-            <div class="label">Successful</div>
+            <div class="num">${openCount}</div>
+            <div class="label">Open</div>
           </div>
           <div class="stat-card">
-            <div class="num">${errorRuns}</div>
-            <div class="label">Errors</div>
+            <div class="num">${investigatingCount}</div>
+            <div class="label">Investigating</div>
           </div>
           <div class="stat-card">
-            <div class="num">${lastSuccessTime}</div>
-            <div class="label" style="font-size:0.75em">Last Success</div>
+            <div class="num">${fixedCount}</div>
+            <div class="label">Fixed</div>
           </div>
         </div>
 
+        <div class="form-card">
+          <h3 style="font-size:1.1em;font-weight:600;color:var(--text-title);margin-bottom:16px;">File a Bug Report</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bugTitle">Title</label>
+              <input type="text" id="bugTitle" placeholder="Short summary of the bug">
+            </div>
+            <div class="form-group">
+              <label for="bugSource">Source</label>
+              <select id="bugSource">
+                <option value="admin-dashboard">Admin Dashboard</option>
+                <option value="cli">CLI</option>
+                <option value="edge-function">Edge Function</option>
+                <option value="worker">Cloudflare Worker</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="bugDescription">Description</label>
+            <textarea id="bugDescription" placeholder="Describe the bug in detail — what happened, what you expected, steps to reproduce..."></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="submitBug()" ${filingBug ? 'disabled' : ''}>${filingBug ? 'Filing...' : 'File Bug Report'}</button>
+        </div>
+
         <div class="filter-bar">
-          <select onchange="filterSource=this.value;renderPage()">
-            <option value="all"${filterSource === 'all' ? ' selected' : ''}>All Sources</option>
-            <option value="substack"${filterSource === 'substack' ? ' selected' : ''}>Substack</option>
-            <option value="youtube"${filterSource === 'youtube' ? ' selected' : ''}>YouTube</option>
-            <option value="embed"${filterSource === 'embed' ? ' selected' : ''}>Embed</option>
-            <option value="chunk"${filterSource === 'chunk' ? ' selected' : ''}>Chunk</option>
-          </select>
           <select onchange="filterStatus=this.value;renderPage()">
             <option value="all"${filterStatus === 'all' ? ' selected' : ''}>All Statuses</option>
-            <option value="success"${filterStatus === 'success' ? ' selected' : ''}>Success</option>
-            <option value="error"${filterStatus === 'error' ? ' selected' : ''}>Error</option>
-            <option value="running"${filterStatus === 'running' ? ' selected' : ''}>Running</option>
+            <option value="open"${filterStatus === 'open' ? ' selected' : ''}>Open</option>
+            <option value="investigating"${filterStatus === 'investigating' ? ' selected' : ''}>Investigating</option>
+            <option value="fixed"${filterStatus === 'fixed' ? ' selected' : ''}>Fixed</option>
+            <option value="wontfix"${filterStatus === 'wontfix' ? ' selected' : ''}>Wontfix</option>
           </select>
-          <button class="btn btn-sm btn-primary" onclick="triggerSync('substack')" ${syncRunningSource === 'substack' ? 'disabled' : ''}>${syncRunningSource === 'substack' ? 'Syncing...' : 'Sync Substack'}</button>
-          <button class="btn btn-sm btn-primary" onclick="triggerSync('youtube')" ${syncRunningSource === 'youtube' ? 'disabled' : ''}>${syncRunningSource === 'youtube' ? 'Syncing...' : 'Sync YouTube'}</button>
         </div>
       `;
 
       if (filtered.length === 0) {
-        h += '<div class="empty-state">No sync operations recorded yet.</div>';
+        h += '<div class="empty-state">No bug reports yet. File one above!</div>';
       } else {
-        h += '<table class="sync-table">';
+        h += '<table class="bug-table">';
         h += '<thead><tr>' +
-          renderSortHeader('Source', 'source', 'col-source') +
           renderSortHeader('Status', 'status', 'col-status') +
-          renderSortHeader('Started', 'started_at', 'col-time') +
-          renderSortHeader('Duration', 'duration', 'col-duration') +
-          renderSortHeader('Checked', 'items_checked', 'col-count') +
-          renderSortHeader('Created', 'items_created', 'col-count') +
-          renderSortHeader('Updated', 'items_updated', 'col-count') +
-          '<th class="col-action">Error</th>' +
+          renderSortHeader('Title', 'title', 'col-title') +
+          renderSortHeader('Source', 'source', 'col-source') +
+          renderSortHeader('Filed', 'created_at', 'col-time') +
+          '<th>Description</th>' +
           '</tr></thead>';
         h += '<tbody>';
 
-        for (const op of filtered) {
-          const startedAt = new Date(op.started_at);
-          const completedAt = op.completed_at ? new Date(op.completed_at) : null;
-          const durationMs = completedAt ? (completedAt.getTime() - startedAt.getTime()) : null;
-
-          const statusClass = op.status === 'success' ? 'status-success' : op.status === 'error' ? 'status-error' : 'status-running';
-          const statusLabel = op.status === 'success' ? 'Success' : op.status === 'error' ? 'Error' : 'Running';
-          const hasError = !!op.error_message;
-          const isExpanded = expandedErrors.has(op.id);
+        for (const br of filtered) {
+          const statusClass = 'status-' + br.status;
+          const isExpanded = expandedDesc.has(br.id);
 
           h += '<tr>';
-          h += '<td class="col-source"><span class="source-icon">' + escapeAttr(op.source) + '</span>' + (op.force ? '<span class="force-badge">force</span>' : '') + '</td>';
-          h += '<td class="col-status"><span class="status-badge ' + statusClass + '">' + statusLabel + '</span></td>';
-          h += '<td class="col-time">' + formatTime(op.started_at) + '</td>';
-          h += '<td class="col-duration">' + formatDuration(durationMs) + '</td>';
-          h += '<td class="col-count">' + (op.items_checked ?? '-') + '</td>';
-          h += '<td class="col-count">' + (op.items_created ?? '-') + '</td>';
-          h += '<td class="col-count">' + (op.items_updated ?? '-') + '</td>';
-          h += '<td class="col-action">';
-          if (hasError) {
-            h += '<div class="error-preview' + (isExpanded ? ' expanded' : '') + '">' + escapeAttr(op.error_message) + '</div>';
-            h += '<span class="expand-btn" onclick="toggleError(' + op.id + ')">' + (isExpanded ? 'less' : 'more') + '</span>';
-          } else {
-            h += '-';
+          h += '<td class="col-status"><span class="status-badge ' + statusClass + '">' + escapeAttr(br.status) + '</span></td>';
+          h += '<td class="col-title"><strong>' + escapeAttr(br.title) + '</strong></td>';
+          h += '<td class="col-source"><span style="text-transform:capitalize;">' + escapeAttr(br.source.replace(/-/g, ' ')) + '</span></td>';
+          h += '<td class="col-time">' + formatTime(br.created_at) + '</td>';
+          h += '<td>';
+          h += '<div class="desc-preview' + (isExpanded ? ' expanded' : '') + '">' + escapeAttr(br.description) + '</div>';
+          if (br.description && br.description.length > 60) {
+            h += '<span class="expand-btn" onclick="toggleDesc(\'' + br.id + '\')">' + (isExpanded ? 'less' : 'more') + '</span>';
           }
           h += '</td>';
           h += '</tr>';
@@ -527,6 +539,15 @@
       }
 
       app.innerHTML = h;
+    }
+
+    function submitBug() {
+      const title = document.getElementById('bugTitle').value.trim();
+      const description = document.getElementById('bugDescription').value.trim();
+      const source = document.getElementById('bugSource').value;
+      if (!title) { alert('Title is required'); return; }
+      if (!description) { alert('Description is required'); return; }
+      fileBugReport(title, description, source);
     }
 
     async function signOut() {
@@ -542,7 +563,7 @@
           const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
           if (personErr) throw personErr;
           currentPerson = person;
-          await loadSyncOps();
+          await loadBugReports();
           renderPage();
         } else {
           window.location.href = './index.html';
@@ -552,7 +573,7 @@
           if (event === 'SIGNED_IN' && session) {
             const { data: person } = await sb.rpc('get_or_create_person');
             currentPerson = person;
-            await loadSyncOps();
+            await loadBugReports();
             renderPage();
           } else if (event === 'SIGNED_OUT') {
             currentPerson = null;
@@ -560,7 +581,7 @@
           }
         });
       } catch (err) {
-        app.innerHTML = '<div class="error-box" style="background:var(--error-bg);border:1px solid var(--error-border);color:var(--error-text);padding:16px;border-radius:8px;">Error loading sync operations: <code>' + err.message + '</code></div>';
+        app.innerHTML = '<div class="error-box" style="background:var(--error-bg);border:1px solid var(--error-border);color:var(--error-text);padding:16px;border-radius:8px;">Error: <code>' + err.message + '</code></div>';
         console.error(err);
       }
     }

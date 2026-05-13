@@ -474,6 +474,72 @@ async function handleListAuthors(): Promise<Response> {
   });
 }
 
+async function handleFileBugReport(params: {
+  title: string;
+  description: string;
+  source: string;
+  createdBy?: string;
+}): Promise<Response> {
+  const { title, description, source, createdBy } = params;
+
+  if (!title || !title.trim()) {
+    return jsonResponse({ error: "title is required" }, 400);
+  }
+  if (!description || !description.trim()) {
+    return jsonResponse({ error: "description is required" }, 400);
+  }
+
+  const { data, error } = await supabase
+    .from("bug_reports")
+    .insert({
+      title: title.trim(),
+      description: description.trim(),
+      source: source || "admin-dashboard",
+      created_by: createdBy || null,
+    })
+    .select("id, title, description, source, status, created_at, created_by")
+    .single();
+
+  if (error) {
+    console.error("Error filing bug report:", error);
+    return jsonResponse({ error: "Failed to file bug report" }, 500);
+  }
+
+  return jsonResponse({
+    bug_report: data,
+    message: "Bug report filed successfully",
+  }, 201);
+}
+
+async function handleListBugReports(params: {
+  status?: string;
+  limit?: number;
+}): Promise<Response> {
+  const { status, limit = 100 } = params;
+
+  let query = supabase
+    .from("bug_reports")
+    .select("id, title, description, source, status, created_at, created_by, yesod_note_id, commit_hash")
+    .order("created_at", { ascending: false })
+    .limit(Math.min(limit, 500));
+
+  if (status && status !== "all") {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Error listing bug reports:", error);
+    return jsonResponse({ error: "Failed to list bug reports" }, 500);
+  }
+
+  return jsonResponse({
+    bug_reports: data || [],
+    total: (data || []).length,
+  });
+}
+
 async function handleDbStats(): Promise<Response> {
   const { data: linksData, error: linksError } = await supabase
     .from("links")
@@ -529,6 +595,11 @@ Deno.serve(async (req) => {
     let tagSlug = "";
     let url = "";
     let transcript = "";
+    let bugTitle = "";
+    let bugDescription = "";
+    let bugSource = "";
+    let bugStatus = "";
+    let bugLimit = 100;
 
     if (req.method === "POST") {
       const body = await req.json();
@@ -539,11 +610,16 @@ Deno.serve(async (req) => {
       tagSlug = body.slug || "";
       url = body.url || "";
       transcript = body.transcript || "";
+      bugTitle = body.title || "";
+      bugDescription = body.description || "";
+      bugSource = body.source || "";
     } else if (req.method === "GET") {
       const urlObj = new URL(req.url);
       action = urlObj.searchParams.get("action") || "list-tags";
       apiKey = apiKey || urlObj.searchParams.get("api_key") || "";
       article = urlObj.searchParams.get("article") || "";
+      bugStatus = urlObj.searchParams.get("status") || "";
+      bugLimit = parseInt(urlObj.searchParams.get("limit") || "100", 10);
     } else {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
@@ -565,9 +641,18 @@ Deno.serve(async (req) => {
         return await handleListAuthors();
       case "stats":
         return await handleDbStats();
+      case "file-bug-report":
+        return await handleFileBugReport({
+          title: bugTitle,
+          description: bugDescription,
+          source: bugSource,
+          createdBy: "",
+        });
+      case "list-bug-reports":
+        return await handleListBugReports({ status: bugStatus, limit: bugLimit });
       default:
         return jsonResponse(
-          { error: `Unknown action '${action}'. Valid actions: list-tags, create-tag, delete-tag, tag-article, untag-article, update-transcript, list-authors, stats` },
+          { error: `Unknown action '${action}'. Valid actions: list-tags, create-tag, delete-tag, tag-article, untag-article, update-transcript, list-authors, stats, file-bug-report, list-bug-reports` },
           400,
         );
     }
