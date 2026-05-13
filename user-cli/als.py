@@ -580,6 +580,13 @@ def set_author_name(name: str):
     default=False,
     help="Keep variant in active list indefinitely (no auto-archive).",
 )
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
 def shorten(
     link_id_or_url: str,
     source: str | None,
@@ -587,6 +594,7 @@ def shorten(
     note: str | None,
     expires: str | None,
     no_expires: bool,
+    output_json: bool,
 ):
     """Get your personalised tracking link(s) for any URL or link ID.
 
@@ -601,9 +609,10 @@ def shorten(
       als shorten lnk-abc --note "replying to @mike on twitter"
       als shorten https://example.com --note "linkedin post" --expires 90d
       als shorten lnk-abc --note "pinned in discord" --no-expires
+      als shorten https://example.com --json
     """
     if note is not None:
-        _shorten_with_note(link_id_or_url, note, expires, no_expires)
+        _shorten_with_note(link_id_or_url, note, expires, no_expires, output_json)
         return
 
     # Original behaviour — call shorten-url edge function
@@ -628,6 +637,11 @@ def shorten(
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
     links = data.get("links", [])
     person = data.get("person", {})
     slug = data.get("slug", "")
@@ -675,7 +689,7 @@ def shorten(
 
 
 def _shorten_with_note(
-    link_id_or_url: str, note: str, expires: str | None, no_expires: bool
+    link_id_or_url: str, note: str, expires: str | None, no_expires: bool, output_json: bool = False
 ):
     """Create a tracking variant using server-side AI-inferred UTM from --note."""
     if expires and not re.match(r"^\d+d$", expires):
@@ -684,7 +698,8 @@ def _shorten_with_note(
         )
         sys.exit(1)
 
-    click.echo("Creating variant with server-side UTM inference...")
+    if not output_json:
+        click.echo("Creating variant with server-side UTM inference...")
 
     body: dict = {
         "action": "shorten_with_note",
@@ -707,6 +722,10 @@ def _shorten_with_note(
             click.echo(f"{data.get('error', resp.text)}", err=True)
         sys.exit(1)
 
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
     link = data.get("link", {})
     utm = data.get("utm", {})
     variant = data.get("variant", {})
@@ -727,7 +746,14 @@ def _shorten_with_note(
 
 @cli.command("pre-publish")
 @click.argument("slug_or_url")
-def pre_publish(slug_or_url: str):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def pre_publish(slug_or_url: str, output_json: bool):
     """Create tracking links for an unpublished Substack article.
 
     Accepts a Substack URL or just the article slug. Creates a link record
@@ -740,6 +766,7 @@ def pre_publish(slug_or_url: str):
     Examples:
       als pre-publish https://trilogyai.substack.com/p/my-upcoming-post
       als pre-publish my-upcoming-post
+      als pre-publish my-upcoming-post --json
     """
     # Validate input: if it looks like a URL, check it's a substack URL
     if slug_or_url.startswith("http://") or slug_or_url.startswith("https://"):
@@ -772,6 +799,11 @@ def pre_publish(slug_or_url: str):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
     slug = data.get("slug", "")
     existed = data.get("existed", False)
     caller_links = data.get("caller_links", [])
@@ -983,7 +1015,14 @@ def context_group():
     default=None,
     help="Expiry in days (e.g. 30d, 90d). Default: never.",
 )
-def context_create(label: str, expires: str | None):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def context_create(label: str, expires: str | None, output_json: bool):
     """Create a new link context.
 
     LABEL is a human-readable name (e.g. "AI First Show Apr 1 2026").
@@ -993,6 +1032,7 @@ def context_create(label: str, expires: str | None):
     Examples:
       als context create "AI First Show Apr 1 2026"
       als context create "Newsletter Issue 42" --expires 30d
+      als context create "My Video" --json
     """
     body: dict = {"action": "create", "label": label}
     if expires:
@@ -1008,7 +1048,13 @@ def context_create(label: str, expires: str | None):
         click.echo(f"Error: {resp.json().get('error', resp.text)}", err=True)
         sys.exit(1)
 
-    ctx = resp.json().get("context", {})
+    data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
+    ctx = data.get("context", {})
 
     click.echo(f"\n{click.style('Context created:', fg='green', bold=True)}")
     click.echo(f"  ID:      {ctx.get('id', '')}")
@@ -1027,7 +1073,14 @@ def context_create(label: str, expires: str | None):
     "--pinned", is_flag=True, default=False, help="Generate for all pinned links."
 )
 @click.option("--note", required=True, help="Description for AI UTM inference.")
-def context_generate(ctx_id: str, pinned: bool, note: str):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def context_generate(ctx_id: str, pinned: bool, note: str, output_json: bool):
     """Generate tracking variants for a context.
 
     Creates tracking variants for all pinned links (with --pinned) scoped
@@ -1037,6 +1090,7 @@ def context_generate(ctx_id: str, pinned: bool, note: str):
     \b
     Examples:
       als context generate ctx-abc --pinned --note "youtube video description"
+      als context generate ctx-abc --pinned --note "youtube video" --json
     """
     if not pinned:
         click.echo(
@@ -1045,7 +1099,8 @@ def context_generate(ctx_id: str, pinned: bool, note: str):
         )
         sys.exit(1)
 
-    click.echo("Generating tracking variants (server-side UTM inference)...")
+    if not output_json:
+        click.echo("Generating tracking variants (server-side UTM inference)...")
 
     resp = _api_request(
         "manage-contexts",
@@ -1060,6 +1115,10 @@ def context_generate(ctx_id: str, pinned: bool, note: str):
     if resp.status_code != 200:
         click.echo(f"Error: {data.get('error', resp.text)}", err=True)
         sys.exit(1)
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
 
     utm = data.get("utm", {})
     click.echo(
@@ -2379,7 +2438,14 @@ def custom_links(count: int, show_all: bool, output_json: bool):
     is_flag=True,
     help="Force re-sync of existing articles (updates metadata even if already imported).",
 )
-def sync_substack(force: bool):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def sync_substack(force: bool, output_json: bool):
     """Trigger a sync of the latest articles from the Trilogy Substack.
 
     Calls the sync-substack edge function to fetch the Substack RSS/sitemap
@@ -2390,6 +2456,7 @@ def sync_substack(force: bool):
 
         als sync-substack          # import any new articles
         als sync-substack --force  # re-sync and update existing article metadata
+        als sync-substack --json
     """
     api_key = _get_api_key()
 
@@ -2416,6 +2483,10 @@ def sync_substack(force: bool):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
 
     message = data.get("message", "")
     checked = data.get("checked", 0)
@@ -2453,7 +2524,14 @@ def sync_substack(force: bool):
     default=0,
     help="Limit the number of new videos to import (0 = no limit).",
 )
-def sync_youtube(force: bool, limit: int):
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output raw JSON instead of human-readable text.",
+)
+def sync_youtube(force: bool, limit: int, output_json: bool):
     """Trigger a sync of videos from the AI-First Show YouTube channel.
 
     Calls the sync-youtube edge function to fetch the channel's video list,
@@ -2493,6 +2571,10 @@ def sync_youtube(force: bool, limit: int):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
 
     message = data.get("message", "")
     checked = data.get("checked", 0)
@@ -3226,7 +3308,7 @@ def aifs(
          als aifs list --as 442587729172234252
     """
     if item:
-        _aifs_submit(item, comment, discord_user)
+        _aifs_submit(item, comment, discord_user, output_json)
         return
 
     if not url_or_action:
@@ -3247,10 +3329,10 @@ def aifs(
         return
 
     # Treat as a URL submission
-    _aifs_submit(url_or_action, comment, discord_user)
+    _aifs_submit(url_or_action, comment, discord_user, output_json)
 
 
-def _aifs_submit(url: str, comment: str, discord_user: str = ""):
+def _aifs_submit(url: str, comment: str, discord_user: str = "", output_json: bool = False):
     """Submit a URL as a candidate for the next AI First Show episode."""
     body: dict = {"action": "submit", "url": url}
     if comment:
@@ -3273,6 +3355,11 @@ def _aifs_submit(url: str, comment: str, discord_user: str = ""):
         sys.exit(1)
 
     data = resp.json()
+
+    if output_json:
+        click.echo(json.dumps(data, indent=2))
+        return
+
     status = data.get("status", "")
     short_id = data.get("short_id", "")
 
