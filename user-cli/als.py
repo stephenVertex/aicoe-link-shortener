@@ -191,8 +191,9 @@ def cli():
        My articles: als last --me 5
        Shorten URL: als shorten <url>
        AIFS:        als aifs <url>          # submit for AI First Show
-    Pre-publish: als pre-publish <slug-or-url>
-       Upgrade:     als upgrade
+     Pre-publish: als pre-publish <slug-or-url>
+        Upgrade:     als upgrade
+     Bug report:  als bug-report "title" --description "details"
 
     \b
     Workflow:
@@ -1822,6 +1823,68 @@ def authors():
         name = entry.get("name", "")
         count = entry.get("article_count", 0)
         click.echo(f"  {name}  ({count} article{'s' if count != 1 else ''})")
+    click.echo()
+
+
+@cli.command("bug-report")
+@click.argument("title")
+@click.option(
+    "--description",
+    required=True,
+    help="Detailed description of the bug.",
+)
+@click.option(
+    "--yesod-note-id",
+    default="",
+    help="Optional yesod note ID linked to this bug report.",
+)
+@click.option(
+    "--commit-hash",
+    default="",
+    help="Optional git commit hash related to this bug.",
+)
+def bug_report(title: str, description: str, yesod_note_id: str, commit_hash: str):
+    """File a bug report from the CLI.
+
+    Creates a bug report in the database so the team can track and fix it.
+    Requires a title and a detailed description.
+
+    \b
+    Examples:
+      als bug-report "search command crashes" --description "When I run als search with no args it throws an error"
+      als bug-report "stats output formatting" --description "The bar chart alignment is off for large numbers" --yesod-note-id ys-als-abc1
+    """
+    body: dict = {
+        "action": "create",
+        "title": title,
+        "description": description,
+    }
+    if yesod_note_id:
+        body["yesod_note_id"] = yesod_note_id
+    if commit_hash:
+        body["commit_hash"] = commit_hash
+
+    resp = _api_request("bug-report", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code == 400:
+        data = resp.json()
+        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    report = data.get("bug_report", {})
+
+    click.echo(f"\n{click.style('Bug report filed!', fg='green', bold=True)}")
+    click.echo(f"  ID:     {report.get('id', '')}")
+    click.echo(f"  Title:  {report.get('title', title)}")
+    click.echo(f"  Status: {report.get('status', 'open')}")
+    click.echo(f"  Date:   {report.get('created_at', '')[:10]}")
     click.echo()
 
 

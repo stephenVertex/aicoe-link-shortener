@@ -180,6 +180,25 @@ class TestPrePublish:
                     assert validate_tracking_url(url), f"Invalid tracking URL: {url!r}"
 
 
+class TestBugReport:
+    @pytest.fixture(autouse=True)
+    def _require_auth(self):
+        _skip_if_no_api_key()
+
+    def test_bug_report_succeeds(self):
+        """als bug-report should file a bug and return success."""
+        result = run_als([
+            "bug-report",
+            "smoke-test-bug",
+            "--description",
+            "Automated smoke test for bug-report command",
+        ])
+        assert result.returncode == 0, f"als bug-report failed: {result.stderr}"
+        output = result.stdout
+        assert "Bug report filed!" in output, f"Unexpected bug-report output: {output[:200]}"
+        assert "open" in output, "Expected status 'open' in bug-report output"
+
+
 class TestValidateTrackingUrl:
     def test_valid_url(self):
         assert validate_tracking_url("https://aicoe.fit/my-article-a1b2c3")
