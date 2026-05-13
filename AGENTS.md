@@ -246,3 +246,31 @@ Edge functions are **auto-deployed by CI** when changes land on `main`. Do NOT d
   - `sync-substack` + `sync-youtube` + `embed-articles` + `chunk-videos` → `content-sync`
 - pg_cron jobs updated to call `content-sync` with action parameter
 - CLI and MCP server updated to use consolidated endpoints
+
+## Changelog
+
+We maintain a public changelog so users and contributors can see what changed, why, and when.
+
+### Files
+
+- **`CHANGELOG.md`** (repo root) — Markdown changelog with full details on performance improvements, bug fixes, and feature requests. Includes benchmark results, commit hashes, yesod note IDs, and before/after metrics.
+- **`admin-site/changelog.html`** — Dashboard page mirroring `CHANGELOG.md` with matching theme support (Synthwave, Solarized, Light). Auto-deploys via Amplify on push to `main`.
+
+### What to document
+
+- **Bug fixes**: Root cause, fix approach, result/measurement, yesod note ID, commit hash
+- **Feature requests**: Request description, implementation approach, yesod note ID, commit hash
+- **Performance improvements**: Baseline latency, optimization applied, benchmark results after
+- **Infrastructure changes**: Wrangler upgrades, index additions, table schema changes
+
+### Workflow
+
+When you fix a bug or implement a feature tracked in yesod:
+
+1. Implement the change, commit, and push
+2. Update the yesod note status to `done` with `--commit <hash>`
+3. Append the entry to `CHANGELOG.md` under the appropriate section
+4. Mirror the entry in `admin-site/changelog.html` (copy the HTML card pattern)
+5. Commit both files with `docs:` prefix and push
+
+This keeps the changelog in sync with the code and gives future agents (and humans) a complete paper trail from yesod note → commit → changelog entry.
