@@ -1627,6 +1627,9 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool, tracking: b
             if batch_resp.status_code == 200:
                 tracking_data = batch_resp.json().get("results", {})
 
+    ids = [r.get("id", "") for r in results if r.get("id")]
+    short_id_map = _compute_short_ids(ids)
+
     for i, result in enumerate(results, 1):
         title = result.get("title") or result.get("slug") or ""
         article_author = result.get("author") or ""
@@ -1634,12 +1637,20 @@ def last(n: int, author: str | None, filter_me: bool, summary: bool, tracking: b
         published_at = result.get("published_at") or result.get("created_at", "")
         destination_url = result.get("url", "")
         date_str = published_at[:10] if published_at else ""
+        full_id = result.get("id", "")
+        short_id = short_id_map.get(full_id, full_id[:10]) if full_id else ""
 
         click.echo(f"  {i}. {click.style(title, bold=True)}")
+
+        meta_parts: list[str] = []
+        if short_id:
+            meta_parts.append(f"id: {short_id}")
         if article_author:
-            click.echo(f"     by {article_author}")
+            meta_parts.append(f"by: {article_author}")
         if date_str:
-            click.echo(f"     {date_str}")
+            meta_parts.append(f"date: {date_str}")
+        if meta_parts:
+            click.echo(f"     {', '.join(meta_parts)}")
         if destination_url:
             click.echo(f"     URL:  {destination_url}")
 
