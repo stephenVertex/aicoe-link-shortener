@@ -111,27 +111,23 @@ async function handleArticleStats(params: {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  // Parallelize all independent queries to minimize round-trips
+  // Use precomputed link_stats for counters; fetch time-series + allPeople in parallel
   const [
-    { count: totalClicks, error: clickCountError },
+    { data: stats, error: statsError },
     { data: dailyClicks, error: dailyError },
-    { data: variantClicks, error: variantClicksError },
     { count: variantCount, error: variantCountError },
     { data: allPeople, error: peopleError },
   ] = await Promise.all([
     supabase
-      .from("click_log")
-      .select("id", { count: "exact", head: true })
-      .eq("link_id", link.id),
+      .from("link_stats")
+      .select("total_clicks, by_variant, by_source, by_person, updated_at")
+      .eq("link_id", link.id)
+      .maybeSingle(),
     supabase.rpc("get_click_analytics", {
       p_interval: "day",
       p_link_id: link.id,
       p_start_date: startDate.toISOString(),
     }),
-    supabase
-      .from("click_log")
-      .select("variant_id")
-      .eq("link_id", link.id),
     supabase
       .from("tracking_variants")
       .select("id", { count: "exact", head: true })
@@ -141,90 +137,37 @@ async function handleArticleStats(params: {
       : Promise.resolve({ data: null, error: null }),
   ]);
 
-  if (clickCountError) throw clickCountError;
+  if (statsError) throw statsError;
   if (dailyError) throw dailyError;
-  if (variantClicksError) throw variantClicksError;
   if (variantCountError) throw variantCountError;
   if (everybody && peopleError) throw peopleError;
 
-  // Count variants in JS (same logic as before, but now the rows were fetched in parallel)
-  const variantCounts: Record<string, number> = {};
-  for (const row of variantClicks || []) {
-    const vid = row.variant_id || "__direct__";
-    variantCounts[vid] = (variantCounts[vid] || 0) + 1;
-  }
+  const byVariant = (stats?.by_variant || []) as Array<{
+    label: string;
+    suffix?: string;
+    utm_source?: string;
+    ref?: string;
+    clicks: number;
+  }>;
 
-  const variantIds = Object.keys(variantCounts).filter(
-    (v) => v !== "__direct__",
-  );
-  let variantDetails: Record<
-    string,
-    { suffix: string; utm_source: string; ref: string }
-  > = {};
-  if (variantIds.length > 0) {
-    const { data: variants } = await supabase
-      .from("tracking_variants")
-      .select("id, suffix, utm_source, ref")
-      .in("id", variantIds);
+  const bySource = (stats?.by_source || []) as Array<{
+    source: string;
+    clicks: number;
+  }>;
 
-    for (const v of variants || []) {
-      variantDetails[v.id] = {
-        suffix: v.suffix,
-        utm_source: v.utm_source || "",
-        ref: v.ref || "",
-      };
-    }
-  }
-
-  const byVariant = Object.entries(variantCounts)
-    .map(([vid, count]) => {
-      if (vid === "__direct__") {
-        return { label: "direct (no variant)", clicks: count };
-      }
-      const detail = variantDetails[vid];
-      if (detail) {
-        return {
-          label: detail.utm_source
-            ? `${detail.utm_source} (ref=${detail.ref})`
-            : detail.suffix,
-          suffix: detail.suffix,
-          utm_source: detail.utm_source,
-          ref: detail.ref,
-          clicks: count,
-        };
-      }
-      return { label: vid, clicks: count };
-    })
-    .sort((a, b) => b.clicks - a.clicks);
-
-  const sourceCounts: Record<string, number> = {};
-  for (const [vid, count] of Object.entries(variantCounts)) {
-    let source = "direct";
-    if (vid !== "__direct__" && variantDetails[vid]?.utm_source) {
-      source = variantDetails[vid].utm_source;
-    }
-    sourceCounts[source] = (sourceCounts[source] || 0) + count;
-  }
-
-  const bySource = Object.entries(sourceCounts)
-    .map(([source, clicks]) => ({ source, clicks }))
-    .sort((a, b) => b.clicks - a.clicks);
-
+  // by_person from link_stats only includes people with clicks.
+  // When everybody=true, merge with allPeople to include 0-click people.
   let byPerson: { ref: string; name: string; clicks: number }[] = [];
   if (everybody && allPeople) {
-    const refClicks: Record<string, number> = {};
-    for (const [vid, count] of Object.entries(variantCounts)) {
-      if (vid !== "__direct__" && variantDetails[vid]?.ref) {
-        const ref = variantDetails[vid].ref;
-        refClicks[ref] = (refClicks[ref] || 0) + count;
-      }
+    const clickMap: Record<string, number> = {};
+    for (const p of (stats?.by_person || []) as Array<{ ref: string; name: string; clicks: number }>) {
+      clickMap[p.ref] = p.clicks;
     }
-
     byPerson = (allPeople || [])
       .map((p) => ({
         ref: p.slug,
         name: p.name || p.slug,
-        clicks: refClicks[p.slug] || 0,
+        clicks: clickMap[p.slug] || 0,
       }))
       .sort((a, b) => b.clicks - a.clicks);
   }
@@ -240,7 +183,7 @@ async function handleArticleStats(params: {
       created_at: link.created_at,
       last_synced_at: link.last_synced_at,
     },
-    total_clicks: totalClicks ?? 0,
+    total_clicks: stats?.total_clicks ?? 0,
     tracking_variants: variantCount ?? 0,
     daily_clicks: (dailyClicks || []).map(
       (row: { period: string; clicks: number }) => ({
@@ -406,11 +349,18 @@ async function handleLinkAnalytics(params: {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
 
-  const [{ count: totalClicks, error: totalClicksError }, { data: dailyClicks, error: dailyError }, { data: weeklyClicks, error: weeklyError }, { data: clickRows, error: clickRowsError }, { data: comparisonLinks, error: comparisonError }] = await Promise.all([
+  // Use precomputed link_stats for counters; fetch time-series + comparison in parallel
+  const [
+    { data: stats, error: statsError },
+    { data: dailyClicks, error: dailyError },
+    { data: weeklyClicks, error: weeklyError },
+    { data: comparisonLinks, error: comparisonError },
+  ] = await Promise.all([
     supabase
-      .from("click_log")
-      .select("id", { count: "exact", head: true })
-      .eq("link_id", link.id),
+      .from("link_stats")
+      .select("total_clicks, by_referrer, by_country")
+      .eq("link_id", link.id)
+      .maybeSingle(),
     supabase.rpc("get_click_analytics", {
       p_interval: "day",
       p_link_id: link.id,
@@ -422,11 +372,6 @@ async function handleLinkAnalytics(params: {
       p_start_date: startDate.toISOString(),
     }),
     supabase
-      .from("click_log")
-      .select("referer, clicked_at, country_code")
-      .eq("link_id", link.id)
-      .gte("clicked_at", startDate.toISOString()),
-    supabase
       .from("links")
       .select("id, slug, title, destination_url, created_at")
       .neq("id", link.id)
@@ -434,39 +379,20 @@ async function handleLinkAnalytics(params: {
       .limit(10),
   ]);
 
-  if (totalClicksError) throw totalClicksError;
+  if (statsError) throw statsError;
   if (dailyError) throw dailyError;
   if (weeklyError) throw weeklyError;
-  if (clickRowsError) throw clickRowsError;
   if (comparisonError) throw comparisonError;
 
-  const referrerCounts: Record<string, number> = {};
-  for (const row of clickRows || []) {
-    const rawReferer = row.referer?.trim();
-    let key = "direct";
-    if (rawReferer) {
-      try {
-        key = new URL(rawReferer).hostname || rawReferer;
-      } catch {
-        key = rawReferer;
-      }
-    }
-    referrerCounts[key] = (referrerCounts[key] || 0) + 1;
-  }
+  const referrers = (stats?.by_referrer || []) as Array<{
+    referrer: string;
+    clicks: number;
+  }>;
 
-  const referrers = Object.entries(referrerCounts)
-    .map(([referrer, clicks]) => ({ referrer, clicks }))
-    .sort((a, b) => b.clicks - a.clicks);
-
-  const countryCounts: Record<string, number> = {};
-  for (const row of clickRows || []) {
-    const cc = row.country_code?.trim() || "unknown";
-    countryCounts[cc] = (countryCounts[cc] || 0) + 1;
-  }
-
-  const byCountry = Object.entries(countryCounts)
-    .map(([country, clicks]) => ({ country, clicks }))
-    .sort((a, b) => b.clicks - a.clicks);
+  const byCountry = (stats?.by_country || []) as Array<{
+    country: string;
+    clicks: number;
+  }>;
 
   return jsonResponse({
     link: {
@@ -480,7 +406,7 @@ async function handleLinkAnalytics(params: {
       last_synced_at: link.last_synced_at,
       short_url: `https://${DOMAIN}/${link.slug}`,
     },
-    total_clicks: totalClicks ?? 0,
+    total_clicks: stats?.total_clicks ?? 0,
     days,
     daily_clicks: (dailyClicks || []).map((row: { period: string; clicks: number }) => ({
       date: row.period.slice(0, 10),
