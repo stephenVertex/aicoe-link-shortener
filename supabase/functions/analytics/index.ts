@@ -110,11 +110,12 @@ async function handleArticleStats(params: {
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
+  const startStr = startDate.toISOString().slice(0, 10);
 
-  // Use precomputed link_stats for counters; fetch time-series + allPeople in parallel
+  // Use precomputed link_stats for counters and link_daily_clicks for time-series
   const [
     { data: stats, error: statsError },
-    { data: dailyClicks, error: dailyError },
+    { data: dailyRows, error: dailyError },
     { count: variantCount, error: variantCountError },
     { data: allPeople, error: peopleError },
   ] = await Promise.all([
@@ -123,11 +124,12 @@ async function handleArticleStats(params: {
       .select("total_clicks, by_variant, by_source, by_person, updated_at")
       .eq("link_id", link.id)
       .maybeSingle(),
-    supabase.rpc("get_click_analytics", {
-      p_interval: "day",
-      p_link_id: link.id,
-      p_start_date: startDate.toISOString(),
-    }),
+    supabase
+      .from("link_daily_clicks")
+      .select("date, clicks")
+      .eq("link_id", link.id)
+      .gte("date", startStr)
+      .order("date", { ascending: true }),
     supabase
       .from("tracking_variants")
       .select("id", { count: "exact", head: true })
@@ -141,6 +143,13 @@ async function handleArticleStats(params: {
   if (dailyError) throw dailyError;
   if (variantCountError) throw variantCountError;
   if (everybody && peopleError) throw peopleError;
+
+  const dailyClicks = (dailyRows || []).map(
+    (row: { date: string; clicks: number }) => ({
+      date: row.date.slice(0, 10),
+      clicks: row.clicks,
+    }),
+  );
 
   const byVariant = (stats?.by_variant || []) as Array<{
     label: string;
@@ -185,12 +194,7 @@ async function handleArticleStats(params: {
     },
     total_clicks: stats?.total_clicks ?? 0,
     tracking_variants: variantCount ?? 0,
-    daily_clicks: (dailyClicks || []).map(
-      (row: { period: string; clicks: number }) => ({
-        date: row.period.slice(0, 10),
-        clicks: row.clicks,
-      }),
-    ),
+    daily_clicks: dailyClicks,
     by_variant: byVariant,
     by_source: bySource,
     days,
@@ -348,12 +352,12 @@ async function handleLinkAnalytics(params: {
 
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
+  const startStr = startDate.toISOString().slice(0, 10);
 
-  // Use precomputed link_stats for counters; fetch time-series + comparison in parallel
+  // Use precomputed link_stats for counters and link_daily_clicks for time-series
   const [
     { data: stats, error: statsError },
-    { data: dailyClicks, error: dailyError },
-    { data: weeklyClicks, error: weeklyError },
+    { data: dailyRows, error: dailyError },
     { data: comparisonLinks, error: comparisonError },
   ] = await Promise.all([
     supabase
@@ -361,16 +365,12 @@ async function handleLinkAnalytics(params: {
       .select("total_clicks, by_referrer, by_country")
       .eq("link_id", link.id)
       .maybeSingle(),
-    supabase.rpc("get_click_analytics", {
-      p_interval: "day",
-      p_link_id: link.id,
-      p_start_date: startDate.toISOString(),
-    }),
-    supabase.rpc("get_click_analytics", {
-      p_interval: "week",
-      p_link_id: link.id,
-      p_start_date: startDate.toISOString(),
-    }),
+    supabase
+      .from("link_daily_clicks")
+      .select("date, clicks")
+      .eq("link_id", link.id)
+      .gte("date", startStr)
+      .order("date", { ascending: true }),
     supabase
       .from("links")
       .select("id, slug, title, destination_url, created_at")
@@ -381,8 +381,28 @@ async function handleLinkAnalytics(params: {
 
   if (statsError) throw statsError;
   if (dailyError) throw dailyError;
-  if (weeklyError) throw weeklyError;
   if (comparisonError) throw comparisonError;
+
+  const dailyClicks = (dailyRows || []).map(
+    (row: { date: string; clicks: number }) => ({
+      date: row.date.slice(0, 10),
+      clicks: row.clicks,
+    }),
+  );
+
+  // Compute weekly rollups from daily rows in JS
+  const weeklyMap = new Map<string, number>();
+  for (const d of dailyClicks) {
+    const date = new Date(d.date);
+    const dayOfWeek = date.getDay(); // 0 = Sunday
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - dayOfWeek);
+    const key = weekStart.toISOString().slice(0, 10);
+    weeklyMap.set(key, (weeklyMap.get(key) || 0) + d.clicks);
+  }
+  const weeklyClicks = Array.from(weeklyMap.entries())
+    .map(([week_start, clicks]) => ({ week_start, clicks }))
+    .sort((a, b) => a.week_start.localeCompare(b.week_start));
 
   const referrers = (stats?.by_referrer || []) as Array<{
     referrer: string;
@@ -408,14 +428,8 @@ async function handleLinkAnalytics(params: {
     },
     total_clicks: stats?.total_clicks ?? 0,
     days,
-    daily_clicks: (dailyClicks || []).map((row: { period: string; clicks: number }) => ({
-      date: row.period.slice(0, 10),
-      clicks: row.clicks,
-    })),
-    weekly_clicks: (weeklyClicks || []).map((row: { period: string; clicks: number }) => ({
-      week_start: row.period.slice(0, 10),
-      clicks: row.clicks,
-    })),
+    daily_clicks: dailyClicks,
+    weekly_clicks: weeklyClicks,
     referrers,
     by_country: byCountry,
     comparison_links: (comparisonLinks || []).map((other) => ({
