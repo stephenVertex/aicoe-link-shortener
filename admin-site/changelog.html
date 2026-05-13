@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>aicoe.fit - Changelog</title>
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --text: #333;
+      --text-muted: #666;
+      --text-faint: #888;
+      --text-title: #111;
+      --card-bg: white;
+      --card-shadow: rgba(0,0,0,0.08);
+      --border: #e0e0e0;
+      --border-light: #e5e7eb;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --badge-bg: #dbeafe;
+      --badge-text: #1e40af;
+      --btn-secondary-bg: #e5e7eb;
+      --btn-secondary-text: #374151;
+      --btn-secondary-hover: #d1d5db;
+      --error-bg: #fef2f2;
+      --error-border: #fecaca;
+      --error-text: #991b1b;
+      --success-bg: #dcfce7;
+      --success-border: #86efac;
+      --success-text: #166534;
+      --warn-bg: #fef9c3;
+      --warn-border: #fde68a;
+      --warn-text: #92400e;
+      --stat-num: #2563eb;
+      --code-bg: #f3f4f6;
+      --code-text: #374151;
+    }
+    html[data-theme="synthwave-dark"] {
+      --bg: #1a1a2e;
+      --text: #e0e0e0;
+      --text-muted: #a0a0b8;
+      --text-faint: #707088;
+      --text-title: #ff6ec7;
+      --card-bg: #16213e;
+      --card-shadow: rgba(0,0,0,0.4);
+      --border: #2a2a4a;
+      --border-light: #252545;
+      --accent: #00d4ff;
+      --accent-hover: #33ddff;
+      --badge-bg: #1a1a3e;
+      --badge-text: #00d4ff;
+      --btn-secondary-bg: #252545;
+      --btn-secondary-text: #e0e0e0;
+      --btn-secondary-hover: #2a2a5a;
+      --error-bg: #2e1a1a;
+      --error-border: #6a3a3a;
+      --error-text: #ff6ec7;
+      --success-bg: #1a2e2a;
+      --success-border: #72f1b8;
+      --success-text: #72f1b8;
+      --warn-bg: #2e2a1a;
+      --warn-border: #6a5a2a;
+      --warn-text: #fbbf24;
+      --stat-num: #ff6ec7;
+      --code-bg: #1a1a3e;
+      --code-text: #00d4ff;
+    }
+    html[data-theme="solarized-dark"] {
+      --bg: #002b36;
+      --text: #93a1a1;
+      --text-muted: #839496;
+      --text-faint: #657b83;
+      --text-title: #b58900;
+      --card-bg: #073642;
+      --card-shadow: rgba(0,0,0,0.28);
+      --border: #0d4a59;
+      --border-light: #114b59;
+      --accent: #268bd2;
+      --accent-hover: #3aa0e8;
+      --badge-bg: #11333d;
+      --badge-text: #6cbeff;
+      --btn-secondary-bg: #11404d;
+      --btn-secondary-text: #93a1a1;
+      --btn-secondary-hover: #15505f;
+      --error-bg: #3a2323;
+      --error-border: #6d3f3f;
+      --error-text: #dc322f;
+      --success-bg: #123f40;
+      --success-border: #2aa198;
+      --success-text: #7ee5dd;
+      --warn-bg: #3a3223;
+      --warn-border: #6d5f3f;
+      --warn-text: #b58900;
+      --stat-num: #b58900;
+      --code-bg: #11333d;
+      --code-text: #6cbeff;
+    }
+    html[data-theme="solarized-light"] {
+      --bg: #fdf6e3;
+      --text: #586e75;
+      --text-muted: #657b83;
+      --text-faint: #93a1a1;
+      --text-title: #b58900;
+      --card-bg: #fffdf4;
+      --card-shadow: rgba(88,110,117,0.12);
+      --border: #eee8d5;
+      --border-light: #e6dfca;
+      --accent: #268bd2;
+      --accent-hover: #1f76b4;
+      --badge-bg: #e8f1f3;
+      --badge-text: #268bd2;
+      --btn-secondary-bg: #eee8d5;
+      --btn-secondary-text: #586e75;
+      --btn-secondary-hover: #e6dfca;
+      --error-bg: #fff1f0;
+      --error-border: #f3c7c2;
+      --error-text: #b8332f;
+      --success-bg: #e6f4ef;
+      --success-border: #9dd7c5;
+      --success-text: #20756d;
+      --warn-bg: #fef9c3;
+      --warn-border: #fde68a;
+      --warn-text: #92400e;
+      --stat-num: #b58900;
+      --code-bg: #eee8d5;
+      --code-text: #586e75;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); transition: background 0.2s, color 0.2s; line-height: 1.6; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+    header h1 { font-size: 1.4em; font-weight: 700; }
+    header .header-left { display: flex; align-items: center; gap: 0; }
+    .nav-links { display: flex; align-items: center; gap: 4px; margin-left: 16px; }
+    .nav-link { padding: 4px 12px; font-size: 0.85em; font-weight: 500; color: var(--text-muted); text-decoration: none; border-radius: 6px; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+    .nav-link:hover { background: var(--btn-secondary-hover); color: var(--text); }
+    .nav-link.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .theme-control { display: inline-flex; align-items: center; gap: 6px; }
+    .theme-label { font-size: 0.75em; color: var(--text-faint); }
+    .theme-select { background: var(--card-bg); border: 1px solid var(--border-light); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 0.8em; }
+    h2 { font-size: 1.5em; font-weight: 700; color: var(--text-title); margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.15em; font-weight: 600; color: var(--text-title); margin: 24px 0 10px; }
+    h4 { font-size: 1em; font-weight: 600; color: var(--text-title); margin: 16px 0 6px; }
+    p { margin: 8px 0; color: var(--text); }
+    ul, ol { margin: 8px 0 8px 20px; }
+    li { margin: 4px 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: var(--code-bg); color: var(--code-text); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; font-family: 'SF Mono', Monaco, monospace; }
+    .meta { display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; font-size: 0.82em; color: var(--text-muted); }
+    .meta span { display: inline-flex; align-items: center; gap: 4px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.78em; font-weight: 600; }
+    .badge-bug { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); }
+    .badge-feature { background: var(--badge-bg); color: var(--badge-text); border: 1px solid var(--border-light); }
+    .badge-infra { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+    .result { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success-text); padding: 8px 12px; border-radius: 6px; font-size: 0.9em; margin: 8px 0; }
+    .card { background: var(--card-bg); border-radius: 8px; padding: 16px 20px; margin-bottom: 12px; box-shadow: 0 1px 3px var(--card-shadow); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.9em; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border-light); }
+    th { font-weight: 600; color: var(--text-title); background: var(--border-faint); }
+    tr:hover td { background: var(--border-faint); }
+    .pass { color: var(--success-text); font-weight: 600; }
+    @media (max-width: 720px) {
+      header { align-items: flex-start; }
+      header .header-left { flex-wrap: wrap; }
+      .nav-links { margin-left: 0; margin-top: 8px; flex-wrap: wrap; }
+      table { font-size: 0.8em; }
+      th, td { padding: 6px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-left">
+        <h1>aicoe.fit</h1>
+        <div class="nav-links">
+          <a class="nav-link" href="./index.html">Links</a>
+          <a class="nav-link" href="./index.html#/analytics">Analytics</a>
+          <a class="nav-link" href="./sync.html">Sync</a>
+          <a class="nav-link" href="./video-search.html">Video Search</a>
+          <a class="nav-link active" href="./changelog.html">Changelog</a>
+        </div>
+      </div>
+      <div class="theme-control">
+        <span class="theme-label">Theme</span>
+        <select class="theme-select" id="themeSelect">
+          <option value="synthwave-dark">Synthwave</option>
+          <option value="solarized-dark">Solarized Dark</option>
+          <option value="solarized-light">Solarized Light</option>
+          <option value="light">Light</option>
+          <option value="system">System</option>
+        </select>
+      </div>
+    </header>
+
+    <h2>Changelog</h2>
+    <p style="color:var(--text-muted); margin-bottom: 24px;">All notable performance improvements, bug fixes, and feature requests. Tracked via <a href="https://github.com/yesod/yesod" target="_blank">yesod</a> under tool <code>als</code>.</p>
+
+    <h2>2026-05-12 — Performance Sprint</h2>
+    <p>A focused performance and reliability sprint that eliminated all known bottlenecks and resolved every open bug report and feature request.</p>
+
+    <h3>Bug Fixes</h3>
+
+    <div class="card">
+      <h4>batch-get-links sequential RPC storm <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-xewx</code></span>
+        <span><strong>Commit:</strong> <code>c194d18</code></span>
+      </div>
+      <p><strong>Problem:</strong> <code>batch-get-links</code> called <code>ensure_tracking_variant</code> RPC once per link per source in a nested loop, causing 30+ sequential round-trips for typical batches (10 links x 3 sources). Average latency: <strong>979ms</strong>.</p>
+      <p><strong>Fix:</strong> Gather all missing variants first, then create them all in parallel via <code>Promise.all</code>.</p>
+      <div class="result">55% improvement (979ms &rarr; 440ms). Scale is now 3-5 RPCs regardless of batch size.</div>
+    </div>
+
+    <div class="card">
+      <h4>analytics sequential DB round-trips <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-b0tq</code></span>
+        <span><strong>Commit:</strong> <code>c194d18</code></span>
+      </div>
+      <p><strong>Problem:</strong> <code>analytics</code> (article-stats) fired 5-7 sequential DB round-trips per request and transferred an ever-larger <code>variant_id</code> result set as <code>click_log</code> grew. Average latency: <strong>630ms</strong>.</p>
+      <p><strong>Fix:</strong> Parallelized all independent queries with <code>Promise.all</code>.</p>
+      <div class="result">Eliminated waterfall latency. Article stats now read from precomputed counters.</div>
+    </div>
+
+    <div class="card">
+      <h4>search-articles OpenAI embedding latency <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-lt5q</code></span>
+        <span><strong>Commit:</strong> <code>4a9c50d</code></span>
+      </div>
+      <p><strong>Problem:</strong> <code>search-articles</code> edge function averaged <strong>1,100-1,800ms</strong> per request. OpenAI embedding API alone cost 300-500ms, plus subsequent <code>hybrid_match_articles</code> + <code>search_video_chunks</code> RPCs.</p>
+      <p><strong>Fix:</strong> Added an in-memory LRU cache (500 entries, 1-hour TTL) for query embeddings.</p>
+      <div class="result">Cache hit: ~640ms. Cache miss: ~850ms. Eliminates OpenAI API round-trip for repeated queries.</div>
+    </div>
+
+    <div class="card">
+      <h4>last-articles full-table scan <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-8f45</code></span>
+        <span><strong>Commit:</strong> <code>eb4c410</code></span>
+      </div>
+      <p><strong>Problem:</strong> <code>last-articles</code> edge function did a full-table scan with <code>ORDER BY published_at DESC NULLS LAST LIMIT ... OFFSET ...</code> on the <code>links</code> table. With only 309 rows it still averaged <strong>193ms</strong> per call.</p>
+      <p><strong>Fix:</strong> Added composite index <code>links(published_at DESC NULLS LAST, id)</code>.</p>
+      <div class="result">Replaced full-table scan with ~5ms index scan. Eliminated 22,619ms of total query time.</div>
+    </div>
+
+    <div class="card">
+      <h4>tracking_variants unfiltered OFFSET pagination <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-kjse</code></span>
+        <span><strong>Commit:</strong> <code>aa781da</code></span>
+      </div>
+      <p><strong>Problem:</strong> <code>SELECT * FROM tracking_variants ORDER BY created_at ASC, id ASC LIMIT OFFSET</code> averaged <strong>207ms</strong> per call and consumed <strong>212 seconds</strong> of total execution time over 1,026 calls — the #1 DB performance killer.</p>
+      <p><strong>Fix:</strong> Added composite index <code>tracking_variants(created_at, id)</code>.</p>
+      <div class="result">Replaced 207ms OFFSET pagination with ~5ms index scan.</div>
+    </div>
+
+    <div class="card">
+      <h4>als --help missing aifs subcommand <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-vkay</code></span>
+        <span><strong>Commit:</strong> <code>640130f</code></span>
+      </div>
+      <p><strong>Problem:</strong> Top-level <code>als help</code> showed no reference to <code>submit</code>, <code>vote</code>, <code>list</code>, <code>archive</code>, <code>unarchive</code>, or Discord delegation features.</p>
+      <p><strong>Fix:</strong> Added <code>aifs</code> to the Usage section with all subcommands documented.</p>
+    </div>
+
+    <div class="card">
+      <h4>Cloudflare Worker 404 cache gap <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-yr51</code></span>
+        <span><strong>Commit:</strong> <code>5b59b8d</code></span>
+      </div>
+      <p><strong>Problem:</strong> Cloudflare Worker did not cache 404 responses, so every bot scan (<code>/.env</code>, <code>/.git/config</code>, <code>/wp-admin/install.php</code>, etc.) hit the redirect edge function directly. These requests took <strong>700-1,400ms</strong> and consumed 42% of total edge function time.</p>
+      <p><strong>Fix:</strong> Worker now caches 404s for 60 seconds in <code>SLUG_CACHE</code>.</p>
+      <div class="result">Bot scans drop from ~1,000ms to ~15ms after the first miss.</div>
+    </div>
+
+    <h3>Feature Requests</h3>
+
+    <div class="card">
+      <h4>Precomputed all-time counters (link_stats) <span class="badge badge-feature">feature</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-wz6q</code></span>
+        <span><strong>Commit:</strong> <code>b1d755a</code></span>
+      </div>
+      <p><strong>Request:</strong> Real-time analytics that stay fast as <code>click_log</code> grows past 10k+ rows.</p>
+      <p><strong>Implementation:</strong> Created <code>link_stats</code> table with a trigger on <code>click_log</code> insert that rebuilds all counters (total_clicks, by_variant, by_source, by_referrer, by_country, by_person) for the affected link. The <code>link_analytics</code> action reads from <code>link_stats</code> single row instead of aggregating the full <code>click_log</code> table.</p>
+    </div>
+
+    <div class="card">
+      <h4>Precomputed daily time-series (link_daily_clicks) <span class="badge badge-feature">feature</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-b8dh</code></span>
+        <span><strong>Commit:</strong> <code>6d7295f</code></span>
+      </div>
+      <p><strong>Request:</strong> Click-over-time graphs that don't scan the full <code>click_log</code> table.</p>
+      <p><strong>Implementation:</strong> Created <code>link_daily_clicks(link_id, date, clicks, by_variant, by_source)</code> table with PK <code>(link_id, date)</code> and index for range scans. A consolidated trigger refreshes both <code>link_stats</code> (all-time) and <code>link_daily_clicks</code> (affected date) on every <code>click_log</code> insert. Weekly rollups are computed in JS from daily rows.</p>
+    </div>
+
+    <div class="card">
+      <h4>top-links cache prewarming <span class="badge badge-feature">feature</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-c35v</code></span>
+        <span><strong>Commit:</strong> <code>bf1b756</code></span>
+      </div>
+      <p><strong>Request:</strong> Pre-warm the Cloudflare Worker <code>SLUG_CACHE</code> with the top 50 most-clicked links so the first request after a cold start doesn't hit the edge function.</p>
+      <p><strong>Implementation:</strong> Added <code>top-links</code> action to <code>analytics</code> edge function. Worker <code>scheduled</code> trigger runs every 5 minutes, calls <code>analytics?action=top-links&count=50</code>, and writes top 50 slugs into <code>SLUG_CACHE</code> with 5-minute TTL.</p>
+    </div>
+
+    <div class="card">
+      <h4>last-articles cache headers <span class="badge badge-feature">feature</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-n8xn</code></span>
+        <span><strong>Commit:</strong> <code>bf1b756</code></span>
+      </div>
+      <p><strong>Request:</strong> Add <code>Cache-Control</code> headers to the <code>last-articles</code> edge function so Cloudflare can cache the article list.</p>
+      <p><strong>Implementation:</strong> Returns <code>Cache-Control: public, max-age=60</code>. Article list changes slowly (new articles are synced on a schedule), so a 60-second cache is safe.</p>
+    </div>
+
+    <div class="card">
+      <h4>Composite/covering database indexes <span class="badge badge-feature">feature</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-wkln</code></span>
+        <span><strong>Commit:</strong> <code>956d1b4</code></span>
+      </div>
+      <p><strong>Request:</strong> Add composite DB indexes to eliminate full-table scans.</p>
+      <p><strong>Implementation:</strong></p>
+      <ol>
+        <li><code>tracking_variants(created_at, id)</code> — replaces 207ms OFFSET pagination with ~5ms index scan</li>
+        <li><code>links(published_at DESC NULLS LAST, id)</code> — replaces 193ms full-table scan with ~5ms index scan</li>
+        <li><code>click_log(link_id, clicked_at DESC, variant_id)</code> — covering index for per-link analytics queries; eliminates a second table lookup</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h4>Admin dashboard loading UI <span class="badge badge-feature">feature</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-zjxj</code></span>
+        <span><strong>Commit:</strong> <code>bf1b756</code></span>
+      </div>
+      <p><strong>Request:</strong> Show what is actively loading with descriptive labels and fast-moving progress bars instead of a static spinner.</p>
+      <p><strong>Implementation:</strong> Replaced static "Loading dashboard..." with animated hacker-style progress bars showing 5 steps: Authenticating &rarr; Sources &rarr; Articles & Variants &rarr; Click Data &rarr; Rendering.</p>
+    </div>
+
+    <h3>Infrastructure</h3>
+
+    <div class="card">
+      <h4>wrangler v4 upgrade <span class="badge badge-infra">infra</span></h4>
+      <div class="meta"><span><strong>Commit:</strong> <code>a9a07c5</code></span></div>
+      <p>Updated Cloudflare Worker tooling from wrangler v3 to v4.</p>
+    </div>
+
+    <div class="card">
+      <h4>YouTube auto-sync <span class="badge badge-infra">infra</span></h4>
+      <p><code>pg_cron</code> job <code>sync-youtube</code> runs every 6 hours calling <code>content-sync?action=youtube</code>.</p>
+    </div>
+
+    <div class="card">
+      <h4>Admin dashboard column selection <span class="badge badge-infra">infra</span></h4>
+      <div class="meta"><span><strong>Commit:</strong> <code>ffa7241</code></span></div>
+      <p><code>refreshDashboardData</code> now fetches only needed columns (8 for links, 5 for variants) instead of <code>select('*')</code>, eliminating pulling massive unused columns (<code>transcript</code>, <code>body_text</code>, <code>embedding</code>, <code>description</code>) which can be 50KB+ per row.</p>
+    </div>
+
+    <h3>Benchmark Results (2026-05-13)</h3>
+    <p>All commands now run within thresholds:</p>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Latency</th><th>Threshold</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>help</code></td><td>103ms</td><td>500ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>whoami</code></td><td>181ms</td><td>2000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>search</code></td><td>1,105ms</td><td>3000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>search --me</code></td><td>948ms</td><td>3000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>last</code></td><td>450ms</td><td>1000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>get</code></td><td>890ms</td><td>2000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>custom-links</code></td><td>551ms</td><td>2000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>stats</code></td><td>483ms</td><td>3000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>context list</code></td><td>905ms</td><td>2000ms</td><td class="pass">PASS</td></tr>
+        <tr><td><code>links list --pinned</code></td><td>685ms</td><td>2000ms</td><td class="pass">PASS</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Sync Bug Fix (2026-05-12)</h3>
+    <div class="card">
+      <h4>Substack sync silently skipping articles <span class="badge badge-bug">bug</span></h4>
+      <div class="meta"><span><strong>Commit:</strong> <code>411affa</code></span></div>
+      <p><strong>Problem:</strong> <code>content-sync</code> edge function was silently skipping articles where the Substack API returned short random slugs (e.g. <code>ktrdc8</code>) differing from sitemap URLs (e.g. <code>how-the-machines-finally-learned</code>).</p>
+      <p><strong>Fix:</strong> Matching now tries <code>canonical_url</code> first, then falls back to slug. Also fixed <code>sync_operations</code> logging to properly <code>await</code> the insert instead of fire-and-forget <code>.then()</code>.</p>
+      <p><strong>Article renames:</strong> 11 articles updated from unreadable 6-char random IDs to readable Substack slugs, preserving all clicks.</p>
+    </div>
+
+  </div>
+
+  <script>
+    const THEME_KEY = 'theme';
+
+    function resolveTheme(theme) {
+      if (theme === 'dark') return 'synthwave-dark';
+      if (theme === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'synthwave-dark' : 'light';
+      }
+      return theme || 'synthwave-dark';
+    }
+
+    function applyTheme(theme) {
+      const resolved = resolveTheme(theme);
+      if (resolved === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', resolved);
+      }
+      document.getElementById('themeSelect').value = resolved === 'synthwave-dark' ? 'synthwave-dark' : resolved;
+    }
+
+    function setTheme(theme) {
+      localStorage.setItem(THEME_KEY, theme);
+      applyTheme(theme);
+    }
+
+    function getSavedTheme() {
+      const saved = localStorage.getItem(THEME_KEY) || 'synthwave-dark';
+      return saved === 'dark' ? 'synthwave-dark' : saved;
+    }
+
+    document.getElementById('themeSelect').addEventListener('change', function() {
+      setTheme(this.value);
+    });
+
+    applyTheme(getSavedTheme());
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (getSavedTheme() === 'system') applyTheme('system');
+    });
+  </script>
+</body>
+</html>
