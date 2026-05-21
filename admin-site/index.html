@@ -571,7 +571,7 @@
         sb.from('links')
           .select('id, slug, title, author, published_at, destination_url, content_type, created_at')
           .order('published_at', { ascending: false, nullsFirst: false }),
-        fetchAllRows('tracking_variants', 'id, link_id, ref, suffix, created_at', 'created_at'),
+        fetchAllRows('tracking_variants', 'id, link_id, ref, suffix, utm_source, utm_medium, utm_content, utm_term, created_at', 'created_at'),
       ]);
 
       if (linksResult.error) throw linksResult.error;
@@ -920,7 +920,31 @@
       if (brand === 'email') {
         return '<span class="brand-icon" style="background:#ea4335;color:#fff">✉️</span>';
       }
+      if (brand === 'substack') {
+        return '<span class="brand-icon" style="background:#FF6719;color:#fff"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v4H4zm0 6h16v2H4zm0 4h12v2H4z"/></svg></span>';
+      }
       return '<span class="brand-icon" style="background:var(--btn-secondary-bg);color:var(--text)">' + (fallbackIcon || '🔗') + '</span>';
+    }
+
+    function getDestinationPlatform(url) {
+      const u = (url || '').toLowerCase();
+      if (u.includes('youtube.com') || u.includes('youtu.be')) return { name: 'YouTube', brand: 'youtube' };
+      if (u.includes('substack.com')) return { name: 'Substack', brand: 'substack' };
+      if (u.includes('discord.gg') || u.includes('discord.com')) return { name: 'Discord', brand: 'discord' };
+      if (u.includes('github.com')) return { name: 'GitHub', brand: null };
+      try {
+        const hostname = new URL(url).hostname.replace(/^www\./, '');
+        return { name: hostname, brand: null };
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function renderDestinationBadge(url) {
+      const platform = getDestinationPlatform(url);
+      if (!platform) return '';
+      const icon = platform.brand ? renderBrandIcon(platform.brand) : '<span class="brand-icon" style="background:var(--btn-secondary-bg);color:var(--text)">🌐</span>';
+      return '<span class="source-pill" style="margin-left:8px">' + icon + '<span style="font-size:0.82em;color:var(--text-muted)">' + platform.name + '</span></span>';
     }
 
     function getVariantSourceMeta(variant) {
@@ -1546,7 +1570,7 @@
           <div class="link-card">
             <div class="title">${displayTitle}<span class="short-id-badge">${shortId}</span>${similarityScore}</div>
             <div class="meta">${authorStr}${authorStr && pubDate ? ' &middot; ' : ''}${pubDate}</div>
-            <div class="dest"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a></div>
+            <div class="dest" style="display:flex;align-items:center;flex-wrap:wrap"><a href="${link.destination_url}" target="_blank" rel="noopener">${link.destination_url}</a>${renderDestinationBadge(link.destination_url)}</div>
             <div style="margin-bottom:8px">
               <span class="short-url-wrap">
                 <a class="short-url" href="https://${DOMAIN}/${link.slug}" target="_blank" rel="noopener">https://${DOMAIN}/${link.slug}</a>
