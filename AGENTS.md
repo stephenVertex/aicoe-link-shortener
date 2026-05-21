@@ -26,6 +26,15 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## AWS Profile
+
+When running AWS CLI commands for this project (e.g., checking Amplify deployment status), **always use `--profile cf2`**. Do not attempt to read `~/.aws/credentials` or `~/.aws/config` files.
+
+**Example:**
+```bash
+aws --profile cf2 amplify list-jobs --app-id d3er9dt9913cnv --branch-name main
+```
+
 ## Issue Tracking
 
 - **Internal**: `yesod` — personal local registry for tools, processes, and workflow knowledge
