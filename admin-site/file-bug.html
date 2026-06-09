@@ -298,6 +298,30 @@
     }
 
     const app = document.getElementById('app');
+
+    // Person RPCs are service_role-only in the database; the admin-rpc edge
+    // function verifies our session JWT and calls them for us.
+    async function adminRpc(action, params) {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return { data: null, error: new Error('Not signed in') };
+      try {
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/admin-rpc', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + session.access_token,
+          },
+          body: JSON.stringify({ action: action, params: params || {} }),
+        });
+        const body = await resp.json();
+        if (!resp.ok) return { data: null, error: new Error(body.error || ('HTTP ' + resp.status)) };
+        return { data: body.data, error: null };
+      } catch (err) {
+        return { data: null, error: err };
+      }
+    }
+
     let currentPerson = null;
     let bugReports = [];
     let filterStatus = 'all';
@@ -560,7 +584,7 @@
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (session) {
-          const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
+          const { data: person, error: personErr } = await adminRpc('get_or_create_person');
           if (personErr) throw personErr;
           currentPerson = person;
           await loadBugReports();
@@ -571,7 +595,7 @@
 
         sb.auth.onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_IN' && session) {
-            const { data: person } = await sb.rpc('get_or_create_person');
+            const { data: person } = await adminRpc('get_or_create_person');
             currentPerson = person;
             await loadBugReports();
             renderPage();

@@ -58,6 +58,29 @@
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const app = document.getElementById('app');
 
+    // Person RPCs are service_role-only in the database; the admin-rpc edge
+    // function verifies our session JWT and calls them for us.
+    async function adminRpc(action, params) {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return { data: null, error: new Error('Not signed in') };
+      try {
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/admin-rpc', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + session.access_token,
+          },
+          body: JSON.stringify({ action: action, params: params || {} }),
+        });
+        const body = await resp.json();
+        if (!resp.ok) return { data: null, error: new Error(body.error || ('HTTP ' + resp.status)) };
+        return { data: body.data, error: null };
+      } catch (err) {
+        return { data: null, error: err };
+      }
+    }
+
     let currentPerson = null;
     let showAll = false;
 
@@ -104,7 +127,7 @@
       app.innerHTML = '<div class="loading">Loading dashboard...</div>';
 
       try {
-        const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
+        const { data: person, error: personErr } = await adminRpc('get_or_create_person');
         if (personErr) throw personErr;
         currentPerson = person;
 

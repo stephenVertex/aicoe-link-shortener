@@ -392,6 +392,29 @@
 
     const app = document.getElementById('app');
 
+    // Person/analytics RPCs are service_role-only in the database; the
+    // admin-rpc edge function verifies our session JWT and calls them for us.
+    async function adminRpc(action, params) {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return { data: null, error: new Error('Not signed in') };
+      try {
+        const resp = await fetch(SUPABASE_URL + '/functions/v1/admin-rpc', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + session.access_token,
+          },
+          body: JSON.stringify({ action: action, params: params || {} }),
+        });
+        const body = await resp.json();
+        if (!resp.ok) return { data: null, error: new Error(body.error || ('HTTP ' + resp.status)) };
+        return { data: body.data, error: null };
+      } catch (err) {
+        return { data: null, error: err };
+      }
+    }
+
     let currentPerson = null;
     let showAll = false;
     let searchQuery = '';
@@ -966,7 +989,7 @@
       if (sourceSaving) return;
       sourceSaving = true;
       try {
-        const { data, error } = await sb.rpc('create_person_source', {
+        const { data, error } = await adminRpc('create_person_source', {
           p_label: sourceDraft.label,
           p_source: sourceDraft.source,
           p_medium: sourceDraft.medium,
@@ -998,7 +1021,7 @@
       if (!confirm('Remove source "' + label + '"? Existing links will keep working, but new articles will stop auto-generating for it.')) {
         return;
       }
-      const { error } = await sb.rpc('delete_person_source', { p_source_id: sourceId });
+      const { error } = await adminRpc('delete_person_source', { p_source_id: sourceId });
       if (error) {
         alert('Unable to remove source: ' + error.message);
         return;
@@ -1021,7 +1044,7 @@
         if (analyticsStartDate) params.p_start_date = new Date(analyticsStartDate).toISOString();
         if (analyticsEndDate) params.p_end_date = new Date(analyticsEndDate + 'T23:59:59').toISOString();
         
-        const { data, error } = await sb.rpc('get_click_analytics', params);
+        const { data, error } = await adminRpc('get_click_analytics', params);
         if (error) throw error;
         return data || [];
       } catch (err) {
@@ -1274,7 +1297,7 @@
         if (!currentPerson) {
           const step = getLoadingStepIndex('Authenticating...');
           if (step >= 0) updateLoadingStep(step, 'active');
-          const { data: person, error: personErr } = await sb.rpc('get_or_create_person');
+          const { data: person, error: personErr } = await adminRpc('get_or_create_person');
           if (personErr) throw personErr;
           currentPerson = person;
           if (step >= 0) updateLoadingStep(step, 'done');
