@@ -213,7 +213,7 @@ Edge functions are **auto-deployed by CI** when changes land on `main`. Do NOT d
 2. **Commit and push** — CI will auto-deploy when your branch merges to main
 3. **Verify locally** before pushing (optional but recommended):
    ```bash
-   cd user-cli && uv run pytest tests/test_smoke.py -v
+   cd user-cli && uv run --extra dev python -m pytest tests/test_smoke.py -v
    ```
 
 **Required GitHub secrets** (already configured):
