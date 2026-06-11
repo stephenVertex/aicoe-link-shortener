@@ -198,6 +198,21 @@
     <h2>Changelog</h2>
     <p style="color:var(--text-muted); margin-bottom: 24px;">All notable performance improvements, bug fixes, and feature requests. Tracked via <a href="https://github.com/yesod/yesod" target="_blank">yesod</a> under tool <code>als</code>. <a href="https://github.com/stephenVertex/aicoe-link-shortener/actions" target="_blank" rel="noopener">View CI runs &rarr;</a></p>
 
+    <h2>2026-06-11 — Test Data Exclusion from Search</h2>
+
+    <h3>Bug Fixes</h3>
+
+    <div class="card">
+      <h4>Test links leaking into production search results <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-ev45</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/dfc44a8" target="_blank" rel="noopener"><code>dfc44a8</code></a></span>
+      </div>
+      <p><strong>Problem:</strong> Searches for nonsense queries (e.g. <code>xyz123notfound</code>) returned test/dev links with near-zero similarity, diluting result quality and confusing semantic search output. Known offender slugs: <code>mytestslug123</code>, <code>bz11id</code>, <code>8hr</code>, <code>fi2</code>, <code>0hsnqq</code>, <code>xa0thn</code>, <code>cra</code>.</p>
+      <p><strong>Fix:</strong> Added <code>is_test</code> boolean column to <code>links</code> table (default <code>false</code>). Updated <code>hybrid_match_articles</code>, <code>search_video_chunks</code>, <code>match_articles</code>, and <code>last-articles</code> to filter <code>is_test = false</code>. Flagged all known test slugs via migration without deleting data.</p>
+      <div class="result">Test links are completely excluded from production search and <code>last</code> endpoints. Normal links unaffected. Developer documentation added to README showing how to flag future test links.</div>
+    </div>
+
     <h2>2026-05-12 — Performance Sprint</h2>
     <p>A focused performance and reliability sprint that eliminated all known bottlenecks and resolved every open bug report and feature request.</p>
 

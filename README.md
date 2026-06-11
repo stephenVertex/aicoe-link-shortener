@@ -63,6 +63,9 @@ Every link gets per-person tracking variants with UTM parameters so you can see 
 | author | text | article author from Substack |
 | published_at | timestamptz | article publication date |
 | created_at | timestamptz | |
+| is_test | boolean | default `false`; set to `true` to hide from public search |
+
+> **Developer note:** Links created during testing or development should be flagged with `is_test = true` so they do not appear in production search results (`als search`, `als last`) or semantic search. To flag a link: update the row in Supabase (`update links set is_test = true where slug = 'my-test-slug';`). Known test slugs (e.g. `mytestslug123`, `bz11id`, `8hr`, `fi2`, `0hsnqq`, `xa0thn`, `cra`) are already flagged in migration `20260611000000_add_links_is_test_exclude_from_search.sql`.
 
 ### `tracking_variants`
 | Column | Type | Notes |

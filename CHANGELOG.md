@@ -13,6 +13,17 @@ All notable performance improvements, bug fixes, and feature requests for aicoe.
 - **Deprecation**: `als aifs <subcommand>` still works identically but prints a deprecation notice on stderr pointing at the new binary.
 - **Internals**: Shared Supabase/auth/config helpers extracted into `als_common.py`; no logic duplicated between the two CLIs.
 
+## 2026-06-11 — Test Data Exclusion from Search
+
+### Bug Fixes
+
+#### Test links leaking into production search results — FIXED
+- **ID**: `ys-als-ev45`
+- **Commit**: `dfc44a8`
+- **Problem**: Searches for nonsense queries (e.g. `xyz123notfound`) returned test/dev links with near-zero similarity, diluting result quality and confusing semantic search output. Known offender slugs: `mytestslug123`, `bz11id`, `8hr`, `fi2`, `0hsnqq`, `xa0thn`, `cra`.
+- **Fix**: Added `is_test` boolean column to `links` table (default `false`). Updated `hybrid_match_articles`, `search_video_chunks`, `match_articles`, and `last-articles` to filter `is_test = false`. Flagged all known test slugs via migration without deleting data.
+- **Result**: Test links are completely excluded from production search and `last` endpoints. Normal links unaffected. Developer documentation added to README showing how to flag future test links.
+
 ## 2026-05-12 — Performance Sprint
 
 A focused performance and reliability sprint that eliminated all known bottlenecks and resolved every open bug report and feature request.

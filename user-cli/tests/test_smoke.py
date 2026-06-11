@@ -231,6 +231,37 @@ class TestBugReport:
         assert "open" in output, "Expected status 'open' in bug-report output"
 
 
+class TestSearchExcludesTestLinks:
+    def test_search_no_test_slugs(self):
+        """Search results must not contain known test slugs."""
+        result = run_als(["search", "xyz123notfound", "--count", "10"])
+        assert result.returncode == 0
+        output = result.stdout
+        test_slugs = ["mytestslug123", "bz11id", "8hr", "fi2", "0hsnqq", "xa0thn", "cra"]
+        for slug in test_slugs:
+            assert slug not in output, f"Test slug {slug!r} leaked into search results"
+
+    def test_search_real_query_no_test_slugs(self):
+        """Real search queries must not contain known test slugs."""
+        result = run_als(["search", "AI", "--count", "10"])
+        assert result.returncode == 0
+        output = result.stdout
+        test_slugs = ["mytestslug123", "bz11id", "8hr", "fi2", "0hsnqq", "xa0thn", "cra"]
+        for slug in test_slugs:
+            assert slug not in output, f"Test slug {slug!r} leaked into search results"
+
+
+class TestLastExcludesTestLinks:
+    def test_last_no_test_slugs(self):
+        """Last articles must not contain known test slugs."""
+        result = run_als(["last", "20"])
+        assert result.returncode == 0
+        output = result.stdout
+        test_slugs = ["mytestslug123", "bz11id", "8hr", "fi2", "0hsnqq", "xa0thn", "cra"]
+        for slug in test_slugs:
+            assert slug not in output, f"Test slug {slug!r} leaked into last articles"
+
+
 class TestValidateTrackingUrl:
     def test_valid_url(self):
         assert validate_tracking_url("https://aicoe.fit/my-article-a1b2c3")
