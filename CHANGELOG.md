@@ -2,6 +2,17 @@
 
 All notable performance improvements, bug fixes, and feature requests for aicoe.fit.
 
+## 2026-06-11 — Dedicated `aifs` CLI (v0.9.0)
+
+### Features
+
+#### AIFS split into its own binary
+- **ID**: `ys-als-p58i`
+- **Change**: The AI First Show functionality (`als aifs ...`) now ships as a dedicated `aifs` binary with proper subcommands: `aifs submit <url>`, `aifs vote <id>`, `aifs list`, `aifs archive`, `aifs unarchive`, `aifs episodes`, and `aifs login`. A bare URL still works as shorthand for submit (`aifs https://...`).
+- **Install**: Both binaries ship in the same `als` wheel — a single `uv tool install` (or `als upgrade`) installs both. Credentials (`~/.als.credentials`) are shared; logging in with either CLI authenticates both.
+- **Deprecation**: `als aifs <subcommand>` still works identically but prints a deprecation notice on stderr pointing at the new binary.
+- **Internals**: Shared Supabase/auth/config helpers extracted into `als_common.py`; no logic duplicated between the two CLIs.
+
 ## 2026-05-12 — Performance Sprint
 
 A focused performance and reliability sprint that eliminated all known bottlenecks and resolved every open bug report and feature request.

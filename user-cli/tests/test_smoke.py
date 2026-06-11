@@ -258,3 +258,65 @@ class TestValidateTrackingUrl:
 
     def test_rejects_newlines(self):
         assert not validate_tracking_url("https://aicoe.fit/slug-\nabc")
+
+
+def run_aifs(args: list[str], timeout: int = 60) -> subprocess.CompletedProcess:
+    """Run an aifs CLI command and return the CompletedProcess."""
+    cmd = ["uv", "run", "aifs"] + args
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        cwd=USER_CLI_DIR,
+    )
+
+
+class TestAifsBinary:
+    """Smoke tests for the dedicated aifs binary."""
+
+    def test_help_runs_without_auth(self):
+        result = run_aifs(["--help"])
+        assert result.returncode == 0, f"aifs --help failed: {result.stderr}"
+        for cmd in ("submit", "vote", "list", "archive", "unarchive", "episodes"):
+            assert cmd in result.stdout, f"'{cmd}' missing from aifs --help"
+
+    def test_version(self):
+        result = run_aifs(["--version"])
+        assert result.returncode == 0
+        assert "aifs" in result.stdout
+
+    def test_list_json(self):
+        """aifs list --json returns a JSON array against the live backend."""
+        _skip_if_no_api_key()
+        import json as _json
+
+        result = run_aifs(["list", "--json"])
+        assert result.returncode == 0, f"aifs list failed: {result.stderr}"
+        parsed = _json.loads(result.stdout)
+        assert isinstance(parsed, list)
+
+    def test_episodes_json(self):
+        """aifs episodes --json returns a JSON array against the live backend."""
+        _skip_if_no_api_key()
+        import json as _json
+
+        result = run_aifs(["episodes", "--json"])
+        assert result.returncode == 0, f"aifs episodes failed: {result.stderr}"
+        parsed = _json.loads(result.stdout)
+        assert isinstance(parsed, list)
+
+
+class TestAlsAifsShimSmoke:
+    """The deprecated `als aifs` path still works and warns."""
+
+    def test_shim_help_runs(self):
+        result = run_als(["aifs", "--help"])
+        assert result.returncode == 0
+        assert "DEPRECATED" in result.stdout
+
+    def test_shim_list_warns_on_stderr(self):
+        _skip_if_no_api_key()
+        result = run_als(["aifs", "list", "--json"])
+        assert result.returncode == 0, f"als aifs list failed: {result.stderr}"
+        assert "deprecated" in result.stderr

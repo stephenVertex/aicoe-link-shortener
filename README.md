@@ -224,6 +224,19 @@ als last 5
 
 > **Note on expiration dates:** When you create a one-off tracking variant with `als shorten --note`, the CLI shows an "auto-archive" date. The short link itself does **not** expire; it continues to redirect and log clicks indefinitely. The date simply marks when the variant is moved from the active list to an archived list for easier housekeeping.
 
+### AIFS CLI (aifs)
+
+The same install also ships a dedicated `aifs` binary for AI First Show episode candidate curation (it shares credentials with `als`, so one login covers both):
+```bash
+aifs submit <url> --comment "Great overview of RAG"
+aifs vote aifs-c6u
+aifs list
+aifs archive aifs-c6u --note "Covered in episode 42"
+aifs episodes
+```
+
+> `als aifs <subcommand>` still works but is deprecated in favour of the dedicated binary.
+
 ### Admin CLI
 ```bash
 cd user-cli
