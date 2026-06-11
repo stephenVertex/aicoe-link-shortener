@@ -227,7 +227,7 @@ def help_cmd():
                 "",
                 "# Create a one-off variant for this specific conversation:",
                 'als shorten lnk-xxx --note "replying to @mike on twitter about agents"',
-                "# → aicoe.fit/article-slug-a1b2c3   (auto-expires 60d, separate from your default links)",
+                "# → aicoe.fit/article-slug-a1b2c3   (auto-archive after 60d; link does not expire)",
                 "",
                 "# Later: see how that specific share performed",
                 "als stats article-slug --days 7       # use the slug from als get; per-variant breakdown",
@@ -594,13 +594,13 @@ def set_author_name(name: str):
 @click.option(
     "--expires",
     default=None,
-    help="Expiry in days (e.g. 30d, 90d). Default: 60d when --note is used.",
+    help="Days before auto-archive (e.g. 30d, 90d). Default: 60d when --note is used. Link does not expire; it is moved to an archived list.",
 )
 @click.option(
     "--no-expires",
     is_flag=True,
     default=False,
-    help="Keep variant in active list indefinitely (no auto-archive).",
+    help="Keep variant in active list indefinitely (no auto-archive). Link never expires.",
 )
 @click.option(
     "--json",
@@ -622,7 +622,8 @@ def shorten(
 
     Accepts a URL or lnk-xxx ID. Without --note, behaves as before.
     With --note, uses AI to infer UTM source/medium from the description
-    and creates a tracking variant with a 60-day default expiry.
+    and creates a tracking variant with a 60-day default auto-archive date
+    (link does not expire; it is moved to an archived list after the date).
 
     \b
     Examples:
@@ -759,9 +760,9 @@ def _shorten_with_note(
         f"  UTM:     source={utm.get('utm_source', '?')}, medium={utm.get('utm_medium', '?')}"
     )
     if variant.get("expires_at"):
-        click.echo(f"  Expires: {variant['expires_at'][:10]}")
+        click.echo(f"  Auto-archive: {variant['expires_at'][:10]} (link does not expire)")
     else:
-        click.echo(f"  Expires: never")
+        click.echo(f"  Auto-archive: never")
     click.echo(f"  Short:   {variant.get('short_url', '')}")
     click.echo()
 
