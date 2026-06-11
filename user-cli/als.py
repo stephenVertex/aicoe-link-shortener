@@ -1522,7 +1522,21 @@ def _resolve_short_id(short_id: str, core_only: bool = False) -> str | None:
     default=False,
     help="Output raw JSON instead of human-readable text.",
 )
-def search(query: str, count: int, source: str, filter_me: bool, tracking: bool, output_json: bool):
+@click.option(
+    "--min-score",
+    type=float,
+    default=0.30,
+    help="Minimum similarity threshold (0.0–1.0). Results below this are hidden.",
+)
+def search(
+    query: str,
+    count: int,
+    source: str,
+    filter_me: bool,
+    tracking: bool,
+    output_json: bool,
+    min_score: float,
+):
     """Search articles by semantic similarity.
 
     Returns a compact table of matching articles ranked by relevance.
@@ -1580,6 +1594,21 @@ def search(query: str, count: int, source: str, filter_me: bool, tracking: bool,
 
     search_data = search_resp.json()
     results = search_data.get("results", [])
+
+    if results:
+        filtered = [r for r in results if r.get("similarity", 0) >= min_score]
+        if not filtered:
+            if output_json:
+                click.echo(json.dumps([]))
+                return
+            click.echo(
+                "No strong matches found. "
+                "Try a different query or lower --min-score (currently {:.2f}).".format(
+                    min_score
+                )
+            )
+            return
+        results = filtered
 
     if not results:
         if output_json:
