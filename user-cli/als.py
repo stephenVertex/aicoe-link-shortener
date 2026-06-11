@@ -5,7 +5,6 @@ Authenticate with a personal API key to get personalised tracking links
 for articles, and search the article catalogue.
 """
 
-import configparser
 import json
 import os
 import re
@@ -13,16 +12,22 @@ import shutil
 import subprocess
 import sys
 from importlib.metadata import version as _pkg_version
-from pathlib import Path
 from urllib.parse import urlparse
 
 import click
 import requests
 
-__version__ = _pkg_version("als")
+from als_common import (
+    API_BASE,
+    CREDENTIALS_FILE,
+    _api_request,
+    _get_api_key,
+    _read_credentials,
+    _update_credentials,
+    _write_credentials,
+)
 
-CREDENTIALS_FILE = Path.home() / ".als.credentials"
-API_BASE = "https://dumhbtxskncofwwzrmfx.supabase.co/functions/v1"
+__version__ = _pkg_version("als")
 
 
 # ---------------------------------------------------------------------------
@@ -134,53 +139,8 @@ def _extract_article_from_short_url(url: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Credential helpers
+# Credential helpers (shared with the aifs CLI — see als_common.py)
 # ---------------------------------------------------------------------------
-
-
-def _read_credentials() -> dict[str, str]:
-    """Read credentials from ~/.als.credentials (INI format)."""
-    if not CREDENTIALS_FILE.exists():
-        return {}
-    config = configparser.ConfigParser()
-    config.read(CREDENTIALS_FILE)
-    if "default" not in config:
-        return {}
-    return dict(config["default"])
-
-
-def _write_credentials(api_key: str) -> None:
-    """Write credentials to ~/.als.credentials with mode 0600."""
-    config = configparser.ConfigParser()
-    config["default"] = {"api_key": api_key}
-    CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CREDENTIALS_FILE, "w") as f:
-        config.write(f)
-    os.chmod(CREDENTIALS_FILE, 0o600)
-
-
-def _update_credentials(**fields: str) -> None:
-    """Update specific fields in ~/.als.credentials, preserving existing values."""
-    creds = _read_credentials()
-    creds.update(fields)
-    config = configparser.ConfigParser()
-    config["default"] = creds
-    CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CREDENTIALS_FILE, "w") as f:
-        config.write(f)
-    os.chmod(CREDENTIALS_FILE, 0o600)
-
-
-def _get_api_key() -> str:
-    """Get the API key from env var, credentials file, or exit with an error."""
-    api_key = os.environ.get("AICOE_API_KEY", "")
-    if not api_key:
-        creds = _read_credentials()
-        api_key = creds.get("api_key", "")
-    if not api_key:
-        click.echo("Not logged in. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    return api_key
 
 
 def _resolve_my_author_name(api_key: str) -> str | None:
@@ -203,26 +163,6 @@ def _resolve_my_author_name(api_key: str) -> str | None:
     if resp.status_code != 200:
         return None
     return resp.json().get("name") or None
-
-
-def _api_request(
-    function: str,
-    *,
-    method: str = "POST",
-    api_key: str | None = None,
-    json_body: dict | None = None,
-    params: dict | None = None,
-) -> requests.Response:
-    """Make a request to a Supabase edge function."""
-    if api_key is None:
-        api_key = _get_api_key()
-    url = f"{API_BASE}/{function}"
-    headers = {"x-api-key": api_key}
-    if method == "POST":
-        resp = requests.post(url, json=json_body or {}, headers=headers, timeout=30)
-    else:
-        resp = requests.get(url, params=params or {}, headers=headers, timeout=30)
-    return resp
 
 
 # ---------------------------------------------------------------------------
