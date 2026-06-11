@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
     let query = supabase
       .from("links")
       .select("id, slug, title, author, destination_url, published_at, created_at")
+      .eq("is_test", false)
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(count);
 
