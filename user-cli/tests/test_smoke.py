@@ -85,6 +85,38 @@ class TestSearch:
         assert "lnk-" in output or "ID" in output, "No article IDs in search output"
 
 
+class TestSearchMinScore:
+    def test_min_score_all_below_shows_message(self):
+        """--min-score 0.99 with nonsense query filters all results, shows message."""
+        result = run_als(["search", "xyz123notfound", "--count", "3", "--min-score", "0.99"])
+        assert result.returncode == 0
+        assert "No strong matches found" in result.stdout
+
+    def test_min_score_all_below_json_empty(self):
+        """--min-score 0.99 --json returns empty list, not noise."""
+        result = run_als(["search", "xyz123notfound", "--count", "3", "--min-score", "0.99", "--json"])
+        assert result.returncode == 0
+        assert result.stdout.strip() == "[]"
+
+    def test_min_score_zero_passthrough(self):
+        """--min-score 0 returns results normally (high-score passthrough)."""
+        result = run_als(["search", "AI", "--count", "3", "--min-score", "0"])
+        assert result.returncode == 0
+        assert "lnk-" in result.stdout or "ID" in result.stdout
+
+    def test_default_min_score_returns_results(self):
+        """Default --min-score 0.30 still returns results for a good query."""
+        result = run_als(["search", "Claude", "--count", "3"])
+        assert result.returncode == 0
+        assert "lnk-" in result.stdout or "ID" in result.stdout
+
+    def test_min_score_zero_explicit_flag_returns_results(self):
+        """Explicit --min-score 0.0 returns results normally."""
+        result = run_als(["search", "AI", "--count", "3", "--min-score", "0.0"])
+        assert result.returncode == 0
+        assert "lnk-" in result.stdout or "ID" in result.stdout
+
+
 class TestLast:
     def test_last_returns_articles(self):
         """als last 3 returns 3 articles with proper fields."""
