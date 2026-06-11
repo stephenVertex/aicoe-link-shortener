@@ -76,6 +76,8 @@ Every link gets per-person tracking variants with UTM parameters so you can see 
 | utm_content | text | nullable |
 | utm_term | text | nullable |
 | ref | text | person slug (e.g. `stephen`) |
+| note | text | user-provided description of the share context |
+| expires_at | timestamptz | auto-archive date — link does **not** expire; it is moved to an archived list after this date |
 | created_at | timestamptz | |
 
 ### `click_log`
@@ -219,6 +221,8 @@ als shorten <article-url>
 als search <query>
 als last 5
 ```
+
+> **Note on expiration dates:** When you create a one-off tracking variant with `als shorten --note`, the CLI shows an "auto-archive" date. The short link itself does **not** expire; it continues to redirect and log clicks indefinitely. The date simply marks when the variant is moved from the active list to an archived list for easier housekeeping.
 
 ### Admin CLI
 ```bash
