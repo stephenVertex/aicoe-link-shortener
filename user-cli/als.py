@@ -685,6 +685,9 @@ def shorten(
     With --note, uses AI to infer UTM source/medium from the description
     and creates a tracking variant with a 60-day default expiry.
 
+    If the URL is already an aicoe.fit short link, the command will warn
+    and skip creation. Use --force to create a new short link anyway.
+
     \b
     Examples:
       als shorten https://example.com
