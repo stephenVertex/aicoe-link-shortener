@@ -155,6 +155,7 @@ RETURNS TABLE (
   video_slug text,
   video_title text,
   video_url text,
+  video_author text,
   similarity float
 )
 LANGUAGE plpgsql
@@ -175,6 +176,7 @@ BEGIN
         l.slug as video_slug,
         l.title as video_title,
         l.destination_url as video_url,
+        l.author as video_author,
         (1 - (c.embedding <=> query_embedding))::float as similarity,
         row_number() OVER (PARTITION BY c.link_id ORDER BY c.embedding <=> query_embedding) as rn
       FROM public.video_chunks c
@@ -193,6 +195,7 @@ BEGIN
       ranked_chunks.video_slug::text,
       ranked_chunks.video_title::text,
       ranked_chunks.video_url::text,
+      ranked_chunks.video_author::text,
       ranked_chunks.similarity::float
     FROM ranked_chunks
     WHERE rn = 1
@@ -210,6 +213,7 @@ BEGIN
       l.slug::text as video_slug,
       l.title::text as video_title,
       l.destination_url::text as video_url,
+      l.author::text as video_author,
       (1 - (c.embedding <=> query_embedding))::float as similarity
     FROM public.video_chunks c
     JOIN public.links l ON c.link_id = l.id
