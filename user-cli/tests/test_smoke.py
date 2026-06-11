@@ -4,7 +4,7 @@ These tests call real Supabase edge functions and validate response shape.
 They are read-only or idempotent (pre-publish is idempotent,
 search/last/custom-links are read-only).
 
-Run with: uv run pytest tests/test_smoke.py -v
+Run with: uv run --extra dev python -m pytest tests/test_smoke.py -v
 
 Requires: AICOE_API_KEY env var (or ~/.als.credentials with a valid key).
 """

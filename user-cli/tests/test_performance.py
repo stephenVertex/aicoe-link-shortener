@@ -7,9 +7,9 @@ The first call to each edge function may hit a Supabase cold start (~2-4s
 extra). A session-scoped warmup fixture fires a cheap request before any
 timed test runs, and thresholds account for residual API/network variance.
 
-Run with: uv run pytest user-cli/tests/test_performance.py -v
+Run with: uv run --extra dev python -m pytest user-cli/tests/test_performance.py -v
 
-Skip slow tests: uv run pytest user-cli/tests/test_performance.py -v -m "not slow"
+Skip slow tests: uv run --extra dev python -m pytest user-cli/tests/test_performance.py -v -m "not slow"
 """
 
 from pathlib import Path

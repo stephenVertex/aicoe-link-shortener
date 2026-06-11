@@ -40,4 +40,4 @@ jobs:
 
       - name: Run smoke tests
         working-directory: user-cli
-        run: uv run pytest tests/test_smoke.py -v
+        run: uv run --extra dev python -m pytest tests/test_smoke.py -v
