@@ -14,6 +14,7 @@ import subprocess
 import sys
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
+from urllib.parse import urlparse
 
 import click
 import requests
@@ -77,6 +78,59 @@ def _compute_short_ids(ids: list[str]) -> dict[str, str]:
             result[full_id] = full_id
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Short-link detection helpers
+# ---------------------------------------------------------------------------
+
+
+def _lookup_slug_core(slug: str) -> dict | None:
+    """Look up a slug via get-link with core fields (no auth required)."""
+    resp = requests.post(
+        f"{API_BASE}/get-link",
+        json={"article_url": slug, "fields": "core"},
+        timeout=30,
+    )
+    if resp.status_code == 200:
+        return resp.json().get("article", {})
+    return None
+
+
+def _extract_article_from_short_url(url: str) -> dict | None:
+    """Check if URL is an aicoe.fit short link and return article info if found.
+
+    Handles both base slugs (e.g. https://aicoe.fit/my-slug) and tracking
+    variant URLs (e.g. https://aicoe.fit/my-slug-a1b2c3).
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+
+    if parsed.hostname not in ("aicoe.fit", "www.aicoe.fit"):
+        return None
+
+    path = parsed.path.strip("/")
+    if not path:
+        return None
+
+    # Try the full path as a slug
+    article = _lookup_slug_core(path)
+    if article:
+        return article
+
+    # Try stripping trailing hex-like segments (tracking variant URLs)
+    # e.g. my-article-a1b2c3 -> my-article
+    parts = path.split("-")
+    for i in range(len(parts) - 1, 0, -1):
+        candidate = "-".join(parts[:i])
+        if candidate:
+            article = _lookup_slug_core(candidate)
+            if article:
+                return article
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -603,6 +657,12 @@ def set_author_name(name: str):
     help="Keep variant in active list indefinitely (no auto-archive).",
 )
 @click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force creation even if the URL is already a short link.",
+)
+@click.option(
     "--json",
     "output_json",
     is_flag=True,
@@ -616,6 +676,7 @@ def shorten(
     note: str | None,
     expires: str | None,
     no_expires: bool,
+    force: bool,
     output_json: bool,
 ):
     """Get your personalised tracking link(s) for any URL or link ID.
@@ -639,6 +700,42 @@ def shorten(
 
     # Original behaviour — call shorten-url edge function
     url = link_id_or_url
+
+    # Detect if the user is trying to shorten an already-shortened URL
+    if not force and not link_id_or_url.startswith("lnk-"):
+        article = _extract_article_from_short_url(link_id_or_url)
+        if article:
+            slug = article.get("slug", "")
+            title = article.get("title") or slug
+            author = article.get("author", "")
+            published_at = article.get("published_at", "")
+            date_str = published_at[:10] if published_at else ""
+
+            if output_json:
+                click.echo(
+                    json.dumps(
+                        {
+                            "warning": "This URL is already a short link.",
+                            "article": article,
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                click.echo(f"\n{click.style('This URL is already a short link:', bold=True)}\n")
+                click.echo(f"  {click.style(title, bold=True)}")
+                if author:
+                    click.echo(f"  by {author}")
+                if date_str:
+                    click.echo(f"  {date_str}")
+                click.echo(f"  Slug:  {slug}")
+                click.echo(f"  Short: https://aicoe.fit/{slug}")
+                click.echo()
+                click.echo("  Use --force to create a new short link anyway.")
+                click.echo()
+
+            return
+
     body: dict = {"url": url}
     if source:
         body["source"] = source
