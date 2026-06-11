@@ -1,4 +1,4 @@
-"""Tests for als aifs episodes — listing completed AIFS episodes.
+"""Tests for aifs episodes — listing completed AIFS episodes.
 
 Tests the CLI dispatch and display logic by mocking _api_request.
 Edge function regex parsing tested implicitly through the mock responses.
@@ -81,12 +81,12 @@ def _mock_resp(status_code: int, json_data: dict):
 
 class TestAifsEpisodes:
     def test_completed_episodes(self):
-        with patch("als._api_request") as mock_req:
+        with patch("aifs._api_request") as mock_req:
             mock_req.return_value = _mock_resp(200, MOCK_COMPLETED_RESPONSE)
 
-            import als as als_mod
+            import aifs as aifs_mod
 
-            als_mod._aifs_episodes()
+            aifs_mod._episodes()
 
         assert mock_req.call_count == 1
         call_args = mock_req.call_args
@@ -94,12 +94,12 @@ class TestAifsEpisodes:
         assert call_args[1]["json_body"]["action"] == "episodes"
 
     def test_completed_episodes_json(self, capsys):
-        with patch("als._api_request") as mock_req:
+        with patch("aifs._api_request") as mock_req:
             mock_req.return_value = _mock_resp(200, MOCK_COMPLETED_RESPONSE)
 
-            import als as als_mod
+            import aifs as aifs_mod
 
-            als_mod._aifs_episodes(output_json=True)
+            aifs_mod._episodes(output_json=True)
 
         captured = capsys.readouterr()
         assert "episode_number" in captured.out
@@ -107,34 +107,34 @@ class TestAifsEpisodes:
         assert '"episode_number": 2' in captured.out
 
     def test_empty_state(self, capsys):
-        with patch("als._api_request") as mock_req:
+        with patch("aifs._api_request") as mock_req:
             mock_req.return_value = _mock_resp(200, MOCK_EMPTY_RESPONSE)
 
-            import als as als_mod
+            import aifs as aifs_mod
 
-            als_mod._aifs_episodes()
+            aifs_mod._episodes()
 
         captured = capsys.readouterr()
         assert "No completed episodes found" in captured.out
 
     def test_empty_state_json(self, capsys):
-        with patch("als._api_request") as mock_req:
+        with patch("aifs._api_request") as mock_req:
             mock_req.return_value = _mock_resp(200, MOCK_EMPTY_RESPONSE)
 
-            import als as als_mod
+            import aifs as aifs_mod
 
-            als_mod._aifs_episodes(output_json=True)
+            aifs_mod._episodes(output_json=True)
 
         captured = capsys.readouterr()
         assert "[]" in captured.out
 
     def test_mixed_states(self, capsys):
-        with patch("als._api_request") as mock_req:
+        with patch("aifs._api_request") as mock_req:
             mock_req.return_value = _mock_resp(200, MOCK_MIXED_RESPONSE)
 
-            import als as als_mod
+            import aifs as aifs_mod
 
-            als_mod._aifs_episodes()
+            aifs_mod._episodes()
 
         captured = capsys.readouterr()
         assert "Episode 3" in captured.out
@@ -142,24 +142,24 @@ class TestAifsEpisodes:
         assert "example.com/article-d" in captured.out
 
     def test_api_error_handling(self, capsys):
-        with patch("als._api_request") as mock_req:
+        with patch("aifs._api_request") as mock_req:
             mock_req.return_value = _mock_resp(401, {"error": "Invalid API key"})
 
-            import als as als_mod
+            import aifs as aifs_mod
 
             with pytest.raises(SystemExit) as exc_info:
-                als_mod._aifs_episodes()
+                aifs_mod._episodes()
             assert exc_info.value.code == 1
 
     def test_api_generic_error(self, capsys):
-        with patch("als._api_request") as mock_req:
+        with patch("aifs._api_request") as mock_req:
             mock_req.return_value = _mock_resp(500, {"error": "Server error"})
             mock_req.return_value.text = "Server error"
 
-            import als as als_mod
+            import aifs as aifs_mod
 
             with pytest.raises(SystemExit) as exc_info:
-                als_mod._aifs_episodes()
+                aifs_mod._episodes()
             assert exc_info.value.code == 1
 
 

@@ -184,7 +184,7 @@ def cli():
        Get article: als get <slug>
        My articles: als last --me 5
        Shorten URL: als shorten <url>
-       AIFS:        als aifs <url>          # submit for AI First Show
+       AIFS:        aifs submit <url>       # AI First Show (dedicated aifs CLI)
      Pre-publish: als pre-publish <slug-or-url>
         Upgrade:     als upgrade
      Bug report:  als bug-report "title" --description "details"
@@ -196,7 +196,7 @@ def cli():
       als get lnk-3f7                # get full details + tracking links
       als search 'AI agents'         # find by topic
       als stats lnk-3f7              # check click performance
-      als aifs https://... --comment # submit for AI First Show
+      aifs submit https://...        # submit for AI First Show (dedicated CLI)
     """
     pass
 
@@ -304,14 +304,15 @@ def help_cmd():
             ],
         ),
         (
-            "7. Submit a link for the AI First Show",
-            "You found something interesting and want to nominate it for the next episode.",
+            "7. Submit a link for the AI First Show (dedicated aifs CLI)",
+            "You found something interesting and want to nominate it for the next episode. "
+            "Use the dedicated aifs CLI (installed alongside als; 'als aifs' is deprecated).",
             [
-                'als aifs "https://arxiv.org/abs/..." --comment "Strong reasoning paper"  # → aifs-xxx (submission ID)',
-                "als aifs list                          # → aifs-xxx IDs; see all nominations",
-                'als aifs --item aifs-xxx --comment "Great follow-up"  # vote by ID from the list',
-                "als aifs archive aifs-xxx --note 'Covered in episode 42'  # archive after coverage",
-                "als aifs https://... --as 442587729172234252  # submit on behalf of a Discord user",
+                'aifs submit "https://arxiv.org/abs/..." --comment "Strong reasoning paper"  # → aifs-xxx (submission ID)',
+                "aifs list                              # → aifs-xxx IDs; see all nominations",
+                'aifs vote aifs-xxx --comment "Great follow-up"  # vote by ID from the list',
+                "aifs archive aifs-xxx --note 'Covered in episode 42'  # archive after coverage",
+                "aifs submit https://... --as 442587729172234252  # submit on behalf of a Discord user",
             ],
         ),
         (
@@ -352,7 +353,7 @@ def help_cmd():
                 "als sync-substack --json | jq '.created[]'      # trigger downstream jobs",
                 "als context create 'Campaign' --json | jq '.context.id'  # capture ctx_id",
                 'als shorten lnk-abc --note "twitter" --json | jq ".variant.short_url"  # capture link',
-                "als aifs https://... --json | jq '.short_id'    # capture submission ID",
+                "aifs submit https://... --json | jq '.short_id'  # capture submission ID",
             ],
         ),
     ]
@@ -3350,6 +3351,11 @@ def aifs(
 ):
     """AI First Show episode candidate submission and voting.
 
+    DEPRECATED: use the dedicated 'aifs' CLI instead (installed alongside
+    als). It has the same data and credentials with proper subcommands:
+    aifs submit <url>, aifs vote <id>, aifs list, aifs archive,
+    aifs unarchive, aifs episodes.
+
     Submit URLs as candidates for the next AI First Show episode,
     vote on existing submissions, and view current rankings.
 
@@ -3411,8 +3417,19 @@ def aifs(
          als aifs list --json
          als aifs episodes --json
     """
+    # Deprecation shim: the implementation lives in the dedicated aifs CLI
+    # (aifs.py, installed as the `aifs` binary). Imported lazily so the
+    # shim adds no startup cost to unrelated als commands.
+    import aifs as aifs_cli
+
+    click.echo(
+        "Note: 'als aifs' is deprecated — use the dedicated 'aifs' CLI instead "
+        "(e.g. 'aifs list', 'aifs submit <url>'). Same data, same credentials.",
+        err=True,
+    )
+
     if item:
-        _aifs_submit(item, comment, discord_user, output_json)
+        aifs_cli._submit(item, comment, discord_user, output_json)
         return
 
     if not url_or_action:
@@ -3421,351 +3438,23 @@ def aifs(
 
     if url_or_action == "list":
         filter_val = "all" if show_all else ("archived" if archived else "active")
-        _aifs_list(filter_val, discord_user, output_json)
+        aifs_cli._list_submissions(filter_val, discord_user, output_json)
         return
 
     if url_or_action == "archive":
-        _aifs_archive(list(ids), note, before_date, archive_all, discord_user)
+        aifs_cli._archive(list(ids), note, before_date, archive_all, discord_user)
         return
 
     if url_or_action == "unarchive":
-        _aifs_unarchive(list(ids), discord_user)
+        aifs_cli._unarchive(list(ids), discord_user)
         return
 
     if url_or_action == "episodes":
-        _aifs_episodes(discord_user, output_json)
+        aifs_cli._episodes(discord_user, output_json)
         return
 
     # Treat as a URL submission
-    _aifs_submit(url_or_action, comment, discord_user, output_json)
-
-
-def _aifs_submit(url: str, comment: str, discord_user: str = "", output_json: bool = False):
-    """Submit a URL as a candidate for the next AI First Show episode."""
-    body: dict = {"action": "submit", "url": url}
-    if comment:
-        comment = re.sub(r"\\([?=&#])", r"\1", comment)
-        body["comment"] = comment
-    if discord_user:
-        body["discord_user"] = discord_user
-
-    resp = _api_request("aifs", json_body=body)
-
-    if resp.status_code == 401:
-        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    if resp.status_code == 400:
-        data = resp.json()
-        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
-        sys.exit(1)
-    if resp.status_code != 200:
-        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
-        sys.exit(1)
-
-    data = resp.json()
-
-    if output_json:
-        click.echo(json.dumps(data, indent=2))
-        return
-
-    status = data.get("status", "")
-    short_id = data.get("short_id", "")
-
-    if status == "submitted":
-        click.echo(f"\n{click.style('Submitted!', fg='green', bold=True)}")
-        click.echo(f"  URL: {url}")
-        if short_id:
-            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
-        click.echo(f"  This is the first vote for this URL.")
-    elif status == "voted":
-        click.echo(f"\n{click.style('Voted!', fg='green', bold=True)}")
-        click.echo(f"  URL: {url}")
-        if short_id:
-            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
-        click.echo(f"  Your vote has been added to an existing submission.")
-    elif status == "comment_added":
-        click.echo(f"\n{click.style('Comment added!', fg='green', bold=True)}")
-        click.echo(f"  URL: {url}")
-        if short_id:
-            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
-        click.echo(f"  You already voted — comment added separately.")
-    elif status == "already_voted":
-        click.echo(f"\n{click.style('Already voted', fg='yellow')}")
-        click.echo(f"  URL: {url}")
-        if short_id:
-            click.echo(f"  ID:  {click.style(short_id, bold=True)}")
-        click.echo(f"  You have already voted for this URL.")
-        click.echo(f"  Tip: add --comment to attach a comment.")
-
-    click.echo()
-
-
-def _aifs_list(filter_val: str = "active", discord_user: str = "", output_json: bool = False):
-    """Show current AI First Show candidates sorted by vote count.
-
-    Displays all submitted URLs with their vote counts, the submitter,
-    and any comments from voters.
-
-    \b
-    Example:
-      als aifs list              # active only (default)
-      als aifs list --archived   # archived only
-      als aifs list --all        # everything
-      als aifs list --json
-    """
-    body: dict = {"action": "list", "filter": filter_val}
-    if discord_user:
-        body["discord_user"] = discord_user
-    resp = _api_request("aifs", json_body=body)
-
-    if resp.status_code == 401:
-        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    if resp.status_code != 200:
-        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
-        sys.exit(1)
-
-    data = resp.json()
-    submissions = data.get("submissions", [])
-
-    if not submissions:
-        if output_json:
-            click.echo(json.dumps([]))
-            return
-        click.echo("\nNo submissions yet.")
-        click.echo("Submit one with: als aifs <url>")
-        click.echo()
-        return
-
-    if output_json:
-        click.echo(json.dumps(submissions, indent=2))
-        return
-
-    total = data.get("total", len(submissions))
-    filter_label = {"active": "active", "archived": "archived", "all": "all"}
-    label = filter_label.get(filter_val, "active")
-    click.echo(
-        f"\n{click.style('AI First Show', bold=True)} — {label} submissions "
-        f"({total} submission{'s' if total != 1 else ''})\n"
-    )
-
-    for sub in submissions:
-        vote_count = sub.get("vote_count", 0)
-        url = sub.get("url", "")
-        short_id = sub.get("short_id", "")
-        voters = sub.get("voters", [])
-        archived_at = sub.get("archived_at")
-        archive_note = sub.get("archive_note")
-
-        vote_str = f"{vote_count} vote{'s' if vote_count != 1 else ''}"
-        id_str = click.style(short_id, fg="magenta") if short_id else ""
-
-        if archived_at:
-            archive_badge = click.style(
-                f"[archived: {archive_note}]" if archive_note else "[archived]",
-                fg="black",
-                bold=True,
-            )
-            click.echo(
-                f"  {id_str}  {click.style(vote_str, fg='cyan', bold=True)}  {url}  {archive_badge}"
-            )
-        else:
-            click.echo(
-                f"  {id_str}  {click.style(vote_str, fg='cyan', bold=True)}  {url}"
-            )
-
-        if voters:
-            first_voter = voters[0] if voters else None
-            if first_voter:
-                comment_str = (
-                    f' → {first_voter["person_ref"]}: "{first_voter["comment"]}"'
-                    if first_voter.get("comment")
-                    else f" → {first_voter['person_ref']}"
-                )
-                click.echo(f"           {comment_str}")
-
-            other_voters = voters[1:] if len(voters) > 1 else []
-            for v in other_voters:
-                if v.get("comment"):
-                    click.echo(
-                        f'           → {v.get("person_ref", "?")}: "{v["comment"]}"'
-                    )
-                else:
-                    click.echo(f"           → {v.get('person_ref', '?')}")
-
-        click.echo()
-
-
-def _aifs_archive(
-    ids: list[str], note: str, before_date: str, archive_all: bool, discord_user: str = ""
-) -> None:
-    """Archive AI First Show submissions."""
-    if not note:
-        click.echo("Error: --note is required for archive action.", err=True)
-        sys.exit(1)
-
-    if archive_all:
-        body: dict = {"action": "list", "filter": "active"}
-        if discord_user:
-            body["discord_user"] = discord_user
-        resp = _api_request("aifs", json_body=body)
-        if resp.status_code != 200:
-            click.echo(f"Error fetching submissions: {resp.text}", err=True)
-            sys.exit(1)
-        data = resp.json()
-        submissions = data.get("submissions", [])
-        ids = [s.get("short_id", "") for s in submissions if s.get("short_id")]
-        if not ids:
-            click.echo("No active submissions to archive.")
-            return
-
-    if not ids and not before_date:
-        click.echo(
-            "Error: provide IDs, --before, or --archive-all for archive action.",
-            err=True,
-        )
-        sys.exit(1)
-
-    body: dict = {"action": "archive", "note": note}
-    if ids:
-        body["ids"] = ids
-    if before_date:
-        body["before_date"] = before_date
-    if discord_user:
-        body["discord_user"] = discord_user
-
-    resp = _api_request("aifs", json_body=body)
-
-    if resp.status_code == 401:
-        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    if resp.status_code == 400:
-        data = resp.json()
-        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
-        sys.exit(1)
-    if resp.status_code != 200:
-        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
-        sys.exit(1)
-
-    data = resp.json()
-    count = data.get("count", 0)
-    archived_subs = data.get("submissions", [])
-
-    click.echo(
-        f"\n{click.style('Archived', fg='green', bold=True)} {count} submission(s):"
-    )
-    for sub in archived_subs:
-        short_id = sub.get("short_id", "")
-        if short_id:
-            click.echo(f"  {click.style(short_id, fg='magenta')}")
-    click.echo(f"  Note: {note}")
-    click.echo()
-
-
-def _aifs_unarchive(ids: list[str], discord_user: str = "") -> None:
-    """Unarchive AI First Show submissions."""
-    if not ids:
-        click.echo("Error: provide IDs for unarchive action.", err=True)
-        sys.exit(1)
-
-    body: dict = {"action": "unarchive", "ids": ids}
-    if discord_user:
-        body["discord_user"] = discord_user
-
-    resp = _api_request("aifs", json_body=body)
-
-    if resp.status_code == 401:
-        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    if resp.status_code == 400:
-        data = resp.json()
-        click.echo(f"Error: {data.get('error', resp.text)}", err=True)
-        sys.exit(1)
-    if resp.status_code != 200:
-        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
-        sys.exit(1)
-
-    data = resp.json()
-    count = data.get("count", 0)
-    unarchived_subs = data.get("submissions", [])
-
-    click.echo(
-        f"\n{click.style('Unarchived', fg='green', bold=True)} {count} submission(s):"
-    )
-    for sub in unarchived_subs:
-        short_id = sub.get("short_id", "")
-        if short_id:
-            click.echo(f"  {click.style(short_id, fg='magenta')}")
-    click.echo()
-
-
-def _aifs_episodes(discord_user: str = "", output_json: bool = False):
-    """List completed AIFS episodes with their submission counts and completion dates.
-
-    \b
-    Example:
-      als aifs episodes
-      als aifs episodes --json
-    """
-    body: dict = {"action": "episodes"}
-    if discord_user:
-        body["discord_user"] = discord_user
-    resp = _api_request("aifs", json_body=body)
-
-    if resp.status_code == 401:
-        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
-        sys.exit(1)
-    if resp.status_code != 200:
-        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
-        sys.exit(1)
-
-    data = resp.json()
-    episodes = data.get("episodes", [])
-
-    if not episodes:
-        if output_json:
-            click.echo(json.dumps([]))
-            return
-        click.echo("\nNo completed episodes found.")
-        click.echo(
-            "Archive submissions with episode notes to mark them complete:"
-        )
-        click.echo('  als aifs archive aifs-xxx --note "Covered in episode 1"')
-        click.echo()
-        return
-
-    if output_json:
-        click.echo(json.dumps(episodes, indent=2))
-        return
-
-    total = data.get("total", len(episodes))
-    click.echo(
-        f"\n{click.style('AI First Show', bold=True)} — completed episodes "
-        f"({total} episode{'s' if total != 1 else ''})\n"
-    )
-
-    for ep in episodes:
-        ep_num = ep.get("episode_number")
-        completed_at = ep.get("completed_at", "") or ""
-        sub_count = ep.get("submission_count", 0)
-        submissions = ep.get("submissions", [])
-
-        ts_display = ""
-        if completed_at:
-            ts = completed_at.replace("T", " ").split(".")[0]
-            ts_display = f"  {click.style(ts, fg='black', dim=True)}"
-
-        click.echo(
-            f"  {click.style(f'Episode {ep_num}', fg='cyan', bold=True)}"
-            f"  {sub_count} submission{'s' if sub_count != 1 else ''}"
-            f"{ts_display}"
-        )
-
-        for sub in submissions:
-            short_id = sub.get("short_id", "")
-            url = sub.get("url", "")
-            id_str = click.style(short_id, fg="magenta") if short_id else ""
-            click.echo(f"           {id_str}  {url}")
+    aifs_cli._submit(url_or_action, comment, discord_user, output_json)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 [project]
 name = "als"
-version = "0.8.13"
-description = "User CLI for aicoe.fit link shortener — search and get personalised tracking links"
+version = "0.9.0"
+description = "User CLI for aicoe.fit link shortener — search and get personalised tracking links. Also ships the aifs CLI for AI First Show episode curation."
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.1",
@@ -19,6 +19,10 @@ dev = [
 
 [project.scripts]
 als = "als:cli"
+aifs = "aifs:cli"
+
+[tool.hatch.build.targets.wheel]
+include = ["als.py", "aifs.py", "als_common.py"]
 
 [tool.pytest.ini_options]
 markers = [
