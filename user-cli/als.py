@@ -3321,13 +3321,25 @@ def aifs(
 
          als aifs unarchive aifs-c6u
 
-      6. Submit or vote on behalf of a Discord user
+      6. List completed episodes
+         Show which AIFS episodes are complete, parsed from archive notes
+         that reference episode numbers (e.g., "Covered in episode 42").
+
+         als aifs episodes
+
+      7. Submit or vote on behalf of a Discord user
          When an agent or bot is acting for someone else, use --as with
          their Discord user ID. The action is attributed to the mapped
          person (configured server-side).
 
          als aifs https://example.com --as 442587729172234252
          als aifs list --as 442587729172234252
+
+      8. Get raw JSON output
+         Add --json to any action that returns data for machine-readable output.
+
+         als aifs list --json
+         als aifs episodes --json
     """
     if item:
         _aifs_submit(item, comment, discord_user, output_json)
@@ -3348,6 +3360,10 @@ def aifs(
 
     if url_or_action == "unarchive":
         _aifs_unarchive(list(ids), discord_user)
+        return
+
+    if url_or_action == "episodes":
+        _aifs_episodes(discord_user, output_json)
         return
 
     # Treat as a URL submission
@@ -3611,6 +3627,75 @@ def _aifs_unarchive(ids: list[str], discord_user: str = "") -> None:
         if short_id:
             click.echo(f"  {click.style(short_id, fg='magenta')}")
     click.echo()
+
+
+def _aifs_episodes(discord_user: str = "", output_json: bool = False):
+    """List completed AIFS episodes with their submission counts and completion dates.
+
+    \b
+    Example:
+      als aifs episodes
+      als aifs episodes --json
+    """
+    body: dict = {"action": "episodes"}
+    if discord_user:
+        body["discord_user"] = discord_user
+    resp = _api_request("aifs", json_body=body)
+
+    if resp.status_code == 401:
+        click.echo("Invalid API key. Run: als login --api-key <your-key>", err=True)
+        sys.exit(1)
+    if resp.status_code != 200:
+        click.echo(f"Error ({resp.status_code}): {resp.text}", err=True)
+        sys.exit(1)
+
+    data = resp.json()
+    episodes = data.get("episodes", [])
+
+    if not episodes:
+        if output_json:
+            click.echo(json.dumps([]))
+            return
+        click.echo("\nNo completed episodes found.")
+        click.echo(
+            "Archive submissions with episode notes to mark them complete:"
+        )
+        click.echo('  als aifs archive aifs-xxx --note "Covered in episode 1"')
+        click.echo()
+        return
+
+    if output_json:
+        click.echo(json.dumps(episodes, indent=2))
+        return
+
+    total = data.get("total", len(episodes))
+    click.echo(
+        f"\n{click.style('AI First Show', bold=True)} — completed episodes "
+        f"({total} episode{'s' if total != 1 else ''})\n"
+    )
+
+    for ep in episodes:
+        ep_num = ep.get("episode_number")
+        completed_at = ep.get("completed_at", "") or ""
+        sub_count = ep.get("submission_count", 0)
+        submissions = ep.get("submissions", [])
+
+        ts_display = ""
+        if completed_at:
+            ts = completed_at.replace("T", " ").split(".")[0]
+            ts_display = f"  {click.style(ts, fg='black', dim=True)}"
+
+        click.echo(
+            f"  {click.style(f'Episode {ep_num}', fg='cyan', bold=True)}"
+            f"  {sub_count} submission{'s' if sub_count != 1 else ''}"
+            f"{ts_display}"
+        )
+
+        for sub in submissions:
+            short_id = sub.get("short_id", "")
+            url = sub.get("url", "")
+            id_str = click.style(short_id, fg="magenta") if short_id else ""
+            click.echo(f"           {id_str}  {url}")
 
 
 if __name__ == "__main__":

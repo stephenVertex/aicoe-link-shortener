@@ -400,8 +400,82 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  if (action === "episodes") {
+    const { data: archivedSubs, error: fetchError } = await supabase
+      .from("aifs_submissions")
+      .select("id, url, title, short_id, submitted_by, submitted_at, archived_at, archive_note")
+      .not("archived_at", "is", null)
+      .order("archived_at", { ascending: false });
+
+    if (fetchError) {
+      console.error("Error fetching archived submissions:", fetchError);
+      return jsonResponse({ error: "Failed to fetch archived submissions" }, 500);
+    }
+
+    if (!archivedSubs || archivedSubs.length === 0) {
+      return jsonResponse({ episodes: [], total: 0 });
+    }
+
+    const episodeRegex = /(?:covered\s+in\s+)?(?:episode|ep|e)\s*[#]?\s*(\d+)|#\s*(\d+)/i;
+    const episodesMap = new Map<number, {
+      episode_number: number;
+      completed_at: string;
+      submission_count: number;
+      submissions: Array<{
+        id: string;
+        short_id: string | null;
+        url: string;
+        title: string | null;
+        submitted_by: string;
+      }>;
+    }>();
+
+    for (const s of archivedSubs) {
+      const note = (s.archive_note || "").trim();
+      if (!note) continue;
+
+      const match = note.match(episodeRegex);
+      if (!match) continue;
+
+      const epNum = parseInt(match[1] || match[2], 10);
+      if (isNaN(epNum)) continue;
+
+      const existing = episodesMap.get(epNum);
+      const subEntry = {
+        id: s.id,
+        short_id: s.short_id,
+        url: s.url,
+        title: s.title,
+        submitted_by: s.submitted_by,
+      };
+
+      if (existing) {
+        existing.submissions.push(subEntry);
+        existing.submission_count += 1;
+        if (s.archived_at > existing.completed_at) {
+          existing.completed_at = s.archived_at;
+        }
+      } else {
+        episodesMap.set(epNum, {
+          episode_number: epNum,
+          completed_at: s.archived_at,
+          submission_count: 1,
+          submissions: [subEntry],
+        });
+      }
+    }
+
+    const episodes = Array.from(episodesMap.values())
+      .sort((a, b) => a.episode_number - b.episode_number);
+
+    return jsonResponse({
+      episodes,
+      total: episodes.length,
+    });
+  }
+
   return jsonResponse(
-    { error: `Unknown action '${action}'. Valid actions: submit, list, archive, unarchive` },
+    { error: `Unknown action '${action}'. Valid actions: submit, list, archive, unarchive, episodes` },
     400,
   );
 });
