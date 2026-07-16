@@ -34,6 +34,11 @@ def _stderr(result) -> str:
 
 SUBMITTED = {"status": "submitted", "short_id": "aifs-new"}
 VOTED = {"status": "voted", "short_id": "aifs-c6u"}
+SUBMITTED_WITH_TAGS = {
+    "status": "submitted",
+    "short_id": "aifs-new",
+    "tags": [{"name": "Model Release", "slug": "model-release"}],
+}
 
 LIST_RESPONSE = {
     "submissions": [
@@ -47,6 +52,27 @@ LIST_RESPONSE = {
             ],
             "archived_at": None,
             "archive_note": None,
+            "tags": [],
+        },
+    ],
+    "total": 1,
+}
+
+LIST_RESPONSE_WITH_TAGS = {
+    "submissions": [
+        {
+            "short_id": "aifs-c6u",
+            "url": "https://example.com/a",
+            "vote_count": 2,
+            "voters": [
+                {"person_ref": "alice", "comment": "Great"},
+            ],
+            "archived_at": None,
+            "archive_note": None,
+            "tags": [
+                {"name": "Model Release", "slug": "model-release"},
+                {"name": "Agent Tooling", "slug": "agent-tooling"},
+            ],
         },
     ],
     "total": 1,
@@ -328,6 +354,156 @@ class TestAlsAifsShim:
         result = CliRunner().invoke(als.cli, ["aifs", "--help"])
         assert result.exit_code == 0
         assert "DEPRECATED" in result.output
+
+
+class TestAifsSubmitTags:
+    def test_submit_with_single_tag(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, SUBMITTED_WITH_TAGS)
+            result = CliRunner().invoke(
+                aifs.cli, ["submit", "https://example.com/a", "--tag", "model-release"]
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["tags"] == ["model-release"]
+
+    def test_submit_with_multiple_tags(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, SUBMITTED_WITH_TAGS)
+            result = CliRunner().invoke(
+                aifs.cli,
+                [
+                    "submit", "https://example.com/a",
+                    "--tag", "model-release", "--tag", "agent-tooling",
+                ],
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["tags"] == ["model-release", "agent-tooling"]
+
+    def test_submit_without_tag_omits_tags_key(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, SUBMITTED)
+            result = CliRunner().invoke(aifs.cli, ["submit", "https://example.com/a"])
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert "tags" not in body
+
+    def test_submit_displays_tags(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, SUBMITTED_WITH_TAGS)
+            result = CliRunner().invoke(
+                aifs.cli, ["submit", "https://example.com/a", "--tag", "model-release"]
+            )
+
+        assert result.exit_code == 0
+        assert "Tags:" in result.output
+        assert "model-release" in result.output
+
+
+class TestAifsVoteTags:
+    def test_vote_with_tag(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, VOTED)
+            result = CliRunner().invoke(
+                aifs.cli, ["vote", "aifs-c6u", "--tag", "model-release"]
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["url"] == "aifs-c6u"
+        assert body["tags"] == ["model-release"]
+
+    def test_vote_with_multiple_tags(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, VOTED)
+            result = CliRunner().invoke(
+                aifs.cli,
+                ["vote", "aifs-c6u", "--tag", "model-release", "--tag", "open-weights"],
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["tags"] == ["model-release", "open-weights"]
+
+
+class TestAifsListTags:
+    def test_list_with_tag_filter(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, LIST_RESPONSE)
+            result = CliRunner().invoke(
+                aifs.cli, ["list", "--tag", "model-release"]
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["action"] == "list"
+        assert body["tags"] == ["model-release"]
+
+    def test_list_without_tag_omits_tags_key(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, LIST_RESPONSE)
+            result = CliRunner().invoke(aifs.cli, ["list"])
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert "tags" not in body
+
+    def test_list_displays_tags(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, LIST_RESPONSE_WITH_TAGS)
+            result = CliRunner().invoke(aifs.cli, ["list"])
+
+        assert result.exit_code == 0
+        assert "#model-release" in result.output
+        assert "#agent-tooling" in result.output
+
+    def test_list_with_multiple_tag_filters(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, LIST_RESPONSE)
+            result = CliRunner().invoke(
+                aifs.cli, ["list", "--tag", "model-release", "--tag", "agent-tooling"]
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["tags"] == ["model-release", "agent-tooling"]
+
+
+class TestAlsAifsShimTags:
+    def test_shim_submit_with_tag(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, SUBMITTED)
+            result = CliRunner().invoke(
+                als.cli, ["aifs", "https://example.com/a", "--tag", "model-release"]
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["tags"] == ["model-release"]
+
+    def test_shim_list_with_tag(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, LIST_RESPONSE)
+            result = CliRunner().invoke(als.cli, ["aifs", "list", "--tag", "model-release"])
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["tags"] == ["model-release"]
+
+    def test_shim_vote_with_tag(self):
+        with patch("aifs._api_request") as mock_req:
+            mock_req.return_value = _mock_resp(200, VOTED)
+            result = CliRunner().invoke(
+                als.cli, ["aifs", "--item", "aifs-c6u", "--tag", "model-release"]
+            )
+
+        assert result.exit_code == 0
+        body = mock_req.call_args[1]["json_body"]
+        assert body["tags"] == ["model-release"]
 
 
 class TestSharedCredentials:
