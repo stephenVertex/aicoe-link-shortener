@@ -232,8 +232,10 @@ als last 5
 The same install also ships a dedicated `aifs` binary for AI First Show episode candidate curation (it shares credentials with `als`, so one login covers both):
 ```bash
 aifs submit <url> --comment "Great overview of RAG"
+aifs submit <url> --tag model-release --tag agent-tooling
 aifs vote aifs-c6u
 aifs list
+aifs list --tag model-release
 aifs archive aifs-c6u --note "Covered in episode 42"
 aifs episodes
 ```
