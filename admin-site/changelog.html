@@ -198,6 +198,20 @@
     <h2>Changelog</h2>
     <p style="color:var(--text-muted); margin-bottom: 24px;">All notable performance improvements, bug fixes, and feature requests. Tracked via <a href="https://github.com/yesod/yesod" target="_blank">yesod</a> under tool <code>als</code>. <a href="https://github.com/stephenVertex/aicoe-link-shortener/actions" target="_blank" rel="noopener">View CI runs &rarr;</a></p>
 
+    <h2>2026-07-16 — AIFS Link Tags</h2>
+
+    <h3>Feature Requests</h3>
+
+    <div class="card">
+      <h4>Tag/label categorization for AIFS submissions <span class="badge badge-feature">feature</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-nwbt</code></span>
+      </div>
+      <p><strong>Request:</strong> Add a tag or label concept to AIFS submissions so links can be categorized (e.g. <code>model-release</code>, <code>agent-tooling</code>, <code>open-weights</code>, <code>api-design</code>) and filtered for episode segmentation.</p>
+      <p><strong>Implementation:</strong> Added <code>--tag</code> option (repeatable) to <code>aifs submit</code>, <code>aifs vote</code>, and <code>aifs list</code>. New <code>aifs_submission_tags</code> junction table reuses the existing <code>tags</code> vocabulary. The <code>aifs</code> edge function find-or-creates tags on submit/vote and filters by tag (OR semantics) on list. The deprecated <code>als aifs</code> shim also supports <code>--tag</code>.</p>
+      <div class="result">Submissions can now be categorized and filtered: <code>aifs list --tag model-release</code> shows only model-release submissions. 13 new tests added.</div>
+    </div>
+
     <h2>2026-06-11 — Test Data Exclusion from Search</h2>
 
     <h3>Bug Fixes</h3>

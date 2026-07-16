@@ -2,6 +2,18 @@
 
 All notable performance improvements, bug fixes, and feature requests for aicoe.fit.
 
+## 2026-07-16 — AIFS Link Tags
+
+### Features
+
+#### Tag/label categorization for AIFS submissions
+- **ID**: `ys-als-nwbt`
+- **Change**: Added a `--tag` option (repeatable) to `aifs submit`, `aifs vote`, and `aifs list`. Submissions can now be categorized with tags like `model-release`, `agent-tooling`, `open-weights`, `api-design`. Tags enable filtering (`aifs list --tag model-release`) and grouping for episode segmentation.
+- **Commands**: `aifs submit <url> --tag model-release`, `aifs vote <id> --tag model-release`, `aifs list --tag model-release`. The deprecated `als aifs` shim also supports `--tag`.
+- **Database**: New `aifs_submission_tags` junction table (many-to-many between `aifs_submissions` and the existing `tags` table) with RLS policies matching the `article_tags` pattern. Reuses the shared `tags` vocabulary so a single tag set serves both articles and AIFS submissions.
+- **Edge function**: `aifs` function updated — submit/vote find-or-create tags and attach them; list filters by tag (OR semantics) and includes tags in each submission response.
+- **Tests**: 13 new tests covering single/multiple tags, tag display, tag omission, and shim pass-through.
+
 ## 2026-06-11 — Dedicated `aifs` CLI (v0.9.0)
 
 ### Features
