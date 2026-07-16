@@ -3330,6 +3330,12 @@ def tracking_variants_delete(label: str, source: str):
     help="Act as a Discord user (maps to a person via static config).",
 )
 @click.option(
+    "--tag",
+    "tags",
+    multiple=True,
+    help="Categorize/filter submissions by tag (e.g. model-release). Repeatable.",
+)
+@click.option(
     "--json",
     "output_json",
     is_flag=True,
@@ -3347,6 +3353,7 @@ def aifs(
     before_date: str,
     archive_all: bool,
     discord_user: str,
+    tags: tuple[str, ...],
     output_json: bool,
 ):
     """AI First Show episode candidate submission and voting.
@@ -3429,7 +3436,7 @@ def aifs(
     )
 
     if item:
-        aifs_cli._submit(item, comment, discord_user, output_json)
+        aifs_cli._submit(item, comment, discord_user, output_json, tags=tags)
         return
 
     if not url_or_action:
@@ -3438,7 +3445,7 @@ def aifs(
 
     if url_or_action == "list":
         filter_val = "all" if show_all else ("archived" if archived else "active")
-        aifs_cli._list_submissions(filter_val, discord_user, output_json)
+        aifs_cli._list_submissions(filter_val, discord_user, output_json, tags=tags)
         return
 
     if url_or_action == "archive":
@@ -3454,7 +3461,7 @@ def aifs(
         return
 
     # Treat as a URL submission
-    aifs_cli._submit(url_or_action, comment, discord_user, output_json)
+    aifs_cli._submit(url_or_action, comment, discord_user, output_json, tags=tags)
 
 
 if __name__ == "__main__":

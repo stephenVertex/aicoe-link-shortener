@@ -54,6 +54,8 @@ def cli():
                    aifs <url>                   # shorthand for submit
       Vote:        aifs vote aifs-c6u --comment "Strong reasoning results"
       Rankings:    aifs list
+      Tags:        aifs submit <url> --tag model-release
+                   aifs list --tag model-release
       Archive:     aifs archive aifs-c6u --note "Covered in episode 42"
       Unarchive:   aifs unarchive aifs-c6u
       Episodes:    aifs episodes
@@ -100,13 +102,19 @@ def login(api_key: str):
     help="Act as a Discord user (maps to a person via static config).",
 )
 @click.option(
+    "--tag",
+    "tags",
+    multiple=True,
+    help="Categorize this submission with a tag (e.g. model-release). Repeatable.",
+)
+@click.option(
     "--json",
     "output_json",
     is_flag=True,
     default=False,
     help="Output raw JSON instead of human-readable text.",
 )
-def submit(url: str, comment: str, discord_user: str, output_json: bool):
+def submit(url: str, comment: str, discord_user: str, tags: tuple[str, ...], output_json: bool):
     """Submit a URL as a candidate for the next episode.
 
     The URL gets a short ID (aifs-xxx) and your vote is automatically
@@ -116,9 +124,10 @@ def submit(url: str, comment: str, discord_user: str, output_json: bool):
     Examples:
       aifs submit https://arxiv.org/abs/2501.12345
       aifs submit https://example.com --comment "Great overview of RAG"
+      aifs submit https://... --tag model-release --tag agent-tooling
       aifs submit https://... --json | jq '.short_id'
     """
-    _submit(url, comment, discord_user, output_json)
+    _submit(url, comment, discord_user, output_json, tags=tags)
 
 
 @cli.command()
@@ -131,13 +140,19 @@ def submit(url: str, comment: str, discord_user: str, output_json: bool):
     help="Act as a Discord user (maps to a person via static config).",
 )
 @click.option(
+    "--tag",
+    "tags",
+    multiple=True,
+    help="Add a tag to this submission (e.g. model-release). Repeatable.",
+)
+@click.option(
     "--json",
     "output_json",
     is_flag=True,
     default=False,
     help="Output raw JSON instead of human-readable text.",
 )
-def vote(item: str, comment: str, discord_user: str, output_json: bool):
+def vote(item: str, comment: str, discord_user: str, tags: tuple[str, ...], output_json: bool):
     """Vote on an existing submission by its short ID (e.g., aifs-c6u).
 
     Use the short ID from aifs list.
@@ -146,8 +161,9 @@ def vote(item: str, comment: str, discord_user: str, output_json: bool):
     Examples:
       aifs vote aifs-c6u
       aifs vote aifs-c6u --comment "Strong reasoning results"
+      aifs vote aifs-c6u --tag model-release
     """
-    _submit(item, comment, discord_user, output_json)
+    _submit(item, comment, discord_user, output_json, tags=tags)
 
 
 @cli.command("list")
@@ -171,13 +187,19 @@ def vote(item: str, comment: str, discord_user: str, output_json: bool):
     help="Act as a Discord user (maps to a person via static config).",
 )
 @click.option(
+    "--tag",
+    "tags",
+    multiple=True,
+    help="Filter submissions by tag (e.g. model-release). Repeatable (OR).",
+)
+@click.option(
     "--json",
     "output_json",
     is_flag=True,
     default=False,
     help="Output raw JSON instead of human-readable text.",
 )
-def list_cmd(archived: bool, show_all: bool, discord_user: str, output_json: bool):
+def list_cmd(archived: bool, show_all: bool, discord_user: str, tags: tuple[str, ...], output_json: bool):
     """Show current candidates sorted by vote count.
 
     Displays all submitted URLs with their vote counts, the submitter,
@@ -188,10 +210,11 @@ def list_cmd(archived: bool, show_all: bool, discord_user: str, output_json: boo
       aifs list              # active only (default)
       aifs list --archived   # archived only
       aifs list --all        # everything
+      aifs list --tag model-release
       aifs list --json
     """
     filter_val = "all" if show_all else ("archived" if archived else "active")
-    _list_submissions(filter_val, discord_user, output_json)
+    _list_submissions(filter_val, discord_user, output_json, tags=tags)
 
 
 @cli.command()
@@ -285,7 +308,7 @@ def episodes(discord_user: str, output_json: bool):
 # ---------------------------------------------------------------------------
 
 
-def _submit(url: str, comment: str, discord_user: str = "", output_json: bool = False):
+def _submit(url: str, comment: str, discord_user: str = "", output_json: bool = False, tags: tuple[str, ...] = ()):
     """Submit a URL as a candidate for the next AI First Show episode."""
     body: dict = {"action": "submit", "url": url}
     if comment:
@@ -293,6 +316,8 @@ def _submit(url: str, comment: str, discord_user: str = "", output_json: bool = 
         body["comment"] = comment
     if discord_user:
         body["discord_user"] = discord_user
+    if tags:
+        body["tags"] = list(tags)
 
     resp = _api_request("aifs", json_body=body)
 
@@ -341,16 +366,23 @@ def _submit(url: str, comment: str, discord_user: str = "", output_json: bool = 
         click.echo(f"  You have already voted for this URL.")
         click.echo(f"  Tip: add --comment to attach a comment.")
 
+    attached = data.get("tags") or []
+    if attached:
+        tag_str = ", ".join(t.get("slug", t.get("name", "")) for t in attached)
+        click.echo(f"  Tags: {click.style(tag_str, fg='blue')}")
+
     click.echo()
 
 
 def _list_submissions(
-    filter_val: str = "active", discord_user: str = "", output_json: bool = False
+    filter_val: str = "active", discord_user: str = "", output_json: bool = False, tags: tuple[str, ...] = ()
 ):
     """Show current AI First Show candidates sorted by vote count."""
     body: dict = {"action": "list", "filter": filter_val}
     if discord_user:
         body["discord_user"] = discord_user
+    if tags:
+        body["tags"] = list(tags)
     resp = _api_request("aifs", json_body=body)
 
     if resp.status_code == 401:
@@ -407,6 +439,14 @@ def _list_submissions(
             click.echo(
                 f"  {id_str}  {click.style(vote_str, fg='cyan', bold=True)}  {url}"
             )
+
+        sub_tags = sub.get("tags") or []
+        if sub_tags:
+            tag_str = " ".join(
+                click.style(f"#{t.get('slug', t.get('name', ''))}", fg="blue")
+                for t in sub_tags
+            )
+            click.echo(f"           {tag_str}")
 
         if voters:
             first_voter = voters[0] if voters else None
