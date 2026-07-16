@@ -35,6 +35,106 @@ function resolvePersonSlug(person: PersonInfo, discordUser?: string): string {
   return person.slug;
 }
 
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "");
+}
+
+interface TagRecord {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+async function findOrCreateTags(tagNames: string[]): Promise<TagRecord[]> {
+  const results: TagRecord[] = [];
+  for (const raw of tagNames) {
+    const name = raw.trim();
+    if (!name) continue;
+    const slug = slugify(name);
+    if (!slug) continue;
+
+    const { data: existing } = await supabase
+      .from("tags")
+      .select("id, name, slug")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (existing) {
+      results.push(existing as TagRecord);
+      continue;
+    }
+
+    const { data: newTag, error } = await supabase
+      .from("tags")
+      .insert({ name, slug })
+      .select("id, name, slug")
+      .single();
+
+    if (error || !newTag) {
+      console.error("Error creating tag:", error);
+      continue;
+    }
+    results.push(newTag as TagRecord);
+  }
+  return results;
+}
+
+async function findTagIds(tagNames: string[]): Promise<string[]> {
+  const slugs = tagNames.map((t) => slugify(t.trim())).filter((s) => s);
+  if (slugs.length === 0) return [];
+  const { data } = await supabase
+    .from("tags")
+    .select("id")
+    .in("slug", slugs);
+  return (data || []).map((t: { id: string }) => t.id);
+}
+
+async function attachTagsToSubmission(
+  submissionId: string,
+  tagNames: string[],
+): Promise<{ name: string; slug: string }[]> {
+  const tagRecords = await findOrCreateTags(tagNames);
+  for (const tag of tagRecords) {
+    await supabase
+      .from("aifs_submission_tags")
+      .upsert(
+        { submission_id: submissionId, tag_id: tag.id },
+        { onConflict: "submission_id,tag_id" },
+      );
+  }
+  return tagRecords.map((t) => ({ name: t.name, slug: t.slug }));
+}
+
+async function getSubmissionTags(
+  submissionIds: string[],
+): Promise<Record<string, Array<{ name: string; slug: string }>>> {
+  if (submissionIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from("aifs_submission_tags")
+    .select("submission_id, tags(id, name, slug)")
+    .in("submission_id", submissionIds);
+
+  if (error) {
+    console.error("Error fetching submission tags:", error);
+    return {};
+  }
+
+  const map: Record<string, Array<{ name: string; slug: string }>> = {};
+  for (const row of data || []) {
+    const sid = row.submission_id as string;
+    if (!map[sid]) map[sid] = [];
+    const tag = row.tags as { name: string; slug: string } | null;
+    if (tag) {
+      map[sid].push({ name: tag.name, slug: tag.slug });
+    }
+  }
+  return map;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -72,6 +172,7 @@ Deno.serve(async (req: Request) => {
   let beforeDate = "";
   let filter = "active";
   let discordUser = "";
+  let tags: string[] = [];
 
   if (req.method === "POST") {
     try {
@@ -85,6 +186,7 @@ Deno.serve(async (req: Request) => {
       beforeDate = body.before_date || "";
       filter = body.filter || "active";
       discordUser = body.discord_user || "";
+      tags = body.tags || [];
     } catch {
       return jsonResponse({ error: "Invalid JSON body" }, 400);
     }
@@ -94,6 +196,7 @@ Deno.serve(async (req: Request) => {
     action = reqUrl.searchParams.get("action") || "list";
     filter = reqUrl.searchParams.get("filter") || "active";
     discordUser = reqUrl.searchParams.get("discord_user") || "";
+    tags = reqUrl.searchParams.getAll("tag") || [];
   }
 
   if (!apiKey) {
@@ -165,15 +268,28 @@ Deno.serve(async (req: Request) => {
           comment: comment || null,
         });
 
+        // Attach tags if provided
+        let attachedTags: { name: string; slug: string }[] = [];
+        if (tags.length > 0) {
+          attachedTags = await attachTagsToSubmission(newSubmission.id, tags);
+        }
+
         return jsonResponse({
           status: "submitted",
           submission_id: newSubmission.id,
           short_id: newSubmission.short_id,
+          tags: attachedTags,
           message: "URL submitted successfully",
         });
       }
     } else {
       return jsonResponse({ error: "url is required" }, 400);
+    }
+
+    // Attach tags if provided (applies to all existing-submission paths)
+    let attachedTags: { name: string; slug: string }[] = [];
+    if (tags.length > 0 && existingSubmission) {
+      attachedTags = await attachTagsToSubmission(existingSubmission.id, tags);
     }
 
     // Check if already voted
@@ -199,6 +315,7 @@ Deno.serve(async (req: Request) => {
           status: "comment_added",
           submission_id: existingSubmission.id,
           short_id: existingSubmission.short_id,
+          tags: attachedTags,
           message: "Comment added (you already voted)",
         });
       }
@@ -207,6 +324,7 @@ Deno.serve(async (req: Request) => {
         status: "already_voted",
         submission_id: existingSubmission.id,
         short_id: existingSubmission.short_id,
+        tags: attachedTags,
         message: "You have already voted for this URL",
       });
     }
@@ -222,6 +340,7 @@ Deno.serve(async (req: Request) => {
       status: "voted",
       submission_id: existingSubmission.id,
       short_id: existingSubmission.short_id,
+      tags: attachedTags,
       message: "Vote added successfully",
     });
   }
@@ -235,6 +354,25 @@ Deno.serve(async (req: Request) => {
       query = query.is("archived_at", null);
     } else if (filter === "archived") {
       query = query.not("archived_at", "is", null);
+    }
+
+    // Filter by tags if provided (OR: submissions matching any of the tags)
+    if (tags.length > 0) {
+      const tagIds = await findTagIds(tags);
+      if (tagIds.length === 0) {
+        return jsonResponse({ submissions: [], total: 0 });
+      }
+      const { data: junctionRows } = await supabase
+        .from("aifs_submission_tags")
+        .select("submission_id")
+        .in("tag_id", tagIds);
+      const taggedSubmissionIds = [...new Set(
+        (junctionRows || []).map((r: { submission_id: string }) => r.submission_id),
+      )];
+      if (taggedSubmissionIds.length === 0) {
+        return jsonResponse({ submissions: [], total: 0 });
+      }
+      query = query.in("id", taggedSubmissionIds);
     }
 
     const { data: submissions, error: subError } = await query.order("submitted_at", { ascending: false });
@@ -252,6 +390,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const submissionIds = submissions.map((s: { id: string }) => s.id);
+
+    const tagsBySubmission = await getSubmissionTags(submissionIds);
 
     const { data: votes, error: votesError } = await supabase
       .from("aifs_votes")
@@ -293,6 +433,7 @@ Deno.serve(async (req: Request) => {
         submitted_at: s.submitted_at,
         archived_at: s.archived_at,
         archive_note: s.archive_note,
+        tags: tagsBySubmission[s.id] || [],
         vote_count: voteCount,
         voters: [
           { person_ref: s.submitted_by, comment: firstVote?.comment || null, type: "vote" },
