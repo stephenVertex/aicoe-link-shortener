@@ -1,9 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { buildDestinationUrl } from "./destination.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
 
 function hashIP(ip: string): string {
@@ -19,9 +20,10 @@ function hashIP(ip: string): string {
 async function logClick(
   linkId: string,
   variantId: string | null,
-  req: Request
+  req: Request,
 ): Promise<void> {
-  const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+  const ip = req.headers.get("x-forwarded-for") ||
+    req.headers.get("x-real-ip") || "unknown";
   const ipHash = hashIP(ip);
   const userAgent = req.headers.get("user-agent") || "";
   const referer = req.headers.get("referer") || "";
@@ -39,7 +41,8 @@ async function logClick(
 
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/redirect\//, "").replace(/^\//, "").replace(/\/$/, "");
+  const path = url.pathname.replace(/^\/redirect\//, "").replace(/^\//, "")
+    .replace(/\/$/, "");
 
   if (!path) {
     return new Response("Not found", { status: 404 });
@@ -69,13 +72,15 @@ Deno.serve(async (req: Request) => {
 
     const { data: variant } = await supabase
       .from("tracking_variants")
-      .select("id, link_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, ref, expires_at, links!inner(destination_url)")
+      .select(
+        "id, link_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, ref, expires_at, links!inner(destination_url)",
+      )
       .eq("suffix", suffix)
       .eq("links.slug", slug)
       .maybeSingle();
 
     if (variant) {
-      const linkData = variant.links as { destination_url: string };
+      const linkData = variant.links as unknown as { destination_url: string };
       const now = new Date();
 
       if (variant.expires_at && new Date(variant.expires_at) < now) {
@@ -89,13 +94,7 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      const destUrl = new URL(linkData.destination_url);
-      if (variant.utm_source) destUrl.searchParams.set("utm_source", variant.utm_source);
-      if (variant.utm_medium) destUrl.searchParams.set("utm_medium", variant.utm_medium);
-      if (variant.utm_campaign) destUrl.searchParams.set("utm_campaign", variant.utm_campaign);
-      if (variant.utm_content) destUrl.searchParams.set("utm_content", variant.utm_content);
-      if (variant.utm_term) destUrl.searchParams.set("utm_term", variant.utm_term);
-      if (variant.ref) destUrl.searchParams.set("ref", variant.ref);
+      const destUrl = buildDestinationUrl(linkData.destination_url, variant);
 
       const _logPromise = logClick(variant.link_id, variant.id, req);
       return new Response(null, {
