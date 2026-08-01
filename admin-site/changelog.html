@@ -198,6 +198,21 @@
     <h2>Changelog</h2>
     <p style="color:var(--text-muted); margin-bottom: 24px;">All notable performance improvements, bug fixes, and feature requests. Tracked via <a href="https://github.com/yesod/yesod" target="_blank">yesod</a> under tool <code>als</code>. <a href="https://github.com/stephenVertex/aicoe-link-shortener/actions" target="_blank" rel="noopener">View CI runs &rarr;</a></p>
 
+    <h2>2026-08-01 — Substack Web Redirect Compatibility</h2>
+
+    <h3>Bug Fixes</h3>
+
+    <div class="card">
+      <h4>Personalized Substack links showed “page croaked” <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>Issue:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/issues/14" target="_blank" rel="noopener">#14</a></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/c657dcf" target="_blank" rel="noopener"><code>c657dcf</code></a></span>
+      </div>
+      <p><strong>Problem:</strong> Personalized Substack links initially rendered the correct article in web browsers, then Substack's client-side application replaced it with an “Oh no—this page croaked” error. The shortener was exposing its internal person reference as Substack's reserved <code>ref</code> query parameter.</p>
+      <p><strong>Fix:</strong> Substack destinations now omit <code>ref</code> while retaining every UTM parameter. Non-Substack destinations retain the existing <code>ref</code> behavior.</p>
+      <div class="result">Existing short URLs, suffixes, database records, and internal per-person click attribution remain unchanged. Regression tests cover Substack hosts, nested Substack hosts, stored <code>ref</code> cleanup, lookalike domains, and non-Substack destinations.</div>
+    </div>
+
     <h2>2026-07-16 — AIFS Link Tags</h2>
 
     <h3>Feature Requests</h3>

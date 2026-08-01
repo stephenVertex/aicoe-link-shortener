@@ -2,6 +2,17 @@
 
 All notable performance improvements, bug fixes, and feature requests for aicoe.fit.
 
+## 2026-08-01 — Substack Web Redirect Compatibility
+
+### Bug Fixes
+
+#### Personalized Substack links showed “page croaked” — FIXED
+- **Issue**: [#14](https://github.com/stephenVertex/aicoe-link-shortener/issues/14)
+- **Commit**: `c657dcf`
+- **Problem**: Personalized Substack links initially rendered the correct article in web browsers, then Substack's client-side application replaced it with an “Oh no—this page croaked” error. The shortener was exposing its internal person reference as Substack's reserved `ref` query parameter.
+- **Fix**: Substack destinations now omit `ref` while retaining every UTM parameter. Non-Substack destinations retain the existing `ref` behavior.
+- **Result**: Existing short URLs, suffixes, database records, and internal per-person click attribution remain unchanged. Regression tests cover Substack hosts, nested Substack hosts, stored `ref` cleanup, lookalike domains, and non-Substack destinations.
+
 ## 2026-07-16 — AIFS Link Tags
 
 ### Features
