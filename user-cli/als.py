@@ -201,6 +201,34 @@ def cli():
     pass
 
 
+@cli.command()
+def prime():
+    """Print a compact agent-facing usage guide."""
+    click.echo(
+        """als — aicoe.fit link discovery, shortening, tracking, and analytics.
+
+Core link workflow:
+  als search "<topic>" --json        Find articles; results include lnk-... IDs.
+  als get <slug-or-lnk-id> --tracking
+  als shorten <url> [--slug NAME]    Create a clean permanent short link.
+  als shorten <url-or-id> --note "<context>" [--expires 60d | --no-expires]
+    --note creates a tracked variant. It auto-archives after 60 days by default;
+    archiving only hides it from active lists—the redirect and click logging continue.
+
+AI First Show curation (use the dedicated aifs CLI; `als aifs` is deprecated):
+  aifs submit <url> [--comment TEXT] [--tag TAG]   Nominate and vote.
+  aifs vote <aifs-id> [--comment TEXT] [--tag TAG]
+  aifs list [--archived | --all] [--json]
+  aifs archive <aifs-id> --note "Covered in episode YYYYMMDD"
+  aifs episodes [--json]                           List episodes parsed from notes.
+  Use the exact `Covered in episode YYYYMMDD` convention for covered items.
+
+Prefer --json for agent workflows. Use `als <command> --help` for command detail.
+For deeper operational knowledge: `yesod tool als distill`, `yesod tool als notes`,
+or ask a specific question with `yesod ask "..."`."""
+    )
+
+
 @cli.command("help")
 def help_cmd():
     """Show use-case-driven guidance for common workflows."""
