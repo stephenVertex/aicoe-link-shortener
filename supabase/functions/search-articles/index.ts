@@ -6,8 +6,9 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
-const EMBEDDING_MODEL = "text-embedding-3-small";
+const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
+const EMBEDDING_MODEL = "openai/text-embedding-3-small";
+const EMBEDDING_DIMENSIONS = 1536;
 
 interface EmbeddingResponse {
   data: Array<{ embedding: number[]; index: number }>;
@@ -73,21 +74,22 @@ async function generateQueryEmbedding(query: string): Promise<number[]> {
     return cached;
   }
 
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
+  const response = await fetch("https://openrouter.ai/api/v1/embeddings", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model: EMBEDDING_MODEL,
       input: query,
+      dimensions: EMBEDDING_DIMENSIONS,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI API error (${response.status}): ${error}`);
+    throw new Error(`OpenRouter API error (${response.status}): ${error}`);
   }
 
   const result: EmbeddingResponse = await response.json();
@@ -124,9 +126,9 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  if (!OPENAI_API_KEY) {
+  if (!OPENROUTER_API_KEY) {
     return new Response(
-      JSON.stringify({ error: "OPENAI_API_KEY not configured" }),
+      JSON.stringify({ error: "OPENROUTER_API_KEY not configured" }),
       {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders },
