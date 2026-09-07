@@ -2,6 +2,17 @@
 
 All notable performance improvements, bug fixes, and feature requests for aicoe.fit.
 
+## 2026-09-07 — Semantic Search Restored via OpenRouter
+
+### Bug Fixes
+
+#### Exhausted OpenAI credits broke semantic search — FIXED
+- **ID**: `ys-als-0tut`
+- **Commit**: `69cb9ae`
+- **Problem**: `als search` returned HTTP 500 after the embedding credential first became invalid and then exhausted its OpenAI credits. The weekly performance workflow had failed continuously since July 2026.
+- **Fix**: Routed the active `search-articles` and consolidated `content-sync` embedding calls through OpenRouter using `openai/text-embedding-3-small` with an explicit 1,536 dimensions, preserving compatibility with all existing vectors.
+- **Result**: Post-deploy smoke tests passed. The performance workflow completed successfully with cold/warm search times of 1,933ms/785ms against a 3,000ms threshold.
+
 ## 2026-08-01 — Substack Web Redirect Compatibility
 
 ### Bug Fixes

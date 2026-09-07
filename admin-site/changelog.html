@@ -198,6 +198,21 @@
     <h2>Changelog</h2>
     <p style="color:var(--text-muted); margin-bottom: 24px;">All notable performance improvements, bug fixes, and feature requests. Tracked via <a href="https://github.com/yesod/yesod" target="_blank">yesod</a> under tool <code>als</code>. <a href="https://github.com/stephenVertex/aicoe-link-shortener/actions" target="_blank" rel="noopener">View CI runs &rarr;</a></p>
 
+    <h2>2026-09-07 — Semantic Search Restored via OpenRouter</h2>
+
+    <h3>Bug Fixes</h3>
+
+    <div class="card">
+      <h4>Exhausted OpenAI credits broke semantic search <span class="badge badge-bug">bug</span></h4>
+      <div class="meta">
+        <span><strong>ID:</strong> <code>ys-als-0tut</code></span>
+        <span><strong>Commit:</strong> <a href="https://github.com/stephenVertex/aicoe-link-shortener/commit/69cb9ae" target="_blank" rel="noopener"><code>69cb9ae</code></a></span>
+      </div>
+      <p><strong>Problem:</strong> <code>als search</code> returned HTTP 500 after the embedding credential first became invalid and then exhausted its OpenAI credits. The weekly performance workflow had failed continuously since July 2026.</p>
+      <p><strong>Fix:</strong> Routed the active <code>search-articles</code> and consolidated <code>content-sync</code> embedding calls through OpenRouter using <code>openai/text-embedding-3-small</code> with an explicit 1,536 dimensions, preserving compatibility with all existing vectors.</p>
+      <div class="result">Post-deploy smoke tests passed. The performance workflow completed successfully with cold/warm search times of 1,933ms/785ms against a 3,000ms threshold.</div>
+    </div>
+
     <h2>2026-08-01 — Substack Web Redirect Compatibility</h2>
 
     <h3>Bug Fixes</h3>
